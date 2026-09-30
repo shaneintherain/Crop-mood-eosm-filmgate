@@ -13,3 +13,6 @@ extern WEAK_FUNC(ret_0) int crop_rec_touch_get_value(int control, int slot,
                                                       int *enabled);
 /* Custom page Movie controls: 0=Mode, 1=Aspect Ratio, 2=Preset. */
 extern WEAK_FUNC(ret_0) int crop_rec_custom_adjust(int control, int delta);
+/* Film Format chosen in the Movie menu Preset row (1x1 mode): 0 = none,
+ * otherwise 1..8 matching the film_formats[] table in mlv_lite. */
+extern WEAK_FUNC(ret_0) int crop_rec_film_format();
