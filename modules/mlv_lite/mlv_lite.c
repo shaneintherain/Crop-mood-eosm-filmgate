@@ -173,6 +173,40 @@ static CONFIG_INT("raw.res_x", resolution_index_x, 11);
 static CONFIG_INT("raw.res_x_fine", res_x_fine, 0);
 static CONFIG_INT("raw.aspect.ratio", aspect_ratio_index, 17);
 
+/* ---- Film Format presets ------------------------------------------------
+ * Recording windows that match real film gates at 1:1 pixel scale on the
+ * EOS M sensor (22.3 mm / 5184 px = ~4.30 um per pixel).
+ * "Actual"  = the true physical gate size at 1:1.
+ * "Cropped" = a smaller window, because the true gate would need more
+ *             pixels than the camera can read out in a stable video mode.
+ * The window is centered inside the current crop_rec 1:1 readout, so pick
+ * the matching 1:1 crop mode (see 'mode' column).
+ * Widths are multiples of 16; heights are aligned at runtime.
+ */
+struct film_format
+{
+    const char * name;      /* menu text */
+    int w;                  /* target width  (pixels) */
+    int h;                  /* target height (pixels) */
+    const char * gate;      /* physical size, for the help text */
+    const char * mode;      /* crop_rec 1:1 mode needed */
+};
+
+static const struct film_format film_formats[] =
+{
+    { "OFF",                  0,    0, "",                               "" },
+    { "8mm Actual",        1040,  763, "4.5x3.3mm",                      "1:1 crop 1920x1280 (3:2)" },
+    { "Super 8 Actual",    1344,  931, "5.79x4.01mm",                    "1:1 crop 1920x1280 (3:2)" },
+    { "9.5mm Actual",      1968, 1505, "8.5x6.5mm",                      "1:1 crop 2160x1620 (4:3)" },
+    { "9.5mm 16:9 Cropped",1968, 1107, "8.5mm wide, cropped to 16:9",    "1:1 crop 2160x1620 (4:3)" },
+    { "16mm 16:9 Cropped", 2384, 1341, "10.26mm wide, cropped to 16:9",  "1:1 crop 2560x1440 (16:9)" },
+    { "16mm 1.85 Cropped", 2384, 1289, "10.26mm wide, cropped to 1.85:1","1:1 crop 2560x1440 (16:9)" },
+    { "16mm 2.35 Cropped", 2384, 1014, "10.26mm wide, cropped to 2.35:1","1:1 crop 2560x1440 (16:9)" },
+    { "Super 16 Cropped",  2384, 1411, "12.52x7.41mm, cropped to 2384 wide","1:1 crop 2560x1440 (16:9)" },
+};
+
+static CONFIG_INT("raw.film.format", film_format_index, 0);
+
 static CONFIG_INT("raw.write.speed", measured_write_speed, 0);
 static int measured_write_speed_thread[MAX_WRITER_THREADS] = {0};
 static int measured_compression_ratio = 0;
@@ -742,6 +776,24 @@ static int calc_res_y(int res_x, int max_res_y, int num, int den, float squeeze)
     }
 }
 
+/* same height alignment rules as calc_res_y, for an explicit target height */
+static int film_align_res_y(int rx, int ry, int max_y)
+{
+    ry = MIN(ry, max_y);
+
+    if (OUTPUT_COMPRESSION)
+        return ry & ~1;
+
+    switch (MOD(rx * BPP / 8, 8))
+    {
+        case 0:  return ry & ~1;
+        case 4:  return ry & ~3;
+        case 2:
+        case 6:  return ry & ~7;
+        default: return ry & ~15;
+    }
+}
+
 /* fixme: called from many tasks */
 static REQUIRES(LiveViewTask)
 void update_cropping_offsets()
@@ -814,6 +866,23 @@ void update_resolution_params()
     int num = aspect_ratio_presets_num[aspect_ratio_index];
     int den = aspect_ratio_presets_den[aspect_ratio_index];
     res_y = calc_res_y(res_x, max_res_y, num, den, squeeze_factor);
+
+    /* Film Format override (square pixels only) */
+    if (film_format_index > 0 && film_format_index < COUNT(film_formats) && squeeze_factor == 1.0f)
+    {
+        int fw = film_formats[film_format_index].w;
+        int fh = film_formats[film_format_index].h;
+
+        if (fw > max_res_x)
+        {
+            /* current video mode is too small: shrink, keeping the aspect ratio */
+            fh = fh * max_res_x / fw;
+            fw = max_res_x;
+        }
+
+        res_x = fw & ~15;
+        res_y = film_align_res_y(res_x, fh, max_res_y);
+    }
 
     if (!OUTPUT_COMPRESSION)
     {
@@ -1216,6 +1285,43 @@ static MENU_UPDATE_FUNC(aspect_ratio_update_info)
     }
 }
 
+static MENU_UPDATE_FUNC(film_format_update)
+{
+    if (!raw_video_enabled || !lv)
+    {
+        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Enable RAW video first.");
+        MENU_SET_VALUE("N/A");
+        return;
+    }
+
+    refresh_raw_settings(0);
+
+    int i = COERCE(film_format_index, 0, COUNT(film_formats) - 1);
+
+    if (i == 0)
+    {
+        MENU_SET_HELP("OFF: use Resolution and Aspect ratio below.");
+        return;
+    }
+
+    MENU_SET_RINFO("%dx%d", res_x, res_y);
+
+    if (squeeze_factor != 1.0f)
+    {
+        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Film Format needs a square-pixel 1:1 crop mode.");
+    }
+    else if (film_formats[i].w > max_res_x || film_formats[i].h > max_res_y)
+    {
+        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Too big for current mode (%dx%d). Use %s.",
+            max_res_x, max_res_y, film_formats[i].mode);
+    }
+    else
+    {
+        MENU_SET_HELP("%s. Records %dx%d at 1:1. Best in %s.",
+            film_formats[i].gate, res_x, res_y, film_formats[i].mode);
+    }
+}
+
 static MENU_UPDATE_FUNC(resolution_update)
 {
     if (!raw_video_enabled || !lv)
@@ -1228,6 +1334,8 @@ static MENU_UPDATE_FUNC(resolution_update)
     refresh_raw_settings(1);
 
     MENU_SET_VALUE("%dx%d", res_x, res_y);
+    if (film_format_index > 0)
+        MENU_SET_WARNING(MENU_WARN_ADVICE, "Overridden by Film Format (set it to OFF to use this).");
     int crop_factor = calc_crop_factor();
     if (crop_factor) MENU_SET_RINFO("%s%d.%02dx", FMT_FIXEDPOINT2( crop_factor ));
 
@@ -1299,6 +1407,13 @@ static MENU_UPDATE_FUNC(aspect_ratio_update)
     }
     
     refresh_raw_settings(0);
+
+    if (film_format_index > 0)
+    {
+        MENU_SET_WARNING(MENU_WARN_ADVICE, "Overridden by Film Format (set it to OFF to use this).");
+        write_speed_update(entry, info);
+        return;
+    }
 
     int num = aspect_ratio_presets_num[aspect_ratio_index];
     int den = aspect_ratio_presets_den[aspect_ratio_index];
@@ -4493,6 +4608,17 @@ static struct menu_entry raw_video_menu[] =
         .help2 = "Press LiveView to start recording.",
         .children =  (struct menu_entry[]) {
             {
+                .name = "Film Format",
+                .priv = &film_format_index,
+                .max = COUNT(film_formats) - 1,
+                .update = film_format_update,
+                .choices = CHOICES("OFF", "8mm Actual", "Super 8 Actual", "9.5mm Actual",
+                                   "9.5mm 16:9 Cropped", "16mm 16:9 Cropped",
+                                   "16mm 1.85 Cropped", "16mm 2.35 Cropped", "Super 16 Cropped"),
+                .help = "Record a window that matches a real film gate (1:1 pixels).",
+                .help2 = "Actual = true gate size. Cropped = smaller than the true gate.",
+            },
+            {
                 .name = "Resolution",
                 .priv = &resolution_index_x,
                 .max = COUNT(resolution_presets_x) - 1,
@@ -5297,6 +5423,7 @@ MODULE_CONFIGS_START()
     MODULE_CONFIG(resolution_index_x)
     MODULE_CONFIG(res_x_fine)    
     MODULE_CONFIG(aspect_ratio_index)
+    MODULE_CONFIG(film_format_index)
     MODULE_CONFIG(measured_write_speed)
     MODULE_CONFIG(pre_record)
     MODULE_CONFIG(rec_trigger)
