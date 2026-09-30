@@ -2,8 +2,10 @@ name: Build EOS M
 run-name: Build EOS M
 
 on:
+  workflow_dispatch:
   push:
     branches:
+      - main
       - eosm-slim-gui
 
 jobs:
@@ -58,27 +60,4 @@ jobs:
           zipfile=$(ls platform/EOSM.202/magiclantern-*.zip)
           for mod in crop_rec.mo dual_iso.mo hdmi_out.mo mlv_lite.mo mlv_play.mo mlv_snd.mo sd_uhs.mo file_man.mo bench.mo; do
             if ! unzip -l "$zipfile" | grep -q "$mod"; then
-              echo "Missing from zip: $mod"
-              unzip -l "$zipfile" | grep '\.mo$' || true
-              exit 1
-            fi
-            echo "OK: $mod"
-          done
-          if unzip -l "$zipfile" | grep -E 'lua\.mo|selftest\.mo|arkanoid\.mo'; then
-            echo "Unexpected slim module in zip"
-            exit 1
-          fi
-
-      - name: Upload autoexec.bin
-        uses: actions/upload-artifact@v4
-        with:
-          name: autoexec.bin
-          path: platform/EOSM.202/autoexec.bin
-          if-no-files-found: error
-
-      - name: Upload full Magic Lantern zip
-        uses: actions/upload-artifact@v4
-        with:
-          name: magiclantern-eosm-zip
-          path: platform/EOSM.202/magiclantern-*.zip
-          if-no-files-found: error
+              echo "Missing from zip:
