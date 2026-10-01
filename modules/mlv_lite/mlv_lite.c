@@ -196,14 +196,17 @@ struct film_format
 static const struct film_format film_formats[] =
 {
     { "OFF",                   0,    0, "",                                  "" },
-    { "8mm Actual",         1040,  763, "4.5x3.3mm gate",                    "1:1 3:2 1920x1280" },
-    { "8mm 16:9 Crop",      1040,  585, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280" },
-    { "Super 8 Actual",     1344,  931, "5.79x4.01mm gate",                  "1:1 3:2 1920x1280" },
-    { "Super 8 16:9 Crop",  1344,  756, "Super 8 gate width, cropped to 16:9","1:1 3:2 1920x1280" },
+    { "S35 16:9 Crop",      1696,  954, "S35 gate width, cropped to 16:9",   "3x3 3:2 1736x1160" },
+    { "S35 1.85:1 Crop",    1696,  916, "S35 gate width, cropped to 1.85:1", "3x3 3:2 1736x1160" },
+    { "S35 2.35:1 Crop",    1696,  722, "S35 gate width, cropped to 2.35:1", "3x3 3:2 1736x1160" },
+    { "Super 16 2.35:1 Crop",2912,1239, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest" },
     { "16mm 16:9 Crop",     2384, 1341, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440" },
     { "16mm 1.85:1 Crop",   2384, 1289, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440" },
     { "16mm 2.35:1 Crop",   2384, 1014, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440" },
-    { "Super 16 2.35:1 Crop",2912,1239, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest" },
+    { "Super 8 Actual",     1344,  931, "5.79x4.01mm gate",                  "1:1 3:2 1920x1280" },
+    { "Super 8 16:9 Crop",  1344,  756, "Super 8 gate width, cropped to 16:9","1:1 3:2 1920x1280" },
+    { "8mm Actual",         1040,  763, "4.5x3.3mm gate",                    "1:1 3:2 1920x1280" },
+    { "8mm 16:9 Crop",      1040,  585, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280" },
 };
 
 static CONFIG_INT("raw.film.format", film_format_index, 0);
@@ -716,7 +719,7 @@ static int film_frame_possible(void)
 {
     /* The EOS M crop_rec presets run in Canon's x5 zoom state (lv_dispsize == 5),
      * so x5 must be accepted here; x10 (focus zoom) is not. */
-    return crop_rec_film_format() > 0 &&
+    return crop_rec_film_format() >= 4 && /* S35 (1-3): LCD scale not calibrated */
            (lv_dispsize == 1 || lv_dispsize == 5) &&
            squeeze_factor == 1.0f &&
            (is_LCD_Output() || is_480p_Output() || is_1080i_Full_Output() || is_1080i_Info_Output());
@@ -731,9 +734,9 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
 
     int rw, kn, kd; /* readout width, vertical scale numerator / denominator */
 
-    if (f <= 4)      { rw = 1920; kn = 3;   kd = 8;    } /* 8mm, Super 8 */
+    if (f == 4)      { rw = 3072; kn = 15;  kd = 64;   } /* Super 16     */
     else if (f <= 7) { rw = 2560; kn = 9;   kd = 32;   } /* 16mm         */
-    else             { rw = 3072; kn = 15;  kd = 64;   } /* Super 16     */
+    else             { rw = 1920; kn = 3;   kd = 8;    } /* Super 8, 8mm */
 
     int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
     int nh = res_y * kn / kd;
@@ -4681,9 +4684,10 @@ static struct menu_entry raw_video_menu[] =
                 .priv = &film_format_index,
                 .max = COUNT(film_formats) - 1,
                 .update = film_format_update,
-                .choices = CHOICES("OFF", "8mm Actual", "8mm 16:9 Crop", "Super 8 Actual", "Super 8 16:9 Crop",
-                                   "16mm 16:9 Crop",
-                                   "16mm 1.85:1 Crop", "16mm 2.35:1 Crop", "Super 16 2.35:1 Crop"),
+                .choices = CHOICES("OFF", "S35 16:9 Crop", "S35 1.85:1 Crop", "S35 2.35:1 Crop",
+                                   "Super 16 2.35:1 Crop", "16mm 16:9 Crop", "16mm 1.85:1 Crop",
+                                   "16mm 2.35:1 Crop", "Super 8 Actual", "Super 8 16:9 Crop",
+                                   "8mm Actual", "8mm 16:9 Crop"),
                 .help = "Record a window that matches a real film gate (1:1 pixels).",
                 .help2 = "Actual = true gate size. Crop = a smaller window inside the gate.",
             },
