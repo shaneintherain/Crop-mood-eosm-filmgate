@@ -5739,27 +5739,25 @@ static const char * const slim_1x1_ar_labels[5] = {
 
 /* ---- Film Format menu (1x1 mode) ------------------------------------------
  * In 1x1 mode two Movie menu rows change meaning:
- *   "Aspect Ratio" row -> Film Format  (8mm, Super 8, 9.5mm, 16mm, Super 16)
+ *   "Aspect Ratio" row -> Film Format  (8mm, Super 8, 16mm, Super 16)
  *   "Preset" row       -> Frame        (Actual / 16:9 Crop / 1.85:1 Crop ...)
  * Each Film Format uses one of the existing 1x1 sensor readouts (so no sensor
  * register is changed); mlv_lite cuts the film window out of it and asks
  * crop_rec_film_format() which window to use.  Numbering matches the
  * film_formats[] table in mlv_lite.c:
  *    1 8mm Actual     2 8mm 16:9 Crop    3 Super 8 Actual   4 Super 8 16:9 Crop
- *    5 9.5mm Actual   6 9.5mm 16:9 Crop  7 16mm 16:9 Crop   8 16mm 1.85:1 Crop
- *    9 16mm 2.35:1 Crop                 10 Super 16 2.35:1 Crop
+ *    5 16mm 16:9 Crop 6 16mm 1.85:1 Crop 7 16mm 2.35:1 Crop    8 Super 16 2.35:1 Crop
  */
-#define SLIM_FILM_FORMATS 5
+#define SLIM_FILM_FORMATS 4
 static const char * const slim_film_fmt_names[SLIM_FILM_FORMATS] = {
-    "8mm", "Super 8", "9.5mm", "16mm", "Super 16"
+    "8mm", "Super 8", "16mm", "Super 16"
 };
-static const int slim_film_fmt_first[SLIM_FILM_FORMATS] = { 1, 3, 5, 7, 10 }; /* first table index */
-static const int slim_film_fmt_count[SLIM_FILM_FORMATS] = { 2, 2, 2, 3, 1 };  /* Frame choices */
-static const int slim_film_fmt_ar[SLIM_FILM_FORMATS]    = { 3, 3, 4, 2, 1 };  /* 1x1 readout: 3:2, 3:2, 4:3, 16:9, 2.35:1 3K */
-static const char * const slim_film_frame_names[10] = {
+static const int slim_film_fmt_first[SLIM_FILM_FORMATS] = { 1, 3, 5, 8 }; /* first table index */
+static const int slim_film_fmt_count[SLIM_FILM_FORMATS] = { 2, 2, 3, 1 };  /* Frame choices */
+static const int slim_film_fmt_ar[SLIM_FILM_FORMATS]    = { 3, 3, 2, 1 };  /* 1x1 readout: 3:2, 3:2, 4:3, 16:9, 2.35:1 3K */
+static const char * const slim_film_frame_names[8] = {
     "Actual", "16:9 Crop",                 /* 8mm     */
     "Actual", "16:9 Crop",                 /* Super 8 */
-    "Actual", "16:9 Crop",                 /* 9.5mm   */
     "16:9 Crop", "1.85:1 Crop", "2.35:1 Crop", /* 16mm */
     "2.35:1 Crop"                          /* Super 16 */
 };
@@ -5785,12 +5783,11 @@ static int slim_film_sync(void)
             if (slim_film_fmt < 0 || slim_film_fmt > 1)
                 slim_film_fmt = 0;
             break;
-        case 4: slim_film_fmt = 2; break; /* 4:3   - 9.5mm   */
-        case 2: slim_film_fmt = 3; break; /* 16:9  - 16mm    */
+        case 2: slim_film_fmt = 2; break; /* 16:9  - 16mm    */
         case 1: /* 2.35:1 3K Highest - Super 16 */
             if (slim_unified_preset != 0)
                 return -1;
-            slim_film_fmt = 4;
+            slim_film_fmt = 3;
             break;
         default:
             return -1;
@@ -5809,9 +5806,8 @@ int crop_rec_film_format()
     switch (crop_preset_1x1_res_menu)
     {
         case 4: fmt = (slim_film_fmt >= 0 && slim_film_fmt <= 1) ? slim_film_fmt : 0; break; /* 1280p 3:2 */
-        case 6: fmt = 2; break; /* 1620p 4:3 */
-        case 3: fmt = 3; break; /* 1440p 16:9 */
-        case 2: fmt = 4; break; /* 3K 2.35:1 Highest */
+        case 3: fmt = 2; break; /* 1440p 16:9 */
+        case 2: fmt = 3; break; /* 3K 2.35:1 Highest */
         default: return 0;
     }
 
@@ -8571,6 +8567,15 @@ static unsigned int crop_rec_keypress_cbr(unsigned int key)
     return 1;
 }
 
+/* Bottom-bar name of the active film format (8mm, S8, 16mm, S16) */
+static void slim_film_label(char * buffer, int size)
+{
+    static const char * const lbl[9] = { "", "8mm", "8mm", "S8", "S8", "16mm", "16mm", "16mm", "S16" };
+    int f = crop_rec_film_format();
+    if (f > 0 && f < 9)
+        snprintf(buffer, size, "%s", lbl[f]);
+}
+
 /* Display recording status in top info bar */
 static LVINFO_UPDATE_FUNC(crop_info)
 {
@@ -8594,6 +8599,7 @@ static LVINFO_UPDATE_FUNC(crop_info)
                     if (CROP_1080p)    snprintf(buffer, sizeof(buffer), "1080p");
                     if (CROP_1620p)    snprintf(buffer, sizeof(buffer), "1620p");
                     if (CROP_Full_Res) snprintf(buffer, sizeof(buffer), "FLV");
+                    slim_film_label(buffer, sizeof(buffer));
                     break;
                 case CROP_PRESET_1X3:
                     if (AR_16_9)
@@ -8689,6 +8695,8 @@ static LVINFO_UPDATE_FUNC(crop_info)
         /* When not in the zoom-branch naming path above, still name 1620p. */
         if (!buffer[0] && patch_active && crop_preset == CROP_PRESET_1X1 && CROP_1620p)
             snprintf(buffer, sizeof(buffer), "1620p");
+        if (patch_active && crop_preset == CROP_PRESET_1X1)
+            slim_film_label(buffer, sizeof(buffer));
 
         if (raw_capture_info.binning_x + raw_capture_info.skipping_x == 1 &&
             raw_capture_info.binning_y + raw_capture_info.skipping_y == 1)
