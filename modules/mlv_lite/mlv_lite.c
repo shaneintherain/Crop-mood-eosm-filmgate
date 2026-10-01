@@ -52,6 +52,7 @@
 #include <config.h>
 #include <math.h>
 #include <cropmarks.h>
+#include <vram.h>
 #include <screenshot.h>
 #include "../lv_rec/lv_rec.h"
 #include "edmac.h"
@@ -701,6 +702,42 @@ int crop_rec_cropmarks()
     return 0;
 }
 
+/* Film Format frame on the LCD.
+ *
+ * The generic raw->screen model (lv2raw) assumes the live view is a plain scaled
+ * copy of the raw frame.  The crop_rec 1x1 modes are not: the picture is the full
+ * readout width, but its vertical scale differs per mode (measured on an EOS M LCD,
+ * in the 720x480 layer used by cropmarks).  Measured: x = 720 / readout width;
+ *   3:2   1920x1280 : y = 3/8     (LCD shows the centre 16:9 slice)
+ *   4:3   2160x1620 : y = 437/1620 (picture is stretched horizontally, ~1.24x)
+ *   16:9  2560x1440 : y = 9/32
+ *   2.35  3072x1308 : y = 15/64
+ * The film window is centred in the readout, so the frame is centred on the screen.
+ * Only calibrated for the camera LCD; other outputs use the generic model. */
+static int film_frame_rect(int * x, int * y, int * w, int * h)
+{
+    int f = crop_rec_film_format();
+
+    if (f <= 0 || lv_dispsize != 1 || squeeze_factor != 1.0f || !is_LCD_Output())
+        return 0;
+
+    int rw, kn, kd; /* readout width, vertical scale numerator / denominator */
+
+    if (f <= 4)      { rw = 1920; kn = 3;   kd = 8;    } /* 8mm, Super 8 */
+    else if (f <= 6) { rw = 2160; kn = 437; kd = 1620; } /* 9.5mm        */
+    else if (f <= 9) { rw = 2560; kn = 9;   kd = 32;   } /* 16mm         */
+    else             { rw = 3072; kn = 15;  kd = 64;   } /* Super 16     */
+
+    int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
+    int nh = res_y * kn / kd;
+
+    *x = N2BM_X(360 - nw / 2);
+    *y = N2BM_Y(240 - nh / 2);
+    *w = N2BM_X(nw) - N2BM_X(0);
+    *h = N2BM_Y(nh) - N2BM_Y(0);
+    return 1;
+}
+
 static void refresh_cropmarks()
 {
     if ((lv_dispsize > 1 && !crop_rec_cropmarks()) || lv_dispsize > 5 || raw_rec_should_preview() || !raw_video_enabled)
@@ -741,6 +778,9 @@ static void refresh_cropmarks()
         int y = RAW2BM_Y(skip_y);
         int w = RAW2BM_DX(res_x);
         int h = RAW2BM_DY(res_y);
+
+        /* Film Format: place the frame from the measured per-mode scales */
+        film_frame_rect(&x, &y, &w, &h);
 
         set_movie_cropmarks(x, y, w, h);
     }
