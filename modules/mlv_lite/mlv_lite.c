@@ -714,12 +714,22 @@ int crop_rec_cropmarks()
  *   2.35  3072x1308 : y = 15/64
  * The film window is centred in the readout, so the frame is centred on the screen.
  * Only calibrated for the camera LCD; other outputs use the generic model. */
+static int film_frame_possible(void)
+{
+    /* The EOS M crop_rec presets run in Canon's x5 zoom state (lv_dispsize == 5),
+     * so x5 must be accepted here; x10 (focus zoom) is not. */
+    return crop_rec_film_format() > 0 &&
+           (lv_dispsize == 1 || lv_dispsize == 5) &&
+           squeeze_factor == 1.0f &&
+           is_LCD_Output();
+}
+
 static int film_frame_rect(int * x, int * y, int * w, int * h)
 {
-    int f = crop_rec_film_format();
-
-    if (f <= 0 || lv_dispsize != 1 || squeeze_factor != 1.0f || !is_LCD_Output())
+    if (!film_frame_possible())
         return 0;
+
+    int f = crop_rec_film_format();
 
     int rw, kn, kd; /* readout width, vertical scale numerator / denominator */
 
@@ -740,7 +750,7 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
 
 static void refresh_cropmarks()
 {
-    if ((lv_dispsize > 1 && !crop_rec_cropmarks()) || lv_dispsize > 5 || raw_rec_should_preview() || !raw_video_enabled)
+    if ((lv_dispsize > 1 && !crop_rec_cropmarks() && !film_frame_possible()) || lv_dispsize > 5 || raw_rec_should_preview() || !raw_video_enabled)
     {
         reset_movie_cropmarks();
     }
