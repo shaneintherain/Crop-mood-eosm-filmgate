@@ -200,8 +200,6 @@ static const struct film_format film_formats[] =
     { "8mm 16:9 Crop",      1040,  585, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280" },
     { "Super 8 Actual",     1344,  931, "5.79x4.01mm gate",                  "1:1 3:2 1920x1280" },
     { "Super 8 16:9 Crop",  1344,  756, "Super 8 gate width, cropped to 16:9","1:1 3:2 1920x1280" },
-    { "9.5mm Actual",       1968, 1505, "8.5x6.5mm gate",                    "1:1 4:3 2160x1620" },
-    { "9.5mm 16:9 Crop",    1968, 1107, "9.5mm gate width, cropped to 16:9", "1:1 4:3 2160x1620" },
     { "16mm 16:9 Crop",     2384, 1341, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440" },
     { "16mm 1.85:1 Crop",   2384, 1289, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440" },
     { "16mm 2.35:1 Crop",   2384, 1014, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440" },
@@ -721,7 +719,7 @@ static int film_frame_possible(void)
     return crop_rec_film_format() > 0 &&
            (lv_dispsize == 1 || lv_dispsize == 5) &&
            squeeze_factor == 1.0f &&
-           is_LCD_Output();
+           (is_LCD_Output() || is_480p_Output() || is_1080i_Full_Output() || is_1080i_Info_Output());
 }
 
 static int film_frame_rect(int * x, int * y, int * w, int * h)
@@ -734,8 +732,7 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     int rw, kn, kd; /* readout width, vertical scale numerator / denominator */
 
     if (f <= 4)      { rw = 1920; kn = 3;   kd = 8;    } /* 8mm, Super 8 */
-    else if (f <= 6) { rw = 2160; kn = 437; kd = 1620; } /* 9.5mm        */
-    else if (f <= 9) { rw = 2560; kn = 9;   kd = 32;   } /* 16mm         */
+    else if (f <= 7) { rw = 2560; kn = 9;   kd = 32;   } /* 16mm         */
     else             { rw = 3072; kn = 15;  kd = 64;   } /* Super 16     */
 
     int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
@@ -4685,7 +4682,7 @@ static struct menu_entry raw_video_menu[] =
                 .max = COUNT(film_formats) - 1,
                 .update = film_format_update,
                 .choices = CHOICES("OFF", "8mm Actual", "8mm 16:9 Crop", "Super 8 Actual", "Super 8 16:9 Crop",
-                                   "9.5mm Actual", "9.5mm 16:9 Crop", "16mm 16:9 Crop",
+                                   "16mm 16:9 Crop",
                                    "16mm 1.85:1 Crop", "16mm 2.35:1 Crop", "Super 16 2.35:1 Crop"),
                 .help = "Record a window that matches a real film gate (1:1 pixels).",
                 .help2 = "Actual = true gate size. Crop = a smaller window inside the gate.",
