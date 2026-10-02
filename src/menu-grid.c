@@ -645,7 +645,7 @@ void menu_quick_screen_draw(void)
             bmp_draw_rect(COLOR_FILM_MUTED, box_x, box_y, box_w, box_h);
         }
 
-        color = selected ? COLOR_BLACK : enabled ? COLOR_CREAM : COLOR_FILM_MUTED;
+        color = enabled ? COLOR_RED : COLOR_FILM_MUTED;
         arrow_color = selected ? COLOR_BLACK : enabled ? COLOR_CREAM : COLOR_FILM_FAINT;
 
         bmp_printf(

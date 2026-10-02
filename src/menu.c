@@ -54,7 +54,7 @@
 #define MENU_HELP_Y_POS_2 458
 #define MENU_WARNING_Y_POS (menu_lv_transparent_mode ? 425 : 458)
 
-#define MENU_BG_COLOR_HEADER_FOOTER COLOR_FILM_FAINT
+#define MENU_BG_COLOR_HEADER_FOOTER COLOR_BLACK
 
 extern int bmp_color_scheme;
 #define MENU_BAR_COLOR COLOR_CREAM
@@ -3215,8 +3215,14 @@ skip_name:
 #endif
 
     // print value field
+    int value_fnt = fnt;
+#ifdef CONFIG_SLIM_MENUS
+    /* Film Edge: the value of the selected row is red (not when read-only) */
+    if (slim_style && !customize_mode && !junkie_mode && entry->selected && !slim_locked)
+        value_fnt = FONT(FONT_CANON, COLOR_RED, NO_BG_ERASE);
+#endif
     bmp_printf(
-        fnt,
+        value_fnt,
         x_value, y + y_font_offset,
         "%s",
         info->value

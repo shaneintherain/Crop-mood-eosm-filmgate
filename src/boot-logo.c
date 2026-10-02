@@ -1644,7 +1644,7 @@ void boot_logo_show(void)
     /* Keep Canon's dialogs from overwriting the splash while it is visible. */
     boot_logo_active = 1;
     canon_gui_disable_front_buffer();
-    boot_logo_hide_time = get_ms_clock() + 2000;
+    boot_logo_hide_time = get_ms_clock() + 3000;
     BMP_LOCK( boot_logo_present(); )
     task_create("boot_logo", 0x1e, 0x1000, boot_logo_task, 0);
 }

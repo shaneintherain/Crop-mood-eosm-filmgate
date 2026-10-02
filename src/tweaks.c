@@ -2358,6 +2358,21 @@ static CONFIG_INT("lv.sat", preview_saturation, 0);         // range: -2:2, 3 sp
 #define PREVIEW_SATURATION_INDEX (PREVIEW_SATURATION_BOOST_WB ? (is_adjusting_wb() ? 4 : 2) : PREVIEW_SATURATION_INDEX_RAW)
 
 #define PREVIEW_SATURATION_GRAYSCALE (preview_saturation == -2)
+
+/* B&W Preview: live view shown without colour (display only; raw recording is not touched) */
+static CONFIG_INT("lv.bw", bw_preview, 0);
+static struct menu_entry bw_preview_menu[] = {
+    {
+        .name       = "B&W Preview",
+        .priv       = &bw_preview,
+        .max        = 1,
+        .choices    = CHOICES("OFF", "ON"),
+        .edit_mode  = EM_INLINE_ADJUST,
+        .icon_type  = IT_DICE,
+        .help       = "Show the live view in black and white, on the LCD and over HDMI.",
+        .help2      = "Only the preview changes. Your recorded raw video keeps all its colour.",
+    },
+};
 #define PREVIEW_CONTRAST_AUTO (preview_contrast == 3)
 
 static CONFIG_INT("lv.crazy", preview_crazy, 0);         // range: 0:2
@@ -3526,7 +3541,7 @@ static void preview_contrast_n_saturation_step()
     static int saturation_values[] = {0,0x40,0x80,0xC0,0xFF};
     int desired_saturation = saturation_values[PREVIEW_SATURATION_INDEX];
     
-    if (focus_peaking_grayscale_running())
+    if (focus_peaking_grayscale_running() || bw_preview)
         desired_saturation = 0;
     
     #ifdef FEATURE_DIGIC_FOCUS_PEAKING
@@ -5281,6 +5296,7 @@ static void tweak_init()
     #ifdef FEATURE_ANAMORPHIC_PREVIEW
     anamorphic_preview_add_slim_menu();
     #endif
+    menu_add("Overlay", bw_preview_menu, COUNT(bw_preview_menu));
     menu_add("Settings", custom_display_menus, COUNT(custom_display_menus));
     menu_add("Display", display_menus, COUNT(display_menus));
 #else
