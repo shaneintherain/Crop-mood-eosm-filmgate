@@ -522,7 +522,9 @@ static int quick_screen_value(
     {
         snprintf(buf, size, "%s", raw_value);
         if (index == 1 && strstr(buf, "Anamorphic"))
-            snprintf(buf, size, "S35-ANA");   /* full name is too long for the cell */
+            snprintf(buf, size, "A35-ANA");   /* full name is too long for the cell */
+        else if (index == 1 && streq(buf, "Academy 35mm"))
+            snprintf(buf, size, "A35");
         if (index == 2)
         {
             /* Frame cell: "16:9 Crop" -> "16:9" (the word Crop is not needed here) */
@@ -871,7 +873,7 @@ void menu_grid_draw(void)
         int icon_zone_top = y + 10;
         int icon_zone_bot = label_y - GRID_ICON_GAP;
         int icon_cy = (icon_zone_top + icon_zone_bot) / 2;
-        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, fg);
+        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, COLOR_RED);
 
         bmp_printf(FONT(FONT_CANON, fg, NO_BG_ERASE), label_x, label_y, "%s", label);
     }
