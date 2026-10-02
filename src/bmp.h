@@ -311,8 +311,13 @@ void bmp_draw_antialiased_triangle(int tip_x, int tip_y, int direction,
 #define COLOR_ALMOST_BLACK      0x26
 #define COLOR_ALMOST_WHITE      0x4F
 
-/* Film Edge look: warm cream is a Canon palette entry (#DDD7C1), the rest are grays */
-#define COLOR_CREAM             144
+/* Film Edge look: four custom palette entries (free slots 26-29), set up by film_palette_apply().
+ * Warm cream plus three dimmer steps of the same tone. */
+#define COLOR_CREAM             26
+#define COLOR_FILM_DIM          27
+#define COLOR_FILM_MUTED        28
+#define COLOR_FILM_FAINT        29
+void film_palette_apply(void);
 
 #define COLOR_GRAY(percent) (38 + (percent) * 41 / 100) // e.g. COLOR_GRAY(50) is 50% gray
 

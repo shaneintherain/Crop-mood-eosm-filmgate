@@ -142,7 +142,7 @@ static void grid_cell_rect(int idx, int *x, int *y, int *w, int *h)
     *h = ch;
 }
 
-static void grid_draw_ml_icon(int icon, int cx, int cy)
+static void grid_draw_ml_icon(int icon, int cx, int cy, int color)
 {
     const int scale = 2;
     int iw = bfnt_char_get_width(icon) * scale;
@@ -150,7 +150,7 @@ static void grid_draw_ml_icon(int icon, int cx, int cy)
     int ih = 40 * scale;
     int x = cx - iw / 2;
     int y = cy - ih / 2;
-    bfnt_draw_char_scaled(icon, x, y, COLOR_CYAN, NO_BG_ERASE, scale);
+    bfnt_draw_char_scaled(icon, x, y, color, NO_BG_ERASE, scale);
 }
 
 int menu_grid_is_active(void)   { return grid_active; }
@@ -461,14 +461,16 @@ void menu_white_card_wb_capture_finished(void)
 
 static void quick_screen_arrow(int cx, int tip_y, int up, int color)
 {
-    /* Film Edge: thin chevron instead of a filled triangle (same footprint). */
-    const int height = 22;
-    const int half_width = 26;
+    /* Film Edge: small thin chevron.  tip_y keeps the old position, so touch
+     * targets are unchanged; the chevron sits in the middle of the old arrow. */
+    const int height = 9;
+    const int half_width = 12;
     int t;
-    for (t = 0; t < 4; t++)
+    int base = up ? tip_y + 8 : tip_y - 8;
+    for (t = 0; t < 3; t++)
     {
-        int y0 = up ? tip_y + t : tip_y - t;
-        int y1 = up ? tip_y + height + t : tip_y - height - t;
+        int y0 = up ? base + t : base - t;
+        int y1 = up ? base + height + t : base - height - t;
         draw_line(cx, y0, cx - half_width, y1, color);
         draw_line(cx, y0, cx + half_width, y1, color);
     }
@@ -519,6 +521,13 @@ static int quick_screen_value(
     else
     {
         snprintf(buf, size, "%s", raw_value);
+        if (index == 2)
+        {
+            /* Frame cell: "16:9 Crop" -> "16:9" (the word Crop is not needed here) */
+            int n = strlen(buf);
+            if (n > 5 && streq(buf + n - 5, " Crop"))
+                buf[n - 5] = 0;
+        }
     }
 
     /* Film Edge: values are shown in capitals */
@@ -589,6 +598,7 @@ static int quick_screen_adjust(int index, int delta)
 void menu_quick_screen_draw(void)
 {
     int index;
+    film_palette_apply();
     bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
 
     /* Menu task owns the screen here, so dynamic availability is safe to
@@ -613,22 +623,30 @@ void menu_quick_screen_draw(void)
         int selected = (index == quick_screen_sel && enabled);
         int box_y = (index / QUICK_SCREEN_COLS == 0) ? 55 : 256;
         int box_x = (index % QUICK_SCREEN_COLS) * QUICK_SCREEN_CELL_W + 6;
+        int box_w = QUICK_SCREEN_CELL_W - 12;
+        int box_h = 168;
         int arrow_color;
+        int label_bg = selected ? COLOR_CREAM : COLOR_BLACK;
         static const char * const labels[QUICK_SCREEN_COUNT] =
             { "WB", "FORMAT", "FRAME", "BITS", "FPS", "SHUTTER", "APERTURE", "ISO" };
 
-        /* Film Edge cell: thin outline, or a solid cream block when selected */
+        /* Film Edge cell: thin outline, or the whole box solid cream when selected */
         if (selected)
-            bmp_fill(COLOR_CREAM, box_x, box_y, QUICK_SCREEN_CELL_W - 12, 168);
+        {
+            bmp_fill(COLOR_CREAM, box_x, box_y, box_w, box_h);
+            bmp_draw_rect(COLOR_CREAM, box_x, box_y, box_w, box_h);
+        }
         else
-            bmp_draw_rect(COLOR_GRAY(8), box_x, box_y, QUICK_SCREEN_CELL_W - 12, 168);
+        {
+            bmp_draw_rect(COLOR_FILM_MUTED, box_x, box_y, box_w, box_h);
+        }
 
-        color = selected ? COLOR_BLACK : enabled ? COLOR_CREAM : COLOR_GRAY(35);
-        arrow_color = selected ? COLOR_BLACK : enabled ? COLOR_CREAM : COLOR_GRAY(17);
+        color = selected ? COLOR_BLACK : enabled ? COLOR_CREAM : COLOR_FILM_MUTED;
+        arrow_color = selected ? COLOR_BLACK : enabled ? COLOR_CREAM : COLOR_FILM_FAINT;
 
         bmp_printf(
-            FONT(FONT_SMALL, selected ? COLOR_GRAY(20) : COLOR_GRAY(42), NO_BG_ERASE),
-            cx - (int)strlen(labels[index]) * 4, box_y + 5, "%s", labels[index]);
+            FONT(FONT_SMALL, selected ? COLOR_FILM_FAINT : COLOR_FILM_DIM, label_bg),
+            cx - (int)strlen(labels[index]) * 4, box_y + 6, "%s", labels[index]);
 
         width = bmp_string_width(FONT_CANON, value);
         value_x = cx - (width + (draw_degree ? 12 : 0)) / 2;
@@ -644,10 +662,10 @@ void menu_quick_screen_draw(void)
         }
         quick_screen_arrow(cx, up_tip_y, 1,
             !enabled ? arrow_color :
-            quick_screen_feedback == index * 2 ? COLOR_WHITE : arrow_color);
+            quick_screen_feedback == index * 2 ? COLOR_FILM_DIM : arrow_color);
         quick_screen_arrow(cx, down_tip_y, 0,
             !enabled ? arrow_color :
-            quick_screen_feedback == index * 2 + 1 ? COLOR_WHITE : arrow_color);
+            quick_screen_feedback == index * 2 + 1 ? COLOR_FILM_DIM : arrow_color);
     }
 }
 
@@ -805,11 +823,10 @@ int menu_quick_screen_handle_key(int button_code)
 
 void menu_grid_draw(void)
 {
+    film_palette_apply();
     bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
 
-    int fnt = FONT(FONT_CANON, COLOR_WHITE, NO_BG_ERASE);
     int label_h = fontspec_font(FONT_CANON)->height;
-    int b = GRID_SEL_BORDER;
 
     for (int i = 0; i < GRID_COUNT; i++)
     {
@@ -817,11 +834,18 @@ void menu_grid_draw(void)
         grid_cell_rect(i, &x, &y, &w, &h);
         int selected = (i == grid_sel);
         int r = MIN(GRID_RADIUS, MIN(w, h) / 2);
+        int fg = selected ? COLOR_BLACK : COLOR_CREAM;
 
+        /* Film Edge: outlined tile; the selected tile is solid cream */
         if (selected)
-            grid_fill_round_rect(x - b, y - b, w + 2 * b, h + 2 * b, r + b, COLOR_ORANGE);
-
-        grid_fill_round_rect(x, y, w, h, r, COLOR_GRAY(20));
+        {
+            grid_fill_round_rect(x, y, w, h, r, COLOR_CREAM);
+        }
+        else
+        {
+            grid_fill_round_rect(x, y, w, h, r, COLOR_FILM_MUTED);
+            grid_fill_round_rect(x + 2, y + 2, w - 4, h - 4, MAX(r - 2, 1), COLOR_BLACK);
+        }
 
         /* Shared bottom baseline for all four labels. */
         int label_y = y + h - GRID_LABEL_PAD - label_h;
@@ -832,9 +856,9 @@ void menu_grid_draw(void)
         int icon_zone_top = y + 10;
         int icon_zone_bot = label_y - GRID_ICON_GAP;
         int icon_cy = (icon_zone_top + icon_zone_bot) / 2;
-        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy);
+        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, fg);
 
-        bmp_printf(fnt, label_x, label_y, "%s", grid_tiles[i].label);
+        bmp_printf(FONT(FONT_CANON, fg, NO_BG_ERASE), label_x, label_y, "%s", grid_tiles[i].label);
     }
 }
 

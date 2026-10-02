@@ -754,6 +754,7 @@ EXCLUDES(lvinfo_sem)
 void lvinfo_display(int top, int bottom)
 {
     take_semaphore(lvinfo_sem, 0);
+    film_palette_apply();
 
     static int refresh_timer = INT_MIN;
     if (layout_dirty && should_run_polling_action(2000, &refresh_timer))
@@ -778,8 +779,8 @@ void lvinfo_display(int top, int bottom)
             }
             else
             {
-                draw_circle(dot_x, dot_y, 10, COLOR_GRAY(42));
-                draw_circle(dot_x, dot_y, 9, COLOR_GRAY(42));
+                draw_circle(dot_x, dot_y, 10, COLOR_FILM_DIM);
+                draw_circle(dot_x, dot_y, 9, COLOR_FILM_DIM);
             }
         }
     }

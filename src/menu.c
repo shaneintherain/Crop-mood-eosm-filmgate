@@ -54,10 +54,10 @@
 #define MENU_HELP_Y_POS_2 458
 #define MENU_WARNING_Y_POS (menu_lv_transparent_mode ? 425 : 458)
 
-#define MENU_BG_COLOR_HEADER_FOOTER 42
+#define MENU_BG_COLOR_HEADER_FOOTER COLOR_FILM_FAINT
 
 extern int bmp_color_scheme;
-#define MENU_BAR_COLOR (bmp_color_scheme ? COLOR_LIGHT_BLUE : COLOR_BLUE)
+#define MENU_BAR_COLOR COLOR_CREAM
 
 #ifdef CONFIG_MENU_ICONS
 #define SUBMENU_OFFSET 48
@@ -3000,11 +3000,11 @@ entry_print(
     {
         /* Canon Gothic — native camera UI font (smoother than RBF bitmap fonts). */
         /* Film Edge: selected row in cream, other rows in softer grey. */
-        int fg = entry->selected ? COLOR_CREAM : COLOR_GRAY(60);
-        /* read-only rows use enabled=0 and stay dark grey. */
+        int fg = entry->selected ? COLOR_CREAM : COLOR_FILM_DIM;
+        /* read-only rows use enabled=0 and stay muted. */
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = COLOR_GRAY(35);
+            fg = COLOR_FILM_MUTED;
         fnt = FONT(FONT_CANON, fg, COLOR_BLACK);
     }
 #endif
@@ -3034,10 +3034,10 @@ skip_name:
     /* Slim chrome: Canon font for the whole row (~camera UI size/weight). */
     if (slim_style && !customize_mode && !junkie_mode)
     {
-        int fg = entry->selected ? COLOR_CREAM : COLOR_GRAY(60);
+        int fg = entry->selected ? COLOR_CREAM : COLOR_FILM_DIM;
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? COLOR_CREAM : COLOR_GRAY(35);
+            fg = entry->selected ? COLOR_CREAM : COLOR_FILM_MUTED;
         fnt = FONT(FONT_CANON, fg, COLOR_BLACK);
     }
 
@@ -3055,9 +3055,9 @@ skip_name:
         !junkie_mode;
     int draw_left_arrow = draw_tri_arrows;
     int draw_right_arrow = draw_tri_arrows;
-    int arrow_color = COLOR_GRAY(60);
+    int arrow_color = COLOR_FILM_DIM;
     if (draw_tri_arrows && slim_locked)
-        arrow_color = COLOR_GRAY(30);
+        arrow_color = COLOR_FILM_MUTED;
     else if (draw_tri_arrows && entry->selected)
         arrow_color = COLOR_CREAM;
     int fonth = fontspec_font(fnt)->height;
@@ -4712,6 +4712,7 @@ void menus_display(
 )
 {
     g_submenu_width = 720;
+    film_palette_apply();
 
     if (duplicate_check_dirty)
         check_duplicate_entries();
@@ -4786,8 +4787,8 @@ void menus_display(
     
     int bgs = COLOR_BLACK;
     int bgu = MENU_BG_COLOR_HEADER_FOOTER;
-    int fgu = COLOR_GRAY(35);
-    int fgs = COLOR_WHITE;
+    int fgu = COLOR_FILM_MUTED;
+    int fgs = COLOR_CREAM;
 
     if (customize_mode) fgs = get_customize_color();
 

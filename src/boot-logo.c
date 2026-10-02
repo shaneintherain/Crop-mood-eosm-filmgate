@@ -1537,6 +1537,7 @@ extern int ml_started;
 
 static void boot_logo_draw(void)
 {
+    film_palette_apply();
     /* Keep splash writes inside ML's normal LCD canvas.  The surrounding
      * 960x540 backing surface is changed by Canon during LV/zoom switches. */
     bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
@@ -1641,7 +1642,7 @@ void boot_logo_show(void)
     /* Keep Canon's dialogs from overwriting the splash while it is visible. */
     boot_logo_active = 1;
     canon_gui_disable_front_buffer();
-    boot_logo_hide_time = get_ms_clock() + 600; /* was 2000: shorter splash = faster start-up */
+    boot_logo_hide_time = get_ms_clock() + 2000;
     BMP_LOCK( boot_logo_present(); )
     task_create("boot_logo", 0x1e, 0x1000, boot_logo_task, 0);
 }
