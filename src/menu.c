@@ -36,7 +36,6 @@
 #include "focus.h"
 #include "menuhelp.h"
 #include "menu-grid.h"
-#include "slim-font.h"
 #include "console.h"
 #include "debug.h"
 #include "lvinfo.h"
@@ -2923,9 +2922,9 @@ entry_print(
     int use_small_font = 0;
     int x_font_offset = 0;
 #ifdef CONFIG_SLIM_MENUS
-    /* Roboto Thin is a fixed 40px bitmap font; center it in Slim rows. */
+    /* Canon Gothic is taller (~40) than FONT_LARGE (~32); center in the row. */
     int y_font_offset = slim_style
-        ? (h - slim_ui_font_height()) / 2
+        ? (h - (int)fontspec_font(FONT_CANON)->height) / 2
         : (h - (int)font_large.height) / 2;
 #else
     int y_font_offset = (h - (int)font_large.height) / 2;
@@ -2999,12 +2998,14 @@ entry_print(
 #ifdef CONFIG_SLIM_MENUS
     if (slim_style && !customize_mode && !junkie_mode)
     {
-        int fg = entry->selected ? COLOR_ORANGE : COLOR_WHITE;
-        /* OFF (bool) stays white; read-only rows use enabled=0 and stay grey. */
+        /* Canon Gothic — native camera UI font (smoother than RBF bitmap fonts). */
+        /* Film Edge: selected row in cream, other rows in softer grey. */
+        int fg = entry->selected ? COLOR_CREAM : COLOR_GRAY(60);
+        /* read-only rows use enabled=0 and stay dark grey. */
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = COLOR_GRAY(50);
-        fnt = slim_ui_font_spec(fg, COLOR_BLACK);
+            fg = COLOR_GRAY(35);
+        fnt = FONT(FONT_CANON, fg, COLOR_BLACK);
     }
 #endif
 
@@ -3030,14 +3031,14 @@ skip_name:
         fnt = (fnt & ~FONT_MASK) | FONT_MED_LARGE;
 
 #ifdef CONFIG_SLIM_MENUS
-    /* Slim chrome: Roboto Thin for the whole row. */
+    /* Slim chrome: Canon font for the whole row (~camera UI size/weight). */
     if (slim_style && !customize_mode && !junkie_mode)
     {
-        int fg = entry->selected ? COLOR_ORANGE : COLOR_WHITE;
+        int fg = entry->selected ? COLOR_CREAM : COLOR_GRAY(60);
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? COLOR_ORANGE : COLOR_GRAY(50);
-        fnt = slim_ui_font_spec(fg, COLOR_BLACK);
+            fg = entry->selected ? COLOR_CREAM : COLOR_GRAY(35);
+        fnt = FONT(FONT_CANON, fg, COLOR_BLACK);
     }
 
     /* Keep dial arrows visible on locked rows, but draw the entire control
@@ -3054,11 +3055,11 @@ skip_name:
         !junkie_mode;
     int draw_left_arrow = draw_tri_arrows;
     int draw_right_arrow = draw_tri_arrows;
-    int arrow_color = COLOR_WHITE;
+    int arrow_color = COLOR_GRAY(60);
     if (draw_tri_arrows && slim_locked)
-        arrow_color = COLOR_GRAY(50);
+        arrow_color = COLOR_GRAY(30);
     else if (draw_tri_arrows && entry->selected)
-        arrow_color = COLOR_ORANGE;
+        arrow_color = COLOR_CREAM;
     int fonth = fontspec_font(fnt)->height;
     int tri_h = MAX(fonth - 4, 18); /* match value glyph height */
     int arrow_slot_w = (tri_h * 6) / 10 + 1;
@@ -3174,7 +3175,7 @@ skip_name:
 
     int x_value = xval;
 #ifdef CONFIG_SLIM_MENUS
-    /* Optical center of the fixed Roboto Thin glyph cell. */
+    /* Optical center of FONT_CANON glyphs */
     int value_cy = y + y_font_offset + (fonth * 9) / 20;
     int left_touch_target = -1;
     if (draw_left_arrow)
@@ -3316,6 +3317,11 @@ skip_name:
     {
 #ifdef CONFIG_SLIM_MENUS
         /* Slim: no blue/cyan left bar, no blue row highlight — text-only selection */
+        if (slim_style && !customize_mode && !junkie_mode)
+        {
+            /* Film Edge: thin cream marker at the left edge of the selected row */
+            bmp_fill(COLOR_CREAM, 6, y + 4, 4, h - 9);
+        }
         if (!(slim_style && !customize_mode && !junkie_mode))
 #endif
         {
@@ -4020,13 +4026,13 @@ menu_display(
     int num_visible = get_menu_visible_count(menu);
     int target_height = menu->submenu_height ? menu->submenu_height - 54 : 370;
 #ifdef CONFIG_SLIM_MENUS
-    int slim_row_h = slim_ui_font_height() + 8;
+    int slim_row_h = (int)fontspec_font(FONT_CANON)->height + 8;
     if (!menu->submenu_height)
     {
         /* Count rows against the remaining screen below the list origin. */
         if (menu_grid_is_launched() && !submenu_level)
         {
-            int slim_header_h = slim_ui_font_height() + 20;
+            int slim_header_h = (int)fontspec_font(FONT_CANON)->height + 20;
             int list_y0 = slim_header_h + 12;
             target_height = 480 - list_y0 - 6;
         }
@@ -4052,7 +4058,7 @@ menu_display(
     
     /* but if we can't avoid scrolling, don't squeeze */
 #ifdef CONFIG_SLIM_MENUS
-    /* Slim rows are taller — never squeeze one extra past what fits. */
+    /* Slim Canon rows are taller — never squeeze one extra past what fits. */
     if (num_visible > ideal_num_items)
     {
         num_visible = ideal_num_items;
@@ -4155,9 +4161,9 @@ menu_display(
             // display current entry
             int row_h = font_large.height + local_spacing;
 #ifdef CONFIG_SLIM_MENUS
-            /* Taller rows for the Slim font. */
+            /* Taller rows for Canon Gothic. */
             if (entry_is_slim_style(entry, IS_SUBMENU(menu)))
-                row_h = MAX(row_h, slim_ui_font_height() + local_spacing + 8);
+                row_h = MAX(row_h, (int)fontspec_font(FONT_CANON)->height + local_spacing + 8);
 #endif
             int ok = menu_entry_process(menu, entry, x, y, row_h, only_selected);
             
@@ -4637,12 +4643,12 @@ show_vscroll(struct menu * parent){
     int max = get_menu_visible_count(parent);
 
 #ifdef CONFIG_SLIM_MENUS
-    /* Match menu_display: Slim row height and remaining viewport. */
+    /* Match menu_display: Canon Gothic row height and remaining viewport. */
     int target_height = parent && parent->submenu_height ? parent->submenu_height - 54 : 430;
-    int row_h = slim_ui_font_height() + 8;
+    int row_h = (int)fontspec_font(FONT_CANON)->height + 8;
     if ((!parent || !parent->submenu_height) && menu_grid_is_launched() && !submenu_level)
     {
-        int slim_header_h = slim_ui_font_height() + 20;
+        int slim_header_h = (int)fontspec_font(FONT_CANON)->height + 20;
         int list_y0 = slim_header_h + 12;
         target_height = 480 - list_y0 - 6;
     }
@@ -4653,8 +4659,8 @@ show_vscroll(struct menu * parent){
     
     if(max > menu_len){
 #ifdef CONFIG_SLIM_MENUS
-        /* Match Slim title bar height + gap below blue line. */
-        int slim_header_h = slim_ui_font_height() + 20;
+        /* Match slim title bar (Canon height + pad) + gap below blue line. */
+        int slim_header_h = (int)fontspec_font(FONT_CANON)->height + 20;
         int far_right = 1;
         int y_lo = far_right
             ? slim_header_h + 12 : 44;
@@ -4671,13 +4677,13 @@ show_vscroll(struct menu * parent){
         int x = 688;
         int bar_w = 24;
 
-        /* Minimal scrollbar: orange thumb and white arrows only. */
-        bmp_fill(COLOR_ORANGE, x + 9, y, 6, size);
-        int arrow_size = MAX(slim_ui_font_height() - 4, 18);
+        /* Minimal scrollbar: orange thumb and white Canon-style arrows only. */
+        bmp_fill(COLOR_CREAM, x + 9, y, 6, size);
+        int arrow_size = MAX((int)fontspec_font(FONT_CANON)->height - 4, 18);
         slim_draw_scroll_arrow_up(x + bar_w / 2, y_lo + arrow_size / 2 + 2,
-            arrow_size, COLOR_WHITE);
+            arrow_size, COLOR_CREAM);
         slim_draw_scroll_arrow_down(x + bar_w / 2, h_bot - arrow_size / 2 - 2,
-            arrow_size, COLOR_WHITE);
+            arrow_size, COLOR_CREAM);
         slim_touch_scroll_x1 = x;
         slim_touch_scroll_x2 = x + bar_w;
         slim_touch_scroll_up_y1 = y_lo;
@@ -4791,8 +4797,8 @@ void menus_display(
     int content_y = 55;
     if (slim_grid_launcher)
     {
-        int fh = slim_ui_font_height();
-        /* Tall enough that all Slim glyphs are fully inside the bar. */
+        int fh = (int)fontspec_font(FONT_CANON)->height;
+        /* Tall enough that Canon glyphs are fully inside the bar (pad above/below). */
         int header_h = fh + 20;
         int title_y = y + (header_h - fh) / 2 - 1;
         if (title_y < y + 2) title_y = y + 2;
@@ -4801,15 +4807,15 @@ void menus_display(
 
         struct menu * sel = get_selected_toplevel_menu();
         if (sel && sel->name)
-            bmp_printf(slim_ui_font_spec(COLOR_WHITE, bgu),
+            bmp_printf(FONT(FONT_CANON, COLOR_CREAM, NO_BG_ERASE),
                 SLIM_MENU_TITLE_X, title_y, "%s", slim_menu_display_name(sel->name));
 
         /* Blue accent along the bottom edge of the grey bar */
-        bmp_fill(MENU_BAR_COLOR, orig_x, y + header_h - 2, 720, 2);
+        bmp_fill(COLOR_CREAM, orig_x, y + header_h - 2, 720, 2);
 
         /* Return-to-grid control in every launched category header. */
         slim_draw_arrow_left(690, y + header_h / 2,
-            MAX(slim_ui_font_height() - 4, 18), COLOR_WHITE);
+            MAX((int)fontspec_font(FONT_CANON)->height - 4, 18), COLOR_CREAM);
         /* EOS M touch X coordinates top out near 616; keep the visual arrow
          * at the right while making its touch box reachable and generous. */
         slim_touch_grid_back_x1 = 500;
@@ -4851,7 +4857,7 @@ void menus_display(
                     //~ bmp_printf(FONT_MED, 720 - strlen(menu->name)*font_med.width, 50, menu->name);
                 //~ else
                 if (!junkie_mode)
-                    bmp_printf(slim_ui_font_spec(fg, bgu), 5, y, "%s", menu->name);
+                    bmp_printf(FONT(FONT_CANON, fg, NO_BG_ERASE), 5, y, "%s", menu->name);
                 
                 int x1 = x - 1;
                 int x2 = x1 + icon_spacing + 2;
@@ -4988,8 +4994,7 @@ submenu_display(struct menu * submenu)
         w = 720-2*bx;
         bmp_fill(MENU_BG_COLOR_HEADER_FOOTER,  bx,  by, w, 40);
         bmp_fill(COLOR_BLACK,  bx,  by + 40, w, h-40);
-        bmp_printf(slim_ui_font_spec(COLOR_WHITE, MENU_BG_COLOR_HEADER_FOOTER),
-                   bx + 15, by + 2, "%s", submenu->name);
+        bmp_printf(FONT(FONT_CANON, COLOR_WHITE, NO_BG_ERASE),  bx + 15,  by+2, "%s", submenu->name);
 
         for (int i = 0; i < 5; i++)
             bmp_draw_rect(45,  bx-i,  by-i, w+i*2, h+i*2);
