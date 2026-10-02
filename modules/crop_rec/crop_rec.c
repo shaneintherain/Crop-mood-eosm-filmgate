@@ -6336,7 +6336,11 @@ static MENU_UPDATE_FUNC(slim_crop_res_update)
     slim_crop_sync_from_backend();
     slim_crop_expected_res(&w, &h);
     if (slim_film_sync() >= 0)
-        MENU_SET_NAME("Sensor Readout"); /* film window is cut from this by RAW video */
+    {
+        /* Film formats: the Recorded Size row is what matters; hide this one. */
+        MENU_SET_SHIDDEN(1);
+        return;
+    }
     MENU_SET_VALUE("%dx%d", w, h);
     /* Read-only: greyed via enabled=0 */
     MENU_SET_ENABLED(0);
@@ -8710,7 +8714,11 @@ static LVINFO_UPDATE_FUNC(crop_info)
         if (patch_active)
             slim_film_label(buffer, sizeof(buffer));
 
-        if (raw_capture_info.binning_x + raw_capture_info.skipping_x == 1 &&
+        if (patch_active && slim_film_active() >= 0)
+        {
+            /* film format: the name alone (no 1:1 / 3x3 tag) */
+        }
+        else if (raw_capture_info.binning_x + raw_capture_info.skipping_x == 1 &&
             raw_capture_info.binning_y + raw_capture_info.skipping_y == 1)
         {
             STR_APPEND(buffer, "%s1:1", buffer[0] ? " " : "");
