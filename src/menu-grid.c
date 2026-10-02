@@ -833,23 +833,27 @@ void menu_grid_draw(void)
         int x, y, w, h;
         grid_cell_rect(i, &x, &y, &w, &h);
         int selected = (i == grid_sel);
-        int r = MIN(GRID_RADIUS, MIN(w, h) / 2);
         int fg = selected ? COLOR_BLACK : COLOR_CREAM;
 
         /* Film Edge: outlined tile; the selected tile is solid cream */
+        /* square corners and a thin outline, the same as the quick menu cells */
         if (selected)
         {
-            grid_fill_round_rect(x, y, w, h, r, COLOR_CREAM);
+            bmp_fill(COLOR_CREAM, x, y, w, h);
+            bmp_draw_rect(COLOR_CREAM, x, y, w, h);
         }
         else
         {
-            grid_fill_round_rect(x, y, w, h, r, COLOR_FILM_MUTED);
-            grid_fill_round_rect(x + 2, y + 2, w - 4, h - 4, MAX(r - 2, 1), COLOR_BLACK);
+            bmp_draw_rect(COLOR_FILM_MUTED, x, y, w, h);
         }
 
         /* Shared bottom baseline for all four labels. */
         int label_y = y + h - GRID_LABEL_PAD - label_h;
-        int label_w = bmp_string_width(FONT_CANON, (char *) grid_tiles[i].label);
+        char label[16];
+        snprintf(label, sizeof(label), "%s", grid_tiles[i].label);
+        for (char *c = label; *c; c++)
+            if (*c >= 'a' && *c <= 'z') *c -= 32;
+        int label_w = bmp_string_width(FONT_CANON, label);
         int label_x = x + (w - label_w) / 2;
 
         /* Icon centered in the remaining space above the label. */
@@ -858,7 +862,7 @@ void menu_grid_draw(void)
         int icon_cy = (icon_zone_top + icon_zone_bot) / 2;
         grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, fg);
 
-        bmp_printf(FONT(FONT_CANON, fg, NO_BG_ERASE), label_x, label_y, "%s", grid_tiles[i].label);
+        bmp_printf(FONT(FONT_CANON, fg, NO_BG_ERASE), label_x, label_y, "%s", label);
     }
 }
 

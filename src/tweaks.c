@@ -3760,6 +3760,20 @@ void film_palette_apply(void)
 #endif
 }
 
+/* Canon reloads its own palette on many screen changes, which would turn our
+ * custom colours back into the unused (pink/purple) defaults.  Keep rewriting them. */
+static void film_palette_task(void *unused)
+{
+    while (1)
+    {
+        if (!ml_shutdown_requested)
+            film_palette_apply();
+        msleep(RECORDING ? 250 : 20);
+    }
+}
+
+TASK_CREATE("film_palette", film_palette_task, 0, 0x1e, 0x1000);
+
 #ifdef FEATURE_COLOR_SCHEME
 
 void alter_bitmap_palette_entry(int color, int base_color, int luma_scale_factor, int chroma_scale_factor)

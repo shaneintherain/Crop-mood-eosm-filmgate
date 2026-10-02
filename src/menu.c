@@ -2998,14 +2998,24 @@ entry_print(
 #ifdef CONFIG_SLIM_MENUS
     if (slim_style && !customize_mode && !junkie_mode)
     {
+        /* Film Edge: the selected row is a solid cream block (like the quick menu),
+         * other rows get a thin divider line. Drawn before the text. */
+        if (entry->selected)
+            bmp_fill(COLOR_CREAM, 10, y, 666, h - 1);
+        else
+            bmp_fill(COLOR_FILM_FAINT, 10, y + h - 1, 666, 1);
+    }
+
+    if (slim_style && !customize_mode && !junkie_mode)
+    {
         /* Canon Gothic — native camera UI font (smoother than RBF bitmap fonts). */
-        /* Film Edge: selected row in cream, other rows in softer grey. */
-        int fg = entry->selected ? COLOR_CREAM : COLOR_FILM_DIM;
+        /* Film Edge: selected row black on cream, other rows in softer grey. */
+        int fg = entry->selected ? COLOR_BLACK : COLOR_FILM_DIM;
         /* read-only rows use enabled=0 and stay muted. */
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = COLOR_FILM_MUTED;
-        fnt = FONT(FONT_CANON, fg, COLOR_BLACK);
+            fg = entry->selected ? COLOR_FILM_FAINT : COLOR_FILM_MUTED;
+        fnt = FONT(FONT_CANON, fg, entry->selected ? NO_BG_ERASE : COLOR_BLACK);
     }
 #endif
 
@@ -3034,11 +3044,11 @@ skip_name:
     /* Slim chrome: Canon font for the whole row (~camera UI size/weight). */
     if (slim_style && !customize_mode && !junkie_mode)
     {
-        int fg = entry->selected ? COLOR_CREAM : COLOR_FILM_DIM;
+        int fg = entry->selected ? COLOR_BLACK : COLOR_FILM_DIM;
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? COLOR_CREAM : COLOR_FILM_MUTED;
-        fnt = FONT(FONT_CANON, fg, COLOR_BLACK);
+            fg = entry->selected ? COLOR_FILM_FAINT : COLOR_FILM_MUTED;
+        fnt = FONT(FONT_CANON, fg, entry->selected ? NO_BG_ERASE : COLOR_BLACK);
     }
 
     /* Keep dial arrows visible on locked rows, but draw the entire control
@@ -3059,7 +3069,7 @@ skip_name:
     if (draw_tri_arrows && slim_locked)
         arrow_color = COLOR_FILM_MUTED;
     else if (draw_tri_arrows && entry->selected)
-        arrow_color = COLOR_CREAM;
+        arrow_color = COLOR_BLACK;
     int fonth = fontspec_font(fnt)->height;
     int tri_h = MAX(fonth - 4, 18); /* match value glyph height */
     int arrow_slot_w = (tri_h * 6) / 10 + 1;
@@ -3317,11 +3327,6 @@ skip_name:
     {
 #ifdef CONFIG_SLIM_MENUS
         /* Slim: no blue/cyan left bar, no blue row highlight — text-only selection */
-        if (slim_style && !customize_mode && !junkie_mode)
-        {
-            /* Film Edge: thin cream marker at the left edge of the selected row */
-            bmp_fill(COLOR_CREAM, 6, y + 4, 4, h - 9);
-        }
         if (!(slim_style && !customize_mode && !junkie_mode))
 #endif
         {
