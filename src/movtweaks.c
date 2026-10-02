@@ -52,20 +52,11 @@ void update_lvae_for_autoiso_n_displaygain();
 CONFIG_INT("hdmi.force.vga", hdmi_force_vga, 0);
 
 static int hdmi_code_array[8];
-static int hdmi_1080i_block[8];   /* last complete HDMI setup seen while in 1080i */
-static int hdmi_1080i_known = 0;
 
 PROP_HANDLER(PROP_HDMI_CHANGE_CODE)
 {
     ASSERT(len == 32);
     memcpy(hdmi_code_array, buf, 32);
-
-    /* remember the complete 1080i block, to be able to ask for exactly that later */
-    if (((int*)buf)[0] == 5)
-    {
-        memcpy(hdmi_1080i_block, buf, 32);
-        hdmi_1080i_known = 1;
-    }
 }
 
 static void ChangeHDMIOutputSizeToVGA()
@@ -76,10 +67,7 @@ static void ChangeHDMIOutputSizeToVGA()
 
 static void ChangeHDMIOutputSizeToFULLHD()
 {
-    if (hdmi_1080i_known)
-        memcpy(hdmi_code_array, hdmi_1080i_block, 32); /* the complete 1080i setup */
-    else
-        hdmi_code_array[0] = 5;
+    hdmi_code_array[0] = 5;
     prop_request_change(PROP_HDMI_CHANGE_CODE, hdmi_code_array, 32);
 } 
 #endif
@@ -469,52 +457,6 @@ void movtweak_step()
         //~ update_lvae_for_autoiso_n_displaygain();
         
         #ifdef FEATURE_FORCE_HDMI_VGA
-        /* Keep the HDMI output at 1080i.  Canon drops to 480p after recording
-         * (and sometimes when the cable is plugged in); ask for 1080i again.
-         * Never while recording.  Waits a couple of seconds after recording
-         * stops, uses the same UI-lock sequence as Force HDMI-VGA, and gives
-         * up after a few tries so a 480p-only monitor is not hammered. */
-        {
-            static int hdmi_tries = 0;
-            static int hdmi_last_try = 0;
-            static int hdmi_rec_prev = 0;
-
-            if (RECORDING)
-            {
-                hdmi_tries = 0;
-                hdmi_last_try = get_ms_clock(); /* delays the first try after stop */
-                hdmi_rec_prev = 1;
-            }
-            else if (hdmi_rec_prev)
-            {
-                hdmi_rec_prev = 0;
-                if (ext_monitor_hdmi)
-                    NotifyBox(2500, "HDMI code %d", hdmi_code); /* diagnostic */
-            }
-
-            if (!ext_monitor_hdmi || hdmi_code >= 5)
-            {
-                hdmi_tries = 0;
-            }
-            else if (!hdmi_force_vga && hdmi_code == 2 && is_movie_mode() && lv &&
-                     !RECORDING && !gui_menu_shown() &&
-                     hdmi_tries < 3 && (get_ms_clock() - hdmi_last_try) > 2000)
-            {
-                hdmi_tries++;
-                hdmi_last_try = get_ms_clock();
-                msleep(500); /* let the mode settle, then re-check */
-                if (hdmi_code == 2 && !RECORDING)
-                {
-                    BMP_LOCK(
-                        ChangeHDMIOutputSizeToFULLHD();
-                        msleep(300);
-                    )
-                    msleep(1500);
-                    NotifyBox(2000, "HDMI request %d (code %d, saved %d)", hdmi_tries, hdmi_code, hdmi_1080i_known);
-                }
-            }
-        }
-
         if (hdmi_force_vga && is_movie_mode() && (lv || PLAY_MODE) && !gui_menu_shown())
         {
             if (hdmi_code >= 5)

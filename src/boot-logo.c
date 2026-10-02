@@ -1585,29 +1585,6 @@ static void boot_logo_present(void)
     bmp_draw_to_idle(0);
 }
 
-/* Canon can finish a queued status-icon draw after its front buffer has been
- * disabled.  Repainting the affected pixels races that late draw and may
- * still expose it for one LCD frame.  The splash uses only these three
- * colors, so make every other palette index opaque black until handoff.
- * Canon may still write the icon pixels, but they cannot become visible. */
-static void boot_logo_isolate_palette(int isolate)
-{
-    uint32_t black = LCD_Palette[3 * COLOR_BLACK + 2];
-
-    for (int color = 0; color < 255; color++)
-    {
-        if (isolate &&
-            (color == COLOR_BLACK ||
-             color == COLOR_WHITE ||
-             color == COLOR_ORANGE))
-            continue;
-
-        uint32_t value = isolate ? black : LCD_Palette[3 * color + 2];
-        EngDrvOut(LCD_Palette[3 * color], value);
-        EngDrvOut(LCD_Palette[3 * color + 0x300], value);
-    }
-}
-
 static void boot_logo_clear(void)
 {
     bmp_draw_to_idle(1);
@@ -1653,9 +1630,7 @@ static void boot_logo_task(void *unused)
             msleep(20);
         boot_logo_handoff_pending = 0;
         BMP_LOCK( boot_logo_release_canvas(); )
-        boot_logo_isolate_palette(0);
         boot_logo_active = 0;
-        lens_display_set_dirty();
     }
 }
 
@@ -1666,8 +1641,7 @@ void boot_logo_show(void)
     /* Keep Canon's dialogs from overwriting the splash while it is visible. */
     boot_logo_active = 1;
     canon_gui_disable_front_buffer();
-    boot_logo_isolate_palette(1);
-    boot_logo_hide_time = get_ms_clock() + 2000;
+    boot_logo_hide_time = get_ms_clock() + 600; /* was 2000: shorter splash = faster start-up */
     BMP_LOCK( boot_logo_present(); )
     task_create("boot_logo", 0x1e, 0x1000, boot_logo_task, 0);
 }
