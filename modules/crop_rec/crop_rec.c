@@ -5756,10 +5756,10 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
  */
 #define SLIM_FILM_FORMATS 6
 static const char * const slim_film_fmt_names[SLIM_FILM_FORMATS] = {
-    "S35", "S35 Anamorphic", "S16", "16mm", "S8", "8mm"
+    "Academy 35mm", "A35 Anamorphic", "S16", "16mm", "S8", "8mm"
 };
 static const char * const slim_film_fmt_labels[SLIM_FILM_FORMATS] = {
-    "S35", "S35A", "S16", "16mm", "S8", "8mm"      /* bottom bar */
+    "A35", "A35-ANA", "S16", "16mm", "S8", "8mm"   /* bottom bar */
 };
 static const int slim_film_fmt_first[SLIM_FILM_FORMATS] = { 1, 4, 6, 7, 10, 12 }; /* first table index */
 static const int slim_film_fmt_count[SLIM_FILM_FORMATS] = { 3, 2, 1, 3, 2, 2 };  /* Frame choices */
@@ -6736,7 +6736,7 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .choices    = CHOICES("1x1", "1x3", "3x3", "LV"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
-        .help       = "Film format (S35, S35 Anamorphic, S16, 16mm, S8, 8mm).",
+        .help       = "Film format (Academy 35mm, A35 Anamorphic, S16, 16mm, S8, 8mm).",
     },
     {
         .name       = "Aspect Ratio",
@@ -8581,7 +8581,7 @@ static unsigned int crop_rec_keypress_cbr(unsigned int key)
     return 1;
 }
 
-/* Bottom-bar name of the active film format (S35, S35A, S16, 16mm, S8, 8mm) */
+/* Bottom-bar name of the active film format (A35, A35-ANA, S16, 16mm, S8, 8mm) */
 static void slim_film_label(char * buffer, int size)
 {
     int fmt = slim_film_active();
