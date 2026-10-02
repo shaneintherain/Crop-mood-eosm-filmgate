@@ -457,6 +457,30 @@ void movtweak_step()
         //~ update_lvae_for_autoiso_n_displaygain();
         
         #ifdef FEATURE_FORCE_HDMI_VGA
+        /* Keep the HDMI output at 1080i.  Canon sometimes drops to 480p (after
+         * recording, when the cable is plugged in, ...); ask for 1080i again.
+         * Never while recording, and give up after 3 tries per connection so a
+         * monitor that only supports 480p is not hammered. */
+        {
+            static int hdmi_tries = 0;
+            static int hdmi_last_try = 0;
+
+            if (!ext_monitor_hdmi || hdmi_code >= 5)
+            {
+                hdmi_tries = 0;
+            }
+            else if (!hdmi_force_vga && hdmi_code == 2 && is_movie_mode() && lv &&
+                     !RECORDING && !gui_menu_shown() &&
+                     hdmi_tries < 3 && (get_ms_clock() - hdmi_last_try) > 1500)
+            {
+                hdmi_tries++;
+                hdmi_last_try = get_ms_clock();
+                msleep(300); /* let the mode settle, then re-check */
+                if (hdmi_code == 2 && !RECORDING)
+                    ChangeHDMIOutputSizeToFULLHD();
+            }
+        }
+
         if (hdmi_force_vga && is_movie_mode() && (lv || PLAY_MODE) && !gui_menu_shown())
         {
             if (hdmi_code >= 5)
