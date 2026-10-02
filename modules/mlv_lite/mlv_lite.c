@@ -2233,9 +2233,9 @@ static int update_status(char * buffer, int buffer_size)
             }
 
             /* warning - recording not continuous.
-             * Film Edge: grey, then burgundy (under 30 s), then bright red (under 10 s). */
+             * Film Edge: grey, then amber (under 30 s), then bright red (under 10 s). */
             return (time_left < 10) ? COLOR_RED :
-                   (time_left < 30) ? 91 /* burgundy */ :
+                   (time_left < 30) ? 19 /* amber (palette 19) */ :
                                       COLOR_GRAY(30);
         }
         else
@@ -2261,6 +2261,7 @@ static LVINFO_UPDATE_FUNC(recording_status)
     {
         /* don't update much more often than 1 second */
         item->color_bg = prev_color;
+        if (prev_color == 19) item->color_fg = COLOR_BLACK;   /* dark text on amber */
         return;
     }
 
@@ -2270,6 +2271,7 @@ static LVINFO_UPDATE_FUNC(recording_status)
     if (!measured_write_speed) return;
 
     prev_color = item->color_bg = update_status(buffer, sizeof(buffer));
+    if (prev_color == 19) item->color_fg = COLOR_BLACK;   /* dark text on amber */
 }
 
 /* Display the 'Recording...' icon and status */
