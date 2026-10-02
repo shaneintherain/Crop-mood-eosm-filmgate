@@ -2,10 +2,8 @@ name: Build EOS M
 run-name: Build EOS M
 
 on:
-  workflow_dispatch:
   push:
     branches:
-      - main
       - eosm-slim-gui
 
 jobs:
@@ -54,9 +52,22 @@ jobs:
 
       - name: Verify build outputs
         run: |
+          set -euo pipefail
           ls -lh platform/EOSM.202/autoexec.bin
           ls -lh platform/EOSM.202/magiclantern-*.zip
-          unzip -l platform/EOSM.202/magiclantern-*.zip | grep "\.mo"
+          zipfile=$(ls platform/EOSM.202/magiclantern-*.zip)
+          for mod in crop_rec.mo hdmi_out.mo mlv_lite.mo mlv_play.mo mlv_snd.mo sd_uhs.mo file_man.mo; do
+            if ! unzip -l "$zipfile" | grep -q "$mod"; then
+              echo "Missing from zip: $mod"
+              unzip -l "$zipfile" | grep '\.mo$' || true
+              exit 1
+            fi
+            echo "OK: $mod"
+          done
+          if unzip -l "$zipfile" | grep -E 'lua\.mo|selftest\.mo|arkanoid\.mo|bench\.mo|dual_iso\.mo'; then
+            echo "Unexpected slim module in zip"
+            exit 1
+          fi
 
       - name: Upload autoexec.bin
         uses: actions/upload-artifact@v4
