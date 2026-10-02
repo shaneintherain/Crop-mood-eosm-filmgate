@@ -457,13 +457,28 @@ void movtweak_step()
         //~ update_lvae_for_autoiso_n_displaygain();
         
         #ifdef FEATURE_FORCE_HDMI_VGA
-        /* Keep the HDMI output at 1080i.  Canon sometimes drops to 480p (after
-         * recording, when the cable is plugged in, ...); ask for 1080i again.
-         * Never while recording, and give up after 3 tries per connection so a
-         * monitor that only supports 480p is not hammered. */
+        /* Keep the HDMI output at 1080i.  Canon drops to 480p after recording
+         * (and sometimes when the cable is plugged in); ask for 1080i again.
+         * Never while recording.  Waits a couple of seconds after recording
+         * stops, uses the same UI-lock sequence as Force HDMI-VGA, and gives
+         * up after a few tries so a 480p-only monitor is not hammered. */
         {
             static int hdmi_tries = 0;
             static int hdmi_last_try = 0;
+            static int hdmi_rec_prev = 0;
+
+            if (RECORDING)
+            {
+                hdmi_tries = 0;
+                hdmi_last_try = get_ms_clock(); /* delays the first try after stop */
+                hdmi_rec_prev = 1;
+            }
+            else if (hdmi_rec_prev)
+            {
+                hdmi_rec_prev = 0;
+                if (ext_monitor_hdmi)
+                    NotifyBox(2500, "HDMI code %d", hdmi_code); /* diagnostic */
+            }
 
             if (!ext_monitor_hdmi || hdmi_code >= 5)
             {
@@ -471,13 +486,22 @@ void movtweak_step()
             }
             else if (!hdmi_force_vga && hdmi_code == 2 && is_movie_mode() && lv &&
                      !RECORDING && !gui_menu_shown() &&
-                     hdmi_tries < 3 && (get_ms_clock() - hdmi_last_try) > 1500)
+                     hdmi_tries < 5 && (get_ms_clock() - hdmi_last_try) > 2000)
             {
                 hdmi_tries++;
                 hdmi_last_try = get_ms_clock();
-                msleep(300); /* let the mode settle, then re-check */
+                msleep(500); /* let the mode settle, then re-check */
                 if (hdmi_code == 2 && !RECORDING)
-                    ChangeHDMIOutputSizeToFULLHD();
+                {
+                    gui_uilock(UILOCK_EVERYTHING);
+                    BMP_LOCK(
+                        ChangeHDMIOutputSizeToFULLHD();
+                        msleep(300);
+                    )
+                    msleep(1500);
+                    gui_uilock(UILOCK_NONE);
+                    NotifyBox(2000, "HDMI back to 1080i (try %d)", hdmi_tries);
+                }
             }
         }
 
