@@ -2167,7 +2167,7 @@ static int update_status(char * buffer, int buffer_size)
     /* Calculate the stats */
     int fps = fps_get_current_x1000();  /* FPS x1000 */
     if (fps == 0)
-        return COLOR_DARK_RED;
+        return COLOR_GRAY(25);
 
     int p = pre_recorded_frames();      /* pre-recorded frames */
     int r = (frame_count - 1 - p);      /* recorded frames */
@@ -2217,13 +2217,13 @@ static int update_status(char * buffer, int buffer_size)
             if (1)  len += snprintf(buffer + len, buffer_size - len, " + %02d", ps);
             if (pd) len += snprintf(buffer + len, buffer_size - len, ".%df", pf);
 
-            /* display in blue */
-            return COLOR_BLUE;
+            /* Film Edge: dark grey (pre-recording) */
+            return COLOR_GRAY(25);
         }
         else if (predicted_frames_left > 10000)
         {
-            /* assume continuous recording */
-            return COLOR_GREEN1;
+            /* assume continuous recording: plain black, no alarm */
+            return COLOR_BLACK;
         }
         else if (RAW_IS_RECORDING)
         {
@@ -2232,20 +2232,23 @@ static int update_status(char * buffer, int buffer_size)
                 len += snprintf(buffer + len, buffer_size - len, " ~ %02d", time_left);
             }
 
-            /* warning - recording not continuous */
-            return (time_left < 10) ? COLOR_DARK_RED : COLOR_ORANGE;
+            /* warning - recording not continuous.
+             * Film Edge: grey, then burgundy (under 30 s), then bright red (under 10 s). */
+            return (time_left < 10) ? COLOR_RED :
+                   (time_left < 30) ? 91 /* burgundy */ :
+                                      COLOR_GRAY(30);
         }
         else
         {
             /* preparing, finishing */
-            return COLOR_YELLOW;
+            return COLOR_GRAY(25);
         }
     } 
     else 
     {
         /* recording stopped - show number of frames */ 
         len = snprintf(buffer, buffer_size, "%d frames", frame_count - 1);
-        return COLOR_DARK_RED;
+        return COLOR_BLACK;
     }
 }
 
@@ -4421,9 +4424,7 @@ abort_and_check_early_stop:
         * so there shouldn't be any starving issues - at least in theory */
         for (; writing_queue_head != writing_queue_tail; INC_MOD(writing_queue_head, COUNT(writing_queue)))
         {
-            bmp_printf( FONT_MED, 30, 110, 
-                "Flushing buffers... %d frames left  ", MOD(writing_queue_tail - writing_queue_head, COUNT(writing_queue))
-            );
+            /* Film Edge: no "Flushing buffers..." message (it only flashes by) */
             int slot_index = writing_queue[writing_queue_head];
 
             if (slots[slot_index].status != SLOT_FULL)
