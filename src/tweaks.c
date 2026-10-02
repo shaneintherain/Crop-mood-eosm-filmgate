@@ -3726,53 +3726,10 @@ static void brightness_saturation_reset()
 }
 #endif
 
-/* Film Edge colours: write four warm cream steps into free palette slots 26-29.
- * Brightness is taken from the palette's own white, so it matches the display. */
+/* Film Edge is plain black and white using fixed palette entries: nothing to set up. */
 void film_palette_apply(void)
 {
-#ifndef CONFIG_VXWORKS
-    if (!DISPLAY_IS_ON) return;
-
-    uint32_t white = LCD_Palette[3 * COLOR_WHITE + 2];
-    int opacity = (white >> 24) & 0xFF;
-    int white_y = (white >> 16) & 0xFF;
-
-    /* luma percent, U, V (small warm tint) */
-    static const int steps[4][3] = {
-        { 92, -5, 4 },   /* cream  */
-        { 60, -4, 3 },   /* dim    */
-        { 38, -3, 2 },   /* muted  */
-        { 18, -1, 1 },   /* faint  */
-    };
-
-    for (int i = 0; i < 4; i++)
-    {
-        int y = white_y * steps[i][0] / 100;
-        uint32_t entry =
-            ((opacity & 0xFF) << 24) |
-            ((y & 0xFF) << 16) |
-            ((steps[i][1] & 0xFF) << 8) |
-            (steps[i][2] & 0xFF);
-        int color = COLOR_CREAM + i;
-        EngDrvOut(LCD_Palette[3 * color], entry);
-        EngDrvOut(LCD_Palette[3 * color + 0x300], entry);
-    }
-#endif
 }
-
-/* Canon reloads its own palette on many screen changes, which would turn our
- * custom colours back into the unused (pink/purple) defaults.  Keep rewriting them. */
-static void film_palette_task(void *unused)
-{
-    while (1)
-    {
-        if (!ml_shutdown_requested)
-            film_palette_apply();
-        msleep(RECORDING ? 250 : 20);
-    }
-}
-
-TASK_CREATE("film_palette", film_palette_task, 0, 0x1e, 0x1000);
 
 #ifdef FEATURE_COLOR_SCHEME
 

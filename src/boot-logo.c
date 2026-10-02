@@ -1541,10 +1541,12 @@ static void boot_logo_draw(void)
     /* Keep splash writes inside ML's normal LCD canvas.  The surrounding
      * 960x540 backing surface is changed by Canon during LV/zoom switches. */
     bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
+    /* span colours 26..29 = white and three greys (fixed palette entries) */
+    static const uint8_t logo_colors[4] = { COLOR_CREAM, COLOR_FILM_DIM, COLOR_FILM_MUTED, COLOR_FILM_FAINT };
     for (unsigned int i = 0; i < BOOT_LOGO_SPANS; i++)
     {
         const struct boot_logo_span *s = &boot_logo_spans[i];
-        bmp_fill(s->color,
+        bmp_fill(logo_colors[(s->color - 26) & 3],
             BOOT_LOGO_X + s->x * BOOT_LOGO_SCALE,
             BOOT_LOGO_Y + s->y * BOOT_LOGO_SCALE,
             s->width * BOOT_LOGO_SCALE,
