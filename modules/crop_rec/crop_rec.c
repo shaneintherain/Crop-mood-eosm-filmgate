@@ -507,8 +507,8 @@ static void crop_rec_adjust_iso(int sign)
 }
 
 /* EOS M Settings → INFO Button:
- * 0=OFF, 1=Dual ISO, 2=Histogram, 3=Waveform, 4=Zebras, 5=False Color,
- * 6=framing, 7=Quick Panel.
+ * 0=OFF, 1=Histogram, 2=Waveform, 3=Zebras, 4=False Color,
+ * 5=Framing, 6=Quick Panel.
  * Returns: 1 = handled (block Canon), -1 = pass to Canon, 0 = not our INFO mapping. */
 static int slim_handle_info_button(unsigned int key)
 {
@@ -518,16 +518,12 @@ static int slim_handle_info_button(unsigned int key)
         return 0; /* OFF — Canon INFO / LV cycle */
 
     /* Outside ML overlay LV, keep Canon INFO for non-framing modes only. */
-    if (INFO_button != 6 && lv_disp_mode != 0)
+    if (INFO_button != 5 && lv_disp_mode != 0)
         return -1;
 
     switch (INFO_button)
     {
-        case 1: /* Dual ISO on/off */
-            slim_toggle_dual_iso();
-            return 1;
-
-        case 2: /* Histogram Off ↔ Performance */
+        case 1: /* Histogram Off ↔ Performance */
         {
             int h = get_config_var("hist.draw");
             set_config_var("hist.draw", h ? 0 : 1);
@@ -535,7 +531,7 @@ static int slim_handle_info_button(unsigned int key)
             return 1;
         }
 
-        case 3: /* Waveform Off ↔ Performance */
+        case 2: /* Waveform Off ↔ Performance */
         {
             int w = get_config_var("waveform.draw");
             set_config_var("waveform.draw", w ? 0 : 1);
@@ -543,7 +539,7 @@ static int slim_handle_info_button(unsigned int key)
             return 1;
         }
 
-        case 4: /* Zebras Off ↔ Performance */
+        case 3: /* Zebras Off ↔ Performance */
         {
             int z = get_config_var("zebra.draw");
             set_config_var("zebra.draw", z ? 0 : 1);
@@ -551,7 +547,7 @@ static int slim_handle_info_button(unsigned int key)
             return 1;
         }
 
-        case 5: /* False Color toggle */
+        case 4: /* False Color toggle */
         {
             extern int falsecolor_draw;
             if (!falsecolor_draw)
@@ -564,11 +560,11 @@ static int slim_handle_info_button(unsigned int key)
             return 1;
         }
 
-        case 6: /* framing ↔ real-time (MLV Lite Preview → Framing) */
+        case 5: /* Framing ↔ real-time (MLV Lite Preview → Framing) */
             mlv_lite_info_framing_toggle();
             return 1;
 
-        case 7: /* Quick Panel */
+        case 6: /* Quick Panel */
             if (!RECORDING && lv && is_movie_mode() &&
                 !gui_menu_shown() && lv_disp_mode == 0)
             {
@@ -5670,7 +5666,7 @@ static struct menu_entry expo_shutter_range_eosm[] = {
 static MENU_UPDATE_FUNC(slim_info_button_update)
 {
     static int last_info_button = -1;
-    if (last_info_button == 6 && INFO_button != 6)
+    if (last_info_button == 5 && INFO_button != 5)
         mlv_lite_info_framing_reset();
     last_info_button = INFO_button;
 }
@@ -5680,8 +5676,8 @@ static struct menu_entry slim_info_button_menu[] = {
     {
         .name      = "INFO Button",
         .priv      = &INFO_button,
-        .max       = 7,
-        .choices   = CHOICES("OFF", "Dual ISO", "Histogram", "Waveform", "Zebras", "False Color", "framing", "Quick Panel"),
+        .max       = 6,
+        .choices   = CHOICES("OFF", "Histogram", "Waveform", "Zebras", "False Color", "Framing", "Quick Panel"),
         .edit_mode = EM_INLINE_ADJUST,
         .update    = slim_info_button_update,
         .icon_type = IT_DICE,
@@ -5769,7 +5765,7 @@ static const int slim_film_fmt_first[SLIM_FILM_FORMATS] = { 1, 4, 6, 7, 10, 12 }
 static const int slim_film_fmt_count[SLIM_FILM_FORMATS] = { 3, 2, 1, 3, 2, 2 };  /* Frame choices */
 static const char * const slim_film_frame_names[13] = {
     "16:9 Crop", "1.85:1 Crop", "2.35:1 Crop",           /* S35     */
-    "2x Squeeze 1.18:1", "1.33x Squeeze 4:3",            /* S35 Anamorphic */
+    "2x 1.18:1", "1.33x 4:3",            /* S35 Anamorphic */
     "2.35:1 Crop",                                       /* S16     */
     "16:9 Crop", "1.85:1 Crop", "2.35:1 Crop",           /* 16mm    */
     "Actual", "16:9 Crop",                               /* S8      */
@@ -8744,6 +8740,21 @@ warn:
     }
 }
 
+/* Display the Frame (aspect) of the active film format in the bottom bar */
+static LVINFO_UPDATE_FUNC(frame_info)
+{
+    LVINFO_BUFFER(16);
+    int fmt = slim_film_active();
+    if (patch_active && fmt >= 0)
+    {
+        snprintf(buffer, sizeof(buffer), "%s",
+            slim_film_frame_names[slim_film_fmt_first[fmt] - 1 + slim_film_frame_get(fmt)]);
+        int n = strlen(buffer);
+        if (n > 5 && streq(buffer + n - 5, " Crop"))
+            buffer[n - 5] = 0;
+    }
+}
+
 /* Display Bitdepth in ML bottom bar */
 static LVINFO_UPDATE_FUNC(bitdepth_info)
 {
@@ -8768,14 +8779,21 @@ static struct lvinfo_item info_items[] = {
         .name = "Crop info",
         .which_bar = LV_BOTTOM_BAR_ONLY,
         .update = crop_info,
-        .preferred_position = -50,  /* near the focal length display */
+        .preferred_position = -128,  /* film format, far left */
+        .priority = 1,
+    },
+    {
+        .name = "Frame info",
+        .which_bar = LV_BOTTOM_BAR_ONLY,
+        .update = frame_info,
+        .preferred_position = -120,  /* aspect, next to the film format */
         .priority = 1,
     },
     {
         .name = "Bitdepth info",
         .which_bar = LV_BOTTOM_BAR_ONLY,
         .update = bitdepth_info,
-        .preferred_position = -128,
+        .preferred_position = -112,  /* bit depth, third */
         .priority = 1,
     }
 };
@@ -9206,10 +9224,17 @@ static unsigned int crop_rec_init()
             else if (INFO_button == 4) INFO_button = 5;
             button_map_v = 2;
         }
+        /* v3: Dual ISO removed from the list: 2..7 -> 1..6, old Dual ISO -> OFF */
+        if (button_map_v < 3)
+        {
+            if (INFO_button == 1) INFO_button = 0;
+            else if (INFO_button > 1) INFO_button--;
+            button_map_v = 3;
+        }
         if (Arrows_U_D < 0 || Arrows_U_D > 3) Arrows_U_D = 3;
         /* Slim: no Left/Right Button remap — leave L/R to Canon. */
         Arrows_L_R = 0;
-        if (INFO_button < 0 || INFO_button > 7) INFO_button = 0;
+        if (INFO_button < 0 || INFO_button > 6) INFO_button = 0;
 
         /* Flat Movie-page crop settings (no Crop Mode submenu / Customize Buttons). */
         menu_add("Movie", crop_rec_menu_eosm, COUNT(crop_rec_menu_eosm));
