@@ -680,6 +680,17 @@ void menu_quick_screen_draw(void)
             !enabled ? arrow_color :
             quick_screen_feedback == index * 2 + 1 ? COLOR_FILM_DIM : arrow_color);
     }
+
+    /* TEMPORARY colour test strip: palette numbers 8, 12 and 84..97 (reds), 4 and 19.
+     * Photograph it and tell me which number looks like burgundy. Remove afterwards. */
+    {
+        static const uint8_t test_colors[18] = { 8, 12, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 4, 19 };
+        for (int k = 0; k < 18; k++)
+        {
+            bmp_fill(test_colors[k], k * 40 + 2, 432, 36, 24);
+            bmp_printf(FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), k * 40 + 6, 459, "%d", test_colors[k]);
+        }
+    }
 }
 
 int menu_quick_screen_handle_touch(int x, int y)

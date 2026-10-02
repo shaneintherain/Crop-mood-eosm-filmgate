@@ -18,7 +18,7 @@ static int (*dual_iso_get_recovery_iso)() = MODULE_FUNCTION(dual_iso_get_recover
 #define TOTAL_WIDTH 720
 
 /* Film Edge look: capital letters, warm cream instead of white/blue/green. */
-#define REC_DOT_SPACE 44   /* top-bar room reserved at the far right for the record dot */
+#define REC_DOT_SPACE 56   /* top-bar room reserved at the far right for the record dot */
 
 static void lvinfo_upper(char * dst, const char * src, int size)
 {
@@ -576,7 +576,6 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
     int touch_hh = 0;
     
     int prev_right = bar_x;
-    int prev_bg = default_bg_out;
     for (int i = 0; i < count; i++)
     {
         /* don't process empty items */
@@ -608,15 +607,17 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
 
         /* fill the gap between this item and previous one */
         /* the Voronoi cell associated with each item will get filled by the same background color */
+        /* Film Edge: gaps stay neutral, so a coloured box (e.g. the red countdown)
+         * stays tight around its own text instead of spreading into the gaps. */
+        int pad = (bg != default_bg_out) ? 5 : 0;
         if (prev_right >= 0 && now_left > prev_right)
         {
             int gap = now_left - prev_right + 1;
-            bmp_fill(prev_bg, prev_right, y0, gap/2, bar_height);
-            bmp_fill(bg, prev_right+gap/2, y0, gap/2, bar_height);
+            bmp_fill(default_bg_out, prev_right, y0, gap, bar_height);
         }
 
         /* clear the space for current box */
-        bmp_fill(bg, x0, y0, w, bar_height);
+        bmp_fill(bg, x0 - pad, y0, w + 2 * pad, bar_height);
         
         /* for debugging: show the center of each item */
         //~ bmp_fill(COLOR_RED, x-1, y0-2, 2, 2);
@@ -649,8 +650,7 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
             touch_hw = hx1 - hx0 + 1;
             touch_hh = hy1 - hy0 + 1;
         }
-        prev_right = x + w/2;
-        prev_bg = bg;
+        prev_right = x + w/2 + pad;
     }
 
     /* fill the remaining space till the far right */
@@ -658,8 +658,7 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
     {
         int now_left = TOTAL_WIDTH;
         int gap = now_left - prev_right;
-        bmp_fill(prev_bg, prev_right, bar_y, gap / 2, bar_height);
-        bmp_fill(default_bg_out, prev_right + gap / 2, bar_y, gap / 2, bar_height);
+        bmp_fill(default_bg_out, prev_right, bar_y, gap, bar_height);
     }
 
     /* Draw selection last.  Gap and neighboring-item background fills used
@@ -771,7 +770,7 @@ void lvinfo_display(int top, int bottom)
         /* Record dot, far right: solid red while recording, a quiet ring while ready. */
         if (is_movie_mode())
         {
-            int dot_x = TOTAL_WIDTH - REC_DOT_SPACE / 2 - 4;
+            int dot_x = TOTAL_WIDTH - 26;
             int dot_y = top_y + 16;
             /* True disc / ring, built row by row so it is as round as the pixels allow */
             const int r = 12;
