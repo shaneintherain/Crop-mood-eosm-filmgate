@@ -521,6 +521,8 @@ static int quick_screen_value(
     else
     {
         snprintf(buf, size, "%s", raw_value);
+        if (index == 1 && strstr(buf, "Anamorphic"))
+            snprintf(buf, size, "S35-ANA");   /* full name is too long for the cell */
         if (index == 2)
         {
             /* Frame cell: "16:9 Crop" -> "16:9" (the word Crop is not needed here) */
@@ -650,6 +652,15 @@ void menu_quick_screen_draw(void)
 
         width = bmp_string_width(FONT_CANON, value);
         value_x = cx - (width + (draw_degree ? 12 : 0)) / 2;
+        if (width > box_w - 8)
+        {
+            /* too long for the cell: use a smaller font so it never spills over */
+            int w2 = bmp_string_width(FONT_MED_LARGE, value);
+            bmp_printf(
+                FONT(FONT_MED_LARGE, color, selected ? COLOR_CREAM : COLOR_BLACK),
+                cx - w2 / 2, value_y + 6, "%s", value);
+        }
+        else
         bmp_printf(
             FONT(FONT_CANON, color, NO_BG_ERASE),
             value_x, value_y, "%s", value);

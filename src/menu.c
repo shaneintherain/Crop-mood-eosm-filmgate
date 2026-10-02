@@ -1449,6 +1449,17 @@ menu_update_placeholder(struct menu * menu, struct menu_entry * new_entry)
             
             placeholder_copy(entry, new_entry);
             entry->shidden = 0;
+#ifdef CONFIG_SLIM_MENUS
+            /* Film Edge: set-and-forget rows are hidden from the Settings list.
+             * They keep working with their saved values; they just aren't shown. */
+            if (streq(new_entry->name, "HDMI Output") ||
+                streq(new_entry->name, "HDMI Resolution") ||
+                streq(new_entry->name, "SD Access Mode") ||
+                streq(new_entry->name, "Small Hacks") ||
+                streq(new_entry->name, "More Hacks") ||
+                streq(new_entry->name, "Card Benchmark"))
+                entry->shidden = 1;
+#endif
             new_entry->shidden = 1;
             new_entry->placeholder = 1;
             
@@ -4813,8 +4824,15 @@ void menus_display(
 
         struct menu * sel = get_selected_toplevel_menu();
         if (sel && sel->name)
+        {
+            /* Film Edge: headings in capitals */
+            char title_caps[40];
+            snprintf(title_caps, sizeof(title_caps), "%s", slim_menu_display_name(sel->name));
+            for (char *c = title_caps; *c; c++)
+                if (*c >= 'a' && *c <= 'z') *c -= 32;
             bmp_printf(FONT(FONT_CANON, COLOR_CREAM, NO_BG_ERASE),
-                SLIM_MENU_TITLE_X, title_y, "%s", slim_menu_display_name(sel->name));
+                SLIM_MENU_TITLE_X, title_y, "%s", title_caps);
+        }
 
         /* Blue accent along the bottom edge of the grey bar */
         bmp_fill(COLOR_CREAM, orig_x, y + header_h - 2, 720, 2);
