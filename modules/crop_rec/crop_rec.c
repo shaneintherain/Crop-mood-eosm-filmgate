@@ -5745,16 +5745,18 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
  *   "Preset" row       -> hidden
  * Each format uses one existing sensor readout (no register is changed):
  *   S35            3x3 binning, 3:2 readout 1736x1160
- *   S35 Anamorphic 1x3 binning (3:1), 2.39:1 Highest
+ *   S35 Anamorphic 3x3 binning, same readout as S35: squeezed windows for an
+ *                  anamorphic lens (2x: 1.18:1, 1.33x: 4:3), de-squeezed in post
  *   S16            1:1 2.35:1 3K    16mm  1:1 16:9 2560x1440
  *   S8, 8mm        1:1 3:2 1920x1280
  * mlv_lite cuts the film window out of the readout and asks
  * crop_rec_film_format() which window to use.  Numbering matches the
  * film_formats[] table in mlv_lite.c:
- *    1 S35 16:9 Crop  2 S35 1.85:1 Crop  3 S35 2.35:1 Crop  4 Super 16 2.35:1 Crop
- *    5 16mm 16:9 Crop 6 16mm 1.85:1 Crop 7 16mm 2.35:1 Crop
- *    8 Super 8 Actual 9 Super 8 16:9 Crop 10 8mm Actual  11 8mm 16:9 Crop
- * S35 Anamorphic has no window (table index 0): the whole 1x3 readout is recorded.
+ *    1 S35 16:9 Crop  2 S35 1.85:1 Crop  3 S35 2.35:1 Crop
+ *    4 S35 Anamorphic 2x (1.18:1)   5 S35 Anamorphic 1.33x (4:3)
+ *    6 Super 16 2.35:1 Crop
+ *    7 16mm 16:9 Crop 8 16mm 1.85:1 Crop 9 16mm 2.35:1 Crop
+ *   10 Super 8 Actual 11 Super 8 16:9 Crop 12 8mm Actual  13 8mm 16:9 Crop
  */
 #define SLIM_FILM_FORMATS 6
 static const char * const slim_film_fmt_names[SLIM_FILM_FORMATS] = {
@@ -5763,10 +5765,11 @@ static const char * const slim_film_fmt_names[SLIM_FILM_FORMATS] = {
 static const char * const slim_film_fmt_labels[SLIM_FILM_FORMATS] = {
     "S35", "S35A", "S16", "16mm", "S8", "8mm"      /* bottom bar */
 };
-static const int slim_film_fmt_first[SLIM_FILM_FORMATS] = { 1, 0, 4, 5, 8, 10 }; /* first table index */
-static const int slim_film_fmt_count[SLIM_FILM_FORMATS] = { 3, 1, 1, 3, 2, 2 };  /* Frame choices */
-static const char * const slim_film_frame_names[11] = {
+static const int slim_film_fmt_first[SLIM_FILM_FORMATS] = { 1, 4, 6, 7, 10, 12 }; /* first table index */
+static const int slim_film_fmt_count[SLIM_FILM_FORMATS] = { 3, 2, 1, 3, 2, 2 };  /* Frame choices */
+static const char * const slim_film_frame_names[13] = {
     "16:9 Crop", "1.85:1 Crop", "2.35:1 Crop",           /* S35     */
+    "2x Squeeze 1.18:1", "1.33x Squeeze 4:3",            /* S35 Anamorphic */
     "2.35:1 Crop",                                       /* S16     */
     "16:9 Crop", "1.85:1 Crop", "2.35:1 Crop",           /* 16mm    */
     "Actual", "16:9 Crop",                               /* S8      */
@@ -5786,13 +5789,10 @@ static int slim_film_sync(void)
 {
     switch (slim_mode_ui)
     {
-        case 2: /* 3x3 3:2 */
+        case 2: /* 3x3 3:2 - S35 or S35 Anamorphic */
             if (crop_preset_ar_menu != 4) return -1;
-            slim_film_fmt = 0;
-            break;
-        case 1: /* 1x3 2.39:1 Highest */
-            if (crop_preset_ar_menu != 4 || slim_unified_preset != 0) return -1;
-            slim_film_fmt = 1;
+            if (slim_film_fmt != 0 && slim_film_fmt != 1)
+                slim_film_fmt = 0;
             break;
         case 0:
             switch (slim_1x1_ar)
@@ -5820,9 +5820,7 @@ static int slim_film_active(void)
     if (!crop_rec_is_enabled())
         return -1;
     if (CROP_PRESET_MENU == CROP_PRESET_3X3)
-        return crop_preset_3x3_res_menu == 2 ? 0 : -1;
-    if (CROP_PRESET_MENU == CROP_PRESET_1X3)
-        return (crop_preset_ar_menu == 4 && crop_preset_1x3_res_menu == 0) ? 1 : -1;
+        return crop_preset_3x3_res_menu == 2 ? (slim_film_fmt == 1 ? 1 : 0) : -1;
     if (CROP_PRESET_MENU == CROP_PRESET_1X1)
     {
         switch (crop_preset_1x1_res_menu)
@@ -5839,8 +5837,8 @@ static int slim_film_active(void)
 int crop_rec_film_format()
 {
     int fmt = slim_film_active();
-    if (fmt < 0 || slim_film_fmt_first[fmt] == 0)
-        return 0; /* no window (S35 Anamorphic) or not a film format */
+    if (fmt < 0)
+        return 0; /* not a film format */
     return slim_film_fmt_first[fmt] + slim_film_frame_get(fmt);
 }
 
@@ -6181,7 +6179,7 @@ static void slim_film_apply(int fmt)
     switch (fmt)
     {
         case 0: slim_mode_ui = 2; crop_preset_ar_menu = 4; break; /* S35: 3x3 3:2 */
-        case 1: slim_mode_ui = 1; crop_preset_ar_menu = 4; break; /* S35 Anamorphic: 1x3 2.39:1 */
+        case 1: slim_mode_ui = 2; crop_preset_ar_menu = 4; break; /* S35 Anamorphic: 3x3 3:2 */
         case 2: slim_mode_ui = 0; slim_1x1_ar = 1; break;         /* S16 */
         case 3: slim_mode_ui = 0; slim_1x1_ar = 2; break;         /* 16mm */
         default: slim_mode_ui = 0; slim_1x1_ar = 3; break;        /* S8, 8mm */
@@ -6217,6 +6215,11 @@ static MENU_UPDATE_FUNC(slim_crop_mode_update)
         MENU_SET_HELP("Press left or right to pick a film format.");
     }
     MENU_SET_ENABLED(1);
+}
+
+static MENU_SELECT_FUNC(slim_crop_size_select)
+{
+    (void)priv; (void)delta; /* Recorded Size is read-only */
 }
 
 static MENU_SELECT_FUNC(slim_crop_preset_select)
@@ -6260,17 +6263,22 @@ static MENU_UPDATE_FUNC(slim_crop_preset_update)
     slim_crop_sync_from_backend();
 
     {
+        /* Preset row: read-only "Recorded Size" for film formats (the Frame
+         * choice lives in the Aspect Ratio row). */
+        static const short film_size[13][2] = {
+            {1696,954},{1696,916},{1696,722},{1376,1152},{1536,1152},{2912,1239},
+            {2384,1341},{2384,1289},{2384,1014},{1344,931},{1344,756},{1040,763},{1040,585}
+        };
         int film_fmt = slim_film_sync();
         if (film_fmt >= 0)
         {
-            int cnt = slim_film_fmt_count[film_fmt];
-            MENU_SET_NAME("Frame");
-            if (slim_film_fmt_first[film_fmt] == 0)
-                MENU_SET_VALUE("2.39:1 Anamorphic");
-            else
-                MENU_SET_VALUE("%s", slim_film_frame_names[slim_film_fmt_first[film_fmt] - 1 + slim_film_frame_get(film_fmt)]);
-            MENU_SET_HELP("Frame inside the %s gate: Actual size or a crop.", slim_film_fmt_names[film_fmt]);
-            MENU_SET_ENABLED(cnt > 1);
+            MENU_SET_NAME("Recorded Size");
+            {
+                int i = slim_film_fmt_first[film_fmt] - 1 + slim_film_frame_get(film_fmt);
+                MENU_SET_VALUE("%dx%d", film_size[i][0], film_size[i][1]);
+            }
+            MENU_SET_HELP("Size of the recorded picture (read-only).");
+            MENU_SET_ENABLED(0);
             return;
         }
     }
@@ -6311,10 +6319,7 @@ static MENU_UPDATE_FUNC(slim_crop_ar_update)
         MENU_SET_ENABLED(0);
         return;
     }
-    if (slim_film_fmt_first[fmt] == 0)
-        MENU_SET_VALUE("2.39:1 Anamorphic");
-    else
-        MENU_SET_VALUE("%s", slim_film_frame_names[slim_film_fmt_first[fmt] - 1 + slim_film_frame_get(fmt)]);
+    MENU_SET_VALUE("%s", slim_film_frame_names[slim_film_fmt_first[fmt] - 1 + slim_film_frame_get(fmt)]);
     MENU_SET_HELP("Frame inside the %s gate: Actual size or a crop.", slim_film_fmt_names[fmt]);
     MENU_SET_ENABLED(slim_film_fmt_count[fmt] > 1);
 }
@@ -6747,14 +6752,13 @@ static struct menu_entry crop_rec_menu_eosm[] =
     {
         .name       = "Preset",
         .priv       = &slim_unified_preset,
-        .select     = slim_crop_preset_select,
+        .select     = slim_crop_size_select,
         .update     = slim_crop_preset_update,
         .max        = 2,
         .choices    = CHOICES("Highest", "Higher", "Medium"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
-        .shidden    = 1,
-        .help       = "Resolution tier (hidden: film formats have one readout each).",
+        .help       = "Recorded picture size (read-only).",
     },
     {
         .name       = "Resolution",
