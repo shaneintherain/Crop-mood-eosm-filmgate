@@ -4830,7 +4830,7 @@ void menus_display(
             snprintf(title_caps, sizeof(title_caps), "%s", slim_menu_display_name(sel->name));
             for (char *c = title_caps; *c; c++)
                 if (*c >= 'a' && *c <= 'z') *c -= 32;
-            bmp_printf(FONT(FONT_CANON, COLOR_CREAM, NO_BG_ERASE),
+            bmp_printf(FONT(FONT_CANON, COLOR_RED, NO_BG_ERASE),
                 SLIM_MENU_TITLE_X, title_y, "%s", title_caps);
         }
 
@@ -7512,10 +7512,11 @@ static void draw_longpress_indicator(struct longpress * longpress)
         int x = x0 + sin_table[MOD(i+3, 12)];
         int y = y0 + sin_table[MOD(i, 12)];
 
-        int color = (!pressed)  ? COLOR_GRAY(50) :  /* button just released */
-                    (n >= 25/2) ? COLOR_ORANGE   :  /* long press event fired */
-                    (i <= 12/2) ? COLOR_GREEN1   :  /* interpreted short press if released */
-                                  COLOR_YELLOW   ;  /* on the way to long press */
+        /* Film Edge: greys only */
+        int color = (!pressed)  ? COLOR_GRAY(40) :  /* button just released */
+                    (n >= 25/2) ? COLOR_WHITE    :  /* long press event fired */
+                    (i <= 12/2) ? COLOR_GRAY(60) :  /* interpreted short press if released */
+                                  COLOR_GRAY(85) ;  /* on the way to long press */
         fill_circle(x, y, 2, color);
     }
 }
