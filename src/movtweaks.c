@@ -52,11 +52,20 @@ void update_lvae_for_autoiso_n_displaygain();
 CONFIG_INT("hdmi.force.vga", hdmi_force_vga, 0);
 
 static int hdmi_code_array[8];
+static int hdmi_1080i_block[8];   /* last complete HDMI setup seen while in 1080i */
+static int hdmi_1080i_known = 0;
 
 PROP_HANDLER(PROP_HDMI_CHANGE_CODE)
 {
     ASSERT(len == 32);
     memcpy(hdmi_code_array, buf, 32);
+
+    /* remember the complete 1080i block, to be able to ask for exactly that later */
+    if (((int*)buf)[0] == 5)
+    {
+        memcpy(hdmi_1080i_block, buf, 32);
+        hdmi_1080i_known = 1;
+    }
 }
 
 static void ChangeHDMIOutputSizeToVGA()
@@ -67,7 +76,10 @@ static void ChangeHDMIOutputSizeToVGA()
 
 static void ChangeHDMIOutputSizeToFULLHD()
 {
-    hdmi_code_array[0] = 5;
+    if (hdmi_1080i_known)
+        memcpy(hdmi_code_array, hdmi_1080i_block, 32); /* the complete 1080i setup */
+    else
+        hdmi_code_array[0] = 5;
     prop_request_change(PROP_HDMI_CHANGE_CODE, hdmi_code_array, 32);
 } 
 #endif
@@ -486,33 +498,19 @@ void movtweak_step()
             }
             else if (!hdmi_force_vga && hdmi_code == 2 && is_movie_mode() && lv &&
                      !RECORDING && !gui_menu_shown() &&
-                     hdmi_tries < 5 && (get_ms_clock() - hdmi_last_try) > 2000)
+                     hdmi_tries < 3 && (get_ms_clock() - hdmi_last_try) > 2000)
             {
                 hdmi_tries++;
                 hdmi_last_try = get_ms_clock();
                 msleep(500); /* let the mode settle, then re-check */
                 if (hdmi_code == 2 && !RECORDING)
                 {
-                    gui_uilock(UILOCK_EVERYTHING);
-                    if (hdmi_tries <= 2)
-                    {
-                        /* ask Canon to switch the HDMI mode */
-                        BMP_LOCK(
-                            ChangeHDMIOutputSizeToFULLHD();
-                            msleep(300);
-                        )
-                    }
-                    else
-                    {
-                        /* Canon ignores the request after recording: restart
-                         * LiveView, which makes it negotiate HDMI again */
-                        PauseLiveView();
-                        msleep(800);
-                        ResumeLiveView();
-                    }
+                    BMP_LOCK(
+                        ChangeHDMIOutputSizeToFULLHD();
+                        msleep(300);
+                    )
                     msleep(1500);
-                    gui_uilock(UILOCK_NONE);
-                    NotifyBox(2000, "HDMI %s (try %d, code %d)", hdmi_tries <= 2 ? "request" : "LV restart", hdmi_tries, hdmi_code);
+                    NotifyBox(2000, "HDMI request %d (code %d, saved %d)", hdmi_tries, hdmi_code, hdmi_1080i_known);
                 }
             }
         }
