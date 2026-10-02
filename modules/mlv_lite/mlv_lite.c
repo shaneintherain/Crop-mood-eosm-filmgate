@@ -199,6 +199,8 @@ static const struct film_format film_formats[] =
     { "S35 16:9 Crop",      1696,  954, "S35 gate width, cropped to 16:9",   "3x3 3:2 1736x1160" },
     { "S35 1.85:1 Crop",    1696,  916, "S35 gate width, cropped to 1.85:1", "3x3 3:2 1736x1160" },
     { "S35 2.35:1 Crop",    1696,  722, "S35 gate width, cropped to 2.35:1", "3x3 3:2 1736x1160" },
+    { "S35 Anamorphic 2x",  1376, 1152, "2x anamorphic gate (1.18:1), full sensor height", "3x3 3:2 1736x1160" },
+    { "S35 Anamorphic 1.33x",1536,1152, "1.33x anamorphic gate (4:3)",       "3x3 3:2 1736x1160" },
     { "Super 16 2.35:1 Crop",2912,1239, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest" },
     { "16mm 16:9 Crop",     2384, 1341, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440" },
     { "16mm 1.85:1 Crop",   2384, 1289, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440" },
@@ -719,7 +721,7 @@ static int film_frame_possible(void)
 {
     /* The EOS M crop_rec presets run in Canon's x5 zoom state (lv_dispsize == 5),
      * so x5 must be accepted here; x10 (focus zoom) is not. */
-    return crop_rec_film_format() >= 4 && /* S35 (1-3): LCD scale not calibrated */
+    return crop_rec_film_format() > 0 &&
            (lv_dispsize == 1 || lv_dispsize == 5) &&
            squeeze_factor == 1.0f &&
            (is_LCD_Output() || is_480p_Output() || is_1080i_Full_Output() || is_1080i_Info_Output());
@@ -734,8 +736,9 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
 
     int rw, kn, kd; /* readout width, vertical scale numerator / denominator */
 
-    if (f == 4)      { rw = 3072; kn = 15;  kd = 64;   } /* Super 16     */
-    else if (f <= 7) { rw = 2560; kn = 9;   kd = 32;   } /* 16mm         */
+    if (f <= 5)      { rw = 1736; kn = 90;  kd = 217;  } /* S35: 3x3 3:2 readout */
+    else if (f == 6) { rw = 3072; kn = 15;  kd = 64;   } /* Super 16     */
+    else if (f <= 9) { rw = 2560; kn = 9;   kd = 32;   } /* 16mm         */
     else             { rw = 1920; kn = 3;   kd = 8;    } /* Super 8, 8mm */
 
     int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
@@ -4685,7 +4688,7 @@ static struct menu_entry raw_video_menu[] =
                 .max = COUNT(film_formats) - 1,
                 .update = film_format_update,
                 .choices = CHOICES("OFF", "S35 16:9 Crop", "S35 1.85:1 Crop", "S35 2.35:1 Crop",
-                                   "Super 16 2.35:1 Crop", "16mm 16:9 Crop", "16mm 1.85:1 Crop",
+                                   "S35 Anamorphic 2x", "S35 Anamorphic 1.33x", "Super 16 2.35:1 Crop", "16mm 16:9 Crop", "16mm 1.85:1 Crop",
                                    "16mm 2.35:1 Crop", "Super 8 Actual", "Super 8 16:9 Crop",
                                    "8mm Actual", "8mm 16:9 Crop"),
                 .help = "Record a window that matches a real film gate (1:1 pixels).",
