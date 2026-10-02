@@ -61,7 +61,7 @@ static int is_basic = 0;
 static CONFIG_INT("crop.fps_over", fps_over, 0);
 static CONFIG_INT("crop.tapdisp", tapdisp, 1);
 static CONFIG_INT("crop.preset_fps", crop_preset_fps_reduce, 1);
-static CONFIG_INT("crop.preset", crop_preset_index, 2);
+static CONFIG_INT("crop.preset", crop_preset_index, 3); /* default: 3x3 = S35 */
 static CONFIG_INT("crop.shutter_range", shutter_range, 0);
 static CONFIG_INT("crop.fix_dual_iso_flicker", fix_dual_iso_flicker, 1);
 
@@ -76,7 +76,7 @@ extern int BitDepth_Analog;
 
 static CONFIG_INT("crop.brighten_lv", brighten_lv_method, 0);
 
-static CONFIG_INT("crop.preset_aspect_ratio", crop_preset_ar_menu, 0);
+static CONFIG_INT("crop.preset_aspect_ratio", crop_preset_ar_menu, 4); /* default: 3:2 readout = S35 */
 static int crop_preset_ar = 0;
 #define AR_16_9        (crop_preset_ar == 0)
 #define AR_2_1         (crop_preset_ar == 1)
@@ -102,7 +102,7 @@ static int crop_preset_1x3_res = 0;
 #define Anam_Medium    (crop_preset_1x3_res == 2)
 #define Anam_FLV    (crop_preset_1x3_res == 3)
 
-static CONFIG_INT("crop.preset_3x3", crop_preset_3x3_res_menu, 1);
+static CONFIG_INT("crop.preset_3x3", crop_preset_3x3_res_menu, 2); /* default: mv1080 3:2 = S35 */
 static int crop_preset_3x3_res = 0;
 #define High_FPS       (crop_preset_3x3_res == 0)
 #define mv1080         (crop_preset_3x3_res == 1)
@@ -5722,7 +5722,7 @@ static struct menu_entry slim_info_button_menu[] = {
 };
 
 /* Mode UI: 0=1x1, 1=1x3, 2=3x3, 3=LV (Full-Res LiveView). */
-static int slim_mode_ui = 0;
+static int slim_mode_ui = 2; /* default: 3x3 (S35) */
 static int slim_unified_preset = 1; /* Highest=0 Higher=1 Medium=2 */
 static int slim_bit_depth_ui = 1;   /* 0=10 1=12 2=14 → bit_depth_analog 3/1/0 */
 /* Crop register changes are applied asynchronously at frame boundaries.
@@ -5775,7 +5775,7 @@ static const char * const slim_film_frame_names[13] = {
     "Actual", "16:9 Crop",                               /* S8      */
     "Actual", "16:9 Crop"                                /* 8mm     */
 };
-static int slim_film_fmt = 2;                        /* selected Film Format (S8 / 8mm share a readout) */
+static int slim_film_fmt = 0;                        /* selected Film Format (S8 / 8mm share a readout) */
 static int slim_film_frame[SLIM_FILM_FORMATS];       /* remembered Frame choice per format */
 
 static int slim_film_frame_get(int fmt)
