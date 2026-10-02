@@ -494,13 +494,25 @@ void movtweak_step()
                 if (hdmi_code == 2 && !RECORDING)
                 {
                     gui_uilock(UILOCK_EVERYTHING);
-                    BMP_LOCK(
-                        ChangeHDMIOutputSizeToFULLHD();
-                        msleep(300);
-                    )
+                    if (hdmi_tries <= 2)
+                    {
+                        /* ask Canon to switch the HDMI mode */
+                        BMP_LOCK(
+                            ChangeHDMIOutputSizeToFULLHD();
+                            msleep(300);
+                        )
+                    }
+                    else
+                    {
+                        /* Canon ignores the request after recording: restart
+                         * LiveView, which makes it negotiate HDMI again */
+                        PauseLiveView();
+                        msleep(800);
+                        ResumeLiveView();
+                    }
                     msleep(1500);
                     gui_uilock(UILOCK_NONE);
-                    NotifyBox(2000, "HDMI back to 1080i (try %d)", hdmi_tries);
+                    NotifyBox(2000, "HDMI %s (try %d, code %d)", hdmi_tries <= 2 ? "request" : "LV restart", hdmi_tries, hdmi_code);
                 }
             }
         }
