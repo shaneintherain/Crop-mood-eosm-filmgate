@@ -1617,6 +1617,10 @@ static void boot_logo_task(void *unused)
         int ml_display_ready = ml_started &&
             (liveview_display_idle() || get_ms_clock() >= fallback_handoff_time);
         if (splash_time_done && ml_display_ready) break;
+
+        /* Canon sometimes punches a small transparent hole in the canvas (live video
+         * shows through at the lower right).  Keep the empty bottom strip opaque. */
+        BMP_LOCK( bmp_fill(COLOR_BLACK, 0, 345, 720, 135); )
         msleep(20);
     }
 

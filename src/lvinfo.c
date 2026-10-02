@@ -773,14 +773,28 @@ void lvinfo_display(int top, int bottom)
         {
             int dot_x = TOTAL_WIDTH - REC_DOT_SPACE / 2 - 4;
             int dot_y = top_y + 16;
-            if (RECORDING)
+            /* True disc / ring, built row by row so it is as round as the pixels allow */
+            const int r = 12;
+            const int ring = RECORDING ? r + 1 : 2;   /* ring width; solid when recording */
+            const int color = RECORDING ? COLOR_RED : COLOR_FILM_DIM;
+            for (int dy = -r; dy <= r; dy++)
             {
-                fill_circle(dot_x, dot_y, 11, COLOR_RED);
-            }
-            else
-            {
-                draw_circle(dot_x, dot_y, 10, COLOR_FILM_DIM);
-                draw_circle(dot_x, dot_y, 9, COLOR_FILM_DIM);
+                int ho = r;
+                while (ho > 0 && 4 * (ho * ho + dy * dy) > (2 * r + 1) * (2 * r + 1)) ho--;
+                int ri = r - ring;   /* inner radius of the ring */
+                int hi = -1;
+                if (ri >= 0 && ABS(dy) <= ri)
+                {
+                    hi = ri;
+                    while (hi > 0 && 4 * (hi * hi + dy * dy) > (2 * ri + 1) * (2 * ri + 1)) hi--;
+                }
+                if (hi < 0)
+                    bmp_fill(color, dot_x - ho, dot_y + dy, 2 * ho + 1, 1);
+                else
+                {
+                    bmp_fill(color, dot_x - ho, dot_y + dy, ho - hi, 1);
+                    bmp_fill(color, dot_x + hi + 1, dot_y + dy, ho - hi, 1);
+                }
             }
         }
     }
