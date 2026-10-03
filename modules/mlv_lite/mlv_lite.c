@@ -2571,16 +2571,24 @@ int mlv_raw_rec_busy()
 static REQUIRES(RawRecTask)
 void hack_liveview(int unhack)
 {
+    /* Film formats show their frame as ML-drawn bars, which need global draw:
+     * skip the kill in that case so the preview keeps the film frame. */
+    static int gd_was_killed = 0;
     if (kill_gd)
     {
         if (!unhack)
         {
-            idle_globaldraw_dis();
-            clrscr();
+            if (!film_frame_possible())
+            {
+                idle_globaldraw_dis();
+                clrscr();
+                gd_was_killed = 1;
+            }
         }
-        else
+        else if (gd_was_killed)
         {
             idle_globaldraw_en();
+            gd_was_killed = 0;
         }
     }
     
