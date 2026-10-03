@@ -104,7 +104,7 @@ static int32_t mlv_play_osd_y = 0;
 static uint32_t mlv_play_render_timestep = 10;
 static uint32_t mlv_play_idle_timestep = 1000;
 static uint32_t mlv_play_osd_force_redraw = 0;
-static uint32_t mlv_play_osd_idle = 1000;
+static uint32_t mlv_play_osd_idle = 4000;
 static uint32_t mlv_play_osd_item = 0;
 static uint32_t mlv_play_paused = 0;
 static uint32_t mlv_play_info = 1;
@@ -650,7 +650,7 @@ static uint32_t mlv_play_osd_draw()
 
     /* undraw last drawn OSD item */
     static char osd_line[64] = "";
-
+    
     uint32_t w = bmp_string_width(FONT_LARGE, osd_line);
     uint32_t h = fontspec_height(FONT_LARGE);
     bmp_fill(COLOR_EMPTY, mlv_play_osd_x - w/2 - border, mlv_play_osd_y - border, w + 2 * border, h + 2 * border);
@@ -722,7 +722,7 @@ static uint32_t mlv_play_osd_draw()
     w = bmp_string_width(FONT_LARGE, osd_line);
     bmp_fill(COLOR_BG, mlv_play_osd_x - w/2 - border, mlv_play_osd_y - border, w + 2 * border, h + 2 * border);
     bmp_printf(FONT(FONT_LARGE,COLOR_WHITE,COLOR_BG), mlv_play_osd_x - w/2, mlv_play_osd_y, osd_line);
-
+    
     /* draw selected item over with blue background */
     bmp_printf(FONT(FONT_LARGE,COLOR_WHITE,COLOR_BLUE), mlv_play_osd_x - w/2 + selected_x, mlv_play_osd_y, "  %s  ", selected_item);
     
@@ -748,7 +748,7 @@ static void mlv_play_osd_task(void *priv)
 {
     uint32_t next_render_time = get_ms_clock() + mlv_play_render_timestep;
  
-    mlv_play_osd_state = MLV_PLAY_MENU_IDLE;
+    mlv_play_osd_state = MLV_PLAY_MENU_FADEIN; /* show the controls when playback starts */
     mlv_play_osd_item = 1;
     mlv_play_paused = 0;   
     
@@ -790,8 +790,13 @@ static void mlv_play_osd_task(void *priv)
                     break;
 
                 case MODULE_KEY_PLAY:
+                case MODULE_KEY_TOUCH_1_FINGER: /* EOS M: tap = pause / resume */
                     mlv_play_osd_act(&mlv_play_osd_pause);
                     mlv_play_osd_pause(NULL, 0, 1);
+                    break;
+
+                case MODULE_KEY_MENU:
+                    mlv_play_render_abort = 1; /* MENU leaves playback */
                     break;
 
                 case MODULE_KEY_PRESS_ZOOMIN:
@@ -860,6 +865,8 @@ static void mlv_play_osd_task(void *priv)
                         {
                             mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
                         }
+                        if (key == MODULE_KEY_PRESS_LEFT)  mlv_play_prev();
+                        if (key == MODULE_KEY_PRESS_RIGHT) mlv_play_next();
                         if (key == MODULE_KEY_INFO)
                         {
                             clrscr();
@@ -2582,7 +2589,7 @@ static void mlv_play_enter_playback()
     /* prepare display */
     NotifyBoxHide();
     enter_play_mode();
-
+    
     /* render task is slave and controlled via these variables */
     mlv_play_render_abort = 0;
     mlv_play_rendering = 1;
@@ -2827,6 +2834,16 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
             case MODULE_KEY_PRESS_ZOOMIN:
             {
                 msg_queue_post(mlv_play_queue_osd, (uint32_t) key);
+                return 0;
+            }
+
+            case MODULE_KEY_TOUCH_1_FINGER:
+            case MODULE_KEY_UNTOUCH_1_FINGER:
+            case MODULE_KEY_TOUCH_2_FINGER:
+            case MODULE_KEY_UNTOUCH_2_FINGER:
+            {
+                if (key == MODULE_KEY_TOUCH_1_FINGER)
+                    msg_queue_post(mlv_play_queue_osd, (uint32_t) key);
                 return 0;
             }
 
