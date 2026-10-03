@@ -6254,6 +6254,25 @@ static MENU_SELECT_FUNC(slim_crop_preset_select)
     slim_crop_clamp_fps();
 }
 
+/* Recorded size of each film-format frame (matches mlv_lite film_formats). */
+static const short film_size[13][2] = {
+    {1696,954},{1696,916},{1696,722},{1376,1152},{1536,1152},{2912,1239},
+    {2384,1341},{2384,1289},{2384,1014},{1344,931},{1344,756},{1040,763},{1040,585}
+};
+
+/* Like slim_crop_expected_res, but for film formats returns the size that is
+ * actually recorded (not the sensor readout). */
+static void slim_crop_shown_res(int *w, int *h)
+{
+    slim_crop_expected_res(w, h);
+    if (slim_film_active() >= 0 || slim_film_sync() >= 0)
+    {
+        int fmt = slim_film_active() >= 0 ? slim_film_active() : slim_film_sync();
+        int i = slim_film_fmt_first[fmt] - 1 + slim_film_frame_get(fmt);
+        if (i >= 0 && i < 13) { *w = film_size[i][0]; *h = film_size[i][1]; }
+    }
+}
+
 static MENU_UPDATE_FUNC(slim_crop_preset_update)
 {
     slim_crop_sync_from_backend();
@@ -6261,10 +6280,6 @@ static MENU_UPDATE_FUNC(slim_crop_preset_update)
     {
         /* Preset row: read-only "Recorded Size" for film formats (the Frame
          * choice lives in the Aspect Ratio row). */
-        static const short film_size[13][2] = {
-            {1696,954},{1696,916},{1696,722},{1376,1152},{1536,1152},{2912,1239},
-            {2384,1341},{2384,1289},{2384,1014},{1344,931},{1344,756},{1040,763},{1040,585}
-        };
         int film_fmt = slim_film_sync();
         if (film_fmt >= 0)
         {
@@ -6374,7 +6389,7 @@ static MENU_UPDATE_FUNC(slim_crop_quick_res_update)
 {
     int w, h;
     slim_crop_sync_from_backend();
-    slim_crop_expected_res(&w, &h);
+    slim_crop_shown_res(&w, &h);
     MENU_SET_VALUE("%dx%d", w, h);
     MENU_SET_ENABLED(slim_mode_ui != 3 && slim_preset_choice_count() > 1);
 }
@@ -6604,7 +6619,7 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
         }
         else
         {
-            slim_crop_expected_res(&w, &h);
+            slim_crop_shown_res(&w, &h);
             snprintf(value, size, "%dx%d", w, h);
             enabled = slim_mode_ui != 3;
         }
