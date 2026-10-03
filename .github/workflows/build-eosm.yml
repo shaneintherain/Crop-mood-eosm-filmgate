@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Python 2 (Required for ML build scripts)
         run: |
@@ -31,7 +31,7 @@ jobs:
 
       - name: Cache ARM toolchain
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/gcc-arm-none-eabi-5_4-2016q3
           key: arm-toolchain-5_4-2016q3
@@ -72,14 +72,14 @@ jobs:
           fi
 
       - name: Upload autoexec.bin
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: autoexec.bin
           path: platform/EOSM.202/autoexec.bin
           if-no-files-found: error
 
       - name: Upload full Magic Lantern zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: magiclantern-eosm-zip
           path: platform/EOSM.202/magiclantern-*.zip
