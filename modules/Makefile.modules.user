@@ -8,4 +8,5 @@ ML_MODULES = \
 	mlv_play \
 	mlv_snd \
 	sd_uhs \
-	file_man
+	file_man \
+	bench
