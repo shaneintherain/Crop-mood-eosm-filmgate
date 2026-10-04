@@ -104,7 +104,7 @@ static int32_t mlv_play_osd_y = 0;
 static uint32_t mlv_play_render_timestep = 10;
 static uint32_t mlv_play_idle_timestep = 1000;
 static uint32_t mlv_play_osd_force_redraw = 0;
-static uint32_t mlv_play_osd_idle = 4000;
+static uint32_t mlv_play_osd_idle = 1000;
 static uint32_t mlv_play_osd_item = 0;
 static uint32_t mlv_play_paused = 0;
 static uint32_t mlv_play_info = 1;
@@ -748,7 +748,7 @@ static void mlv_play_osd_task(void *priv)
 {
     uint32_t next_render_time = get_ms_clock() + mlv_play_render_timestep;
  
-    mlv_play_osd_state = MLV_PLAY_MENU_FADEIN; /* show the controls when playback starts */
+    mlv_play_osd_state = MLV_PLAY_MENU_IDLE;
     mlv_play_osd_item = 1;
     mlv_play_paused = 0;   
     
@@ -790,13 +790,8 @@ static void mlv_play_osd_task(void *priv)
                     break;
 
                 case MODULE_KEY_PLAY:
-                case MODULE_KEY_TOUCH_1_FINGER: /* EOS M: tap = pause / resume */
                     mlv_play_osd_act(&mlv_play_osd_pause);
                     mlv_play_osd_pause(NULL, 0, 1);
-                    break;
-
-                case MODULE_KEY_MENU:
-                    mlv_play_render_abort = 1; /* MENU leaves playback */
                     break;
 
                 case MODULE_KEY_PRESS_ZOOMIN:
@@ -865,8 +860,6 @@ static void mlv_play_osd_task(void *priv)
                         {
                             mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
                         }
-                        if (key == MODULE_KEY_PRESS_LEFT)  mlv_play_prev();
-                        if (key == MODULE_KEY_PRESS_RIGHT) mlv_play_next();
                         if (key == MODULE_KEY_INFO)
                         {
                             clrscr();
@@ -2834,16 +2827,6 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
             case MODULE_KEY_PRESS_ZOOMIN:
             {
                 msg_queue_post(mlv_play_queue_osd, (uint32_t) key);
-                return 0;
-            }
-
-            case MODULE_KEY_TOUCH_1_FINGER:
-            case MODULE_KEY_UNTOUCH_1_FINGER:
-            case MODULE_KEY_TOUCH_2_FINGER:
-            case MODULE_KEY_UNTOUCH_2_FINGER:
-            {
-                if (key == MODULE_KEY_TOUCH_1_FINGER)
-                    msg_queue_post(mlv_play_queue_osd, (uint32_t) key);
                 return 0;
             }
 
