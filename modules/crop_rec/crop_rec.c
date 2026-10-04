@@ -113,6 +113,7 @@ static int crop_preset_fps = 0;
 #define Framerate_24   (crop_preset_fps == 0)
 #define Framerate_25   (crop_preset_fps == 1)
 #define Framerate_30   (crop_preset_fps == 2)
+#define Framerate_18   (crop_preset_fps == 3)   /* slim 1:1 3:2 (S8 / 8mm) only */
 
 /* customized buttons variables
  * EOS M slim defaults:
@@ -2850,6 +2851,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             if (Framerate_24) TimerB = 0x935;
             if (Framerate_25) TimerB = 0x8D4;
             if (Framerate_30) TimerB = 0x75D;
+            if (Framerate_18) TimerB = 0xC44;   /* 18.000 fps: 32 MHz / (0x236 * 0xC45) */
         }
 
         if (is_100D)
@@ -2860,6 +2862,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             if (Framerate_24) TimerB = 0x914;
             if (Framerate_25) TimerB = 0x8B5;
             if (Framerate_30) TimerB = 0x743;
+            if (Framerate_18) TimerB = 0xC18;   /* 18.000 fps: 32 MHz / (0x23E * 0xC19) */
         }
 
         Preview_H     = 1916;
@@ -5061,6 +5064,9 @@ static void update_patch()
         
         crop_preset_ar      = crop_preset_ar_menu;
         crop_preset_fps     = crop_preset_fps_menu;
+        /* 18 fps exists only in the 1:1 1280p preset; anywhere else fall back to 24 */
+        if (crop_preset_fps == 3 && !(CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res_menu == 4))
+            crop_preset_fps = 0;
         crop_preset_1x1_res = crop_preset_1x1_res_menu;
         crop_preset_1x3_res = crop_preset_1x3_res_menu;
         crop_preset_3x3_res = crop_preset_3x3_res_menu;
@@ -5633,7 +5639,7 @@ static MENU_UPDATE_FUNC(fix_dual_iso_flicker_update)
 
 /* ---- EOS M slim Crop Mode (single screen) ----
  * Mode / Aspect / Preset drive recording config; Resolution is read-only;
- * Frame Rate cycles only valid rates; Bit Depth stays 14/12/10 always.
+ * Frame Rate cycles only valid rates; Bit Depth stays 14/12/11/10 always.
  * Module builds lack CONFIG_SLIM_MENUS — gate with is_EOSM. */
 
 static struct menu_entry slim_more_hacks_menu[] = {
@@ -5720,7 +5726,7 @@ static struct menu_entry slim_info_button_menu[] = {
 /* Mode UI: 0=1x1, 1=1x3, 2=3x3, 3=LV (Full-Res LiveView). */
 static int slim_mode_ui = 2; /* default: 3x3 (S35) */
 static int slim_unified_preset = 1; /* Highest=0 Higher=1 Medium=2 */
-static int slim_bit_depth_ui = 1;   /* 0=10 1=12 2=14 → bit_depth_analog 3/1/0 */
+static int slim_bit_depth_ui = 2;   /* 0=10 1=11 2=12 3=14 → bit_depth_analog 3/2/1/0 */
 /* Crop register changes are applied asynchronously at frame boundaries.
  * Do not let direct-touch input start another transition while the previous
  * preview geometry is still settling. */
@@ -5921,7 +5927,7 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
         /* 3:2 → 1920x1280 @ 24/25 — Highest only */
         *res_idx = 4;
         *w = 1920; *h = 1280;
-        *fps_mask = 0x3;
+        *fps_mask = 0xB;   /* 23.976 / 25 / 18 (Super 8 and 8mm) */
         slim_unified_preset = 0;
     }
     else
@@ -5988,9 +5994,10 @@ static void slim_crop_sync_from_backend(void)
         /* Keep AR; backend res comes from slim_crop_apply_3x3_from_ar. */
     }
 
-    if (OUTPUT_10BIT || OUTPUT_11BIT) slim_bit_depth_ui = 0;
-    else if (OUTPUT_12BIT) slim_bit_depth_ui = 1;
-    else slim_bit_depth_ui = 2; /* 14-bit */
+    if (OUTPUT_10BIT) slim_bit_depth_ui = 0;
+    else if (OUTPUT_11BIT) slim_bit_depth_ui = 1;
+    else if (OUTPUT_12BIT) slim_bit_depth_ui = 2;
+    else slim_bit_depth_ui = 3; /* 14-bit */
 }
 
 static void slim_crop_apply_unified_preset(void)
@@ -6039,9 +6046,9 @@ static void slim_crop_apply_mode(void)
 
 static void slim_crop_apply_bit_depth(void)
 {
-    static const int map[] = { 3, 1, 0 }; /* 10, 12, 14 */
+    static const int map[] = { 3, 2, 1, 0 }; /* 10, 11, 12, 14 */
     int prev = bit_depth_analog;
-    slim_bit_depth_ui = COERCE(slim_bit_depth_ui, 0, 2);
+    slim_bit_depth_ui = COERCE(slim_bit_depth_ui, 0, 3);
     bit_depth_analog = map[slim_bit_depth_ui];
     if (bit_depth_analog != prev)
         raw_invalidate_lv_calibration();
@@ -6112,7 +6119,7 @@ static void slim_crop_expected_res(int *w, int *h)
     }
 }
 
-/* Bit0=23.976 Bit1=25 Bit2=30 — rates allowed for current Mode/AR/Preset on EOS M.
+/* Bit0=23.976 Bit1=25 Bit2=30 Bit3=18 (1:1 3:2 only) — rates allowed for current Mode/AR/Preset on EOS M.
  * LV: return 0 (handled specially as 3 fps). */
 static int slim_crop_fps_mask(void)
 {
@@ -6157,7 +6164,7 @@ static void slim_crop_clamp_fps(void)
         return; /* LV @ 3 fps — no 24/25/30 index */
     if (mask & (1 << crop_preset_fps_menu))
         return;
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 4; i++)
     {
         if (mask & (1 << i))
         {
@@ -6441,17 +6448,20 @@ static MENU_SELECT_FUNC(slim_crop_fps_select)
         return; /* LV: 3 fps only */
 
     int mask = slim_crop_fps_mask();
-    int bits = (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1);
+    int bits = (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + ((mask >> 3) & 1);
     if (bits <= 1)
         return;
 
-    int pos = crop_preset_fps_menu;
-    for (int step = 0; step < 3; step++)
+    /* order: 18 <-> 23.976 <-> 25 <-> 30 (index 3 is 18) */
+    static const int order[4] = { 3, 0, 1, 2 };
+    int pos = 0;
+    for (int k = 0; k < 4; k++) if (order[k] == crop_preset_fps_menu) pos = k;
+    for (int step = 0; step < 4; step++)
     {
-        pos = MOD(pos + delta, 3);
-        if (mask & (1 << pos))
+        pos = MOD(pos + (delta < 0 ? -1 : 1), 4);
+        if (mask & (1 << order[pos]))
         {
-            crop_preset_fps_menu = pos;
+            crop_preset_fps_menu = order[pos];
             return;
         }
     }
@@ -6511,12 +6521,12 @@ static MENU_UPDATE_FUNC(slim_crop_fps_update)
         return;
     }
 
-    static const char * labels[] = { "23.976", "25", "30" };
-    MENU_SET_VALUE("%s", labels[COERCE(crop_preset_fps_menu, 0, 2)]);
+    static const char * labels[] = { "23.976", "25", "30", "18" };
+    MENU_SET_VALUE("%s", labels[COERCE(crop_preset_fps_menu, 0, 3)]);
 
     /* Only one valid rate → show it greyed (read-only). */
     int mask = slim_crop_fps_mask();
-    int bits = (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1);
+    int bits = (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + ((mask >> 3) & 1);
     if (bits <= 1)
         MENU_SET_ENABLED(0);
 }
@@ -6524,8 +6534,8 @@ static MENU_UPDATE_FUNC(slim_crop_fps_update)
 static MENU_SELECT_FUNC(slim_crop_bit_select)
 {
     /* Direct-touch arrows and menu L/R move in opposite directions:
-     * 10 <-> 12 <-> 14, wrapping at the ends. */
-    slim_bit_depth_ui = MOD(slim_bit_depth_ui + (delta < 0 ? -1 : 1), 3);
+     * 10 <-> 11 <-> 12 <-> 14, wrapping at the ends. */
+    slim_bit_depth_ui = MOD(slim_bit_depth_ui + (delta < 0 ? -1 : 1), 4);
     slim_crop_apply_bit_depth();
 }
 
@@ -6534,7 +6544,8 @@ static MENU_UPDATE_FUNC(slim_crop_bit_update)
     slim_crop_sync_from_backend();
     MENU_SET_VALUE("%s",
         slim_bit_depth_ui == 0 ? "10 Bit" :
-        slim_bit_depth_ui == 1 ? "12 Bit" : "14 Bit");
+        slim_bit_depth_ui == 1 ? "11 Bit" :
+        slim_bit_depth_ui == 2 ? "12 Bit" : "14 Bit");
     /* Never gate Bit Depth on lossless / other settings. */
 }
 
@@ -6634,7 +6645,7 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
         else
         {
             int mask = slim_crop_fps_mask();
-            int bits = (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1);
+            int bits = (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + ((mask >> 3) & 1);
             if (CROP_PRESET_MENU == CROP_PRESET_3X3 && crop_preset_ar_menu < 4)
             {
                 static const char *hfr[] = { "46.800", "50", "54", "55.6" };
@@ -6642,8 +6653,8 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
             }
             else
             {
-                static const char *labels[] = { "23.976", "25", "30" };
-                snprintf(value, size, "%s", labels[COERCE(crop_preset_fps_menu, 0, 2)]);
+                static const char *labels[] = { "23.976", "25", "30", "18" };
+                snprintf(value, size, "%s", labels[COERCE(crop_preset_fps_menu, 0, 3)]);
             }
             enabled = bits > 1;
         }
@@ -6652,7 +6663,8 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
     {
         snprintf(value, size, "%s",
             slim_bit_depth_ui == 0 ? "10 Bit" :
-            slim_bit_depth_ui == 1 ? "12 Bit" : "14 Bit");
+            slim_bit_depth_ui == 1 ? "11 Bit" :
+            slim_bit_depth_ui == 2 ? "12 Bit" : "14 Bit");
     }
     else
     {
@@ -6794,8 +6806,8 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .priv       = &crop_preset_fps_menu,
         .select     = slim_crop_fps_select,
         .update     = slim_crop_fps_update,
-        .max        = 2,
-        .choices    = CHOICES("23.976", "25", "30"),
+        .max        = 3,
+        .choices    = CHOICES("23.976", "25", "30", "18"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
         .help       = "Frame rates supported by the current configuration.",
@@ -6805,8 +6817,8 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .priv       = &slim_bit_depth_ui,
         .select     = slim_crop_bit_select,
         .update     = slim_crop_bit_update,
-        .max        = 2,
-        .choices    = CHOICES("10 Bit", "12 Bit", "14 Bit"),
+        .max        = 3,
+        .choices    = CHOICES("10 Bit", "11 Bit", "12 Bit", "14 Bit"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
         .help       = "Lossless RAW bit depth. Always available.",
