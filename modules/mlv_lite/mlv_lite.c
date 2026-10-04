@@ -2571,18 +2571,31 @@ int mlv_raw_rec_busy()
 static REQUIRES(RawRecTask)
 void hack_liveview(int unhack)
 {
-    /* Film formats show their frame as ML-drawn bars, which need global draw:
-     * skip the kill in that case so the preview keeps the film frame. */
+    /* Kill Global Draw: stop all ML drawing during recording (saves CPU and
+     * memory bandwidth). In Film Format modes the frame is made of ML-drawn
+     * bars, which would vanish with the rest of the overlays; so, after
+     * clearing the screen, draw the bars once (static, no further redraws). */
     static int gd_was_killed = 0;
     if (kill_gd)
     {
         if (!unhack)
         {
-            if (!film_frame_possible())
+            idle_globaldraw_dis();
+            clrscr();
+            gd_was_killed = 1;
+
+            int fx, fy, fw, fh;
+            if (film_frame_rect(&fx, &fy, &fw, &fh))
             {
-                idle_globaldraw_dis();
-                clrscr();
-                gd_was_killed = 1;
+                int x1 = COERCE(fx, 0, BMP_W_PLUS);
+                int y1 = COERCE(fy, 0, BMP_H_PLUS);
+                int x2 = COERCE(fx + fw, 0, BMP_W_PLUS);
+                int y2 = COERCE(fy + fh, 0, BMP_H_PLUS);
+                bmp_fill(COLOR_BLACK, 0, 0, BMP_W_PLUS, y1);                          /* top    */
+                bmp_fill(COLOR_BLACK, 0, y2, BMP_W_PLUS, BMP_H_PLUS - y2);            /* bottom */
+                bmp_fill(COLOR_BLACK, 0, y1, x1, y2 - y1);                            /* left   */
+                bmp_fill(COLOR_BLACK, x2, y1, BMP_W_PLUS - x2, y2 - y1);              /* right  */
+                bmp_draw_rect(COLOR_GRAY(70), x1, y1, x2 - x1, y2 - y1);              /* edge   */
             }
         }
         else if (gd_was_killed)
