@@ -1161,6 +1161,14 @@ int handle_common_events_by_feature(struct event * event)
     /* log button codes, if enabled from the Debug menu */
     spy_event(event);
 
+    /* DIAGNOSTIC (playback): A = key event arrived at ML */
+    if (PLAY_MODE)
+    {
+        static int diag_a;
+        diag_a++;
+        bmp_printf(FONT_MED, 30, 400, "A:%x n=%d     ", (unsigned)event->param, diag_a);
+    }
+
 #ifdef FEATURE_POWERSAVE_LIVEVIEW
     // these are required for correct shutdown from "LV paused" state
     if (event->param == GMT_GUICMD_START_AS_CHECK || 
@@ -1215,6 +1223,14 @@ int handle_common_events_by_feature(struct event * event)
      * but also let the raw recording modules block the zoom keys to avoid crashing */
     if (handle_zoom_overlay(event) == 0) return 0;
     #endif
+
+    /* DIAGNOSTIC (playback): B = key event passed all earlier ML filters */
+    if (PLAY_MODE)
+    {
+        static int diag_b;
+        diag_b++;
+        bmp_printf(FONT_MED, 30, 425, "B:%x n=%d     ", (unsigned)event->param, diag_b);
+    }
 
     if (handle_module_keys(event) == 0) return 0;
     if (handle_flexinfo_keys(event) == 0) return 0;
