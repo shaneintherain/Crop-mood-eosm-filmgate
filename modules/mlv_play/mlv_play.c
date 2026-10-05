@@ -2791,6 +2791,14 @@ FILETYPE_HANDLER(mlv_play_filehandler)
 
 static unsigned int mlv_play_keypress_cbr(unsigned int key)
 {
+    /* DIAGNOSTIC: K = key reached the playback module */
+    {
+        static int diag_k;
+        diag_k++;
+        bmp_printf(FONT_MED, 30, 450, "K:%x n=%d rend=%d gui=%d osd=%d pau=%d   ",
+            key, diag_k, (int)mlv_play_rendering, (int)gui_state,
+            (int)mlv_play_osd_state, (int)mlv_play_paused);
+    }
     if (mlv_play_rendering)
     {
         switch(key)
