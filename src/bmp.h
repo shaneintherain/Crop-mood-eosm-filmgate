@@ -311,14 +311,6 @@ void bmp_draw_antialiased_triangle(int tip_x, int tip_y, int direction,
 #define COLOR_ALMOST_BLACK      0x26
 #define COLOR_ALMOST_WHITE      0x4F
 
-/* Film Edge look, black and white: only the camera's own fixed palette entries are used,
- * so Canon can never reset them (no pink/purple flashes). */
-#define COLOR_CREAM             COLOR_WHITE
-#define COLOR_FILM_DIM          COLOR_GRAY(70)
-#define COLOR_FILM_MUTED        COLOR_GRAY(45)
-#define COLOR_FILM_FAINT        COLOR_GRAY(20)
-void film_palette_apply(void);
-
 #define COLOR_GRAY(percent) (38 + (percent) * 41 / 100) // e.g. COLOR_GRAY(50) is 50% gray
 
 #define COLOR_DARK_GREEN1_MOD 21

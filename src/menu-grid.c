@@ -4,6 +4,7 @@
 #include "font.h"
 #include "menu.h"
 #include "menu-grid.h"
+#include "slim-font.h"
 #include "gui-common.h"
 #include "config.h"
 #include "lens.h"
@@ -62,13 +63,14 @@ typedef struct
     const char *adjust_entry;
 } quick_screen_item_t;
 
-/* Top-right cell is Bit Depth (10 / 12 / 14 bit), adjusted like Frame Rate. */
+/* Resolution displays the computed read-only value. Its arrows stay within
+ * the Aspect Ratio currently selected beside it. */
 static const quick_screen_item_t quick_screen_items[QUICK_SCREEN_COUNT] =
 {
     { "Expo",  "White Balance", "Expo",  "White Balance"    },
     { "Movie", "Mode",          "Movie", "Mode"             },
     { "Movie", "Aspect Ratio",  "Movie", "Aspect Ratio"     },
-    { "Movie", "Bit Depth",     "Movie", "Bit Depth"        },
+    { "Movie", "Resolution",    "Movie", "Quick Resolution" },
     { "Movie", "Frame Rate",    "Movie", "Frame Rate"       },
     { "Expo",  "Shutter",       "Expo",  "Shutter"          },
     { "Expo",  "Aperture",      "Expo",  "Aperture"         },
@@ -142,7 +144,7 @@ static void grid_cell_rect(int idx, int *x, int *y, int *w, int *h)
     *h = ch;
 }
 
-static void grid_draw_ml_icon(int icon, int cx, int cy, int color)
+static void grid_draw_ml_icon(int icon, int cx, int cy)
 {
     const int scale = 2;
     int iw = bfnt_char_get_width(icon) * scale;
@@ -150,7 +152,7 @@ static void grid_draw_ml_icon(int icon, int cx, int cy, int color)
     int ih = 40 * scale;
     int x = cx - iw / 2;
     int y = cy - ih / 2;
-    bfnt_draw_char_scaled(icon, x, y, color, NO_BG_ERASE, scale);
+    bfnt_draw_char_scaled(icon, x, y, COLOR_CYAN, NO_BG_ERASE, scale);
 }
 
 int menu_grid_is_active(void)   { return grid_active; }
@@ -461,18 +463,14 @@ void menu_white_card_wb_capture_finished(void)
 
 static void quick_screen_arrow(int cx, int tip_y, int up, int color)
 {
-    /* Film Edge: small thin chevron.  tip_y keeps the old position, so touch
-     * targets are unchanged; the chevron sits in the middle of the old arrow. */
-    const int height = 9;
-    const int half_width = 12;
-    int t;
-    int base = up ? tip_y + 8 : tip_y - 8;
-    for (t = 0; t < 3; t++)
+    const int height = 26;
+    const int half_width = 30;
+    int i;
+    for (i = 0; i <= height; i++)
     {
-        int y0 = up ? base + t : base - t;
-        int y1 = up ? base + height + t : base - height - t;
-        draw_line(cx, y0, cx - half_width, y1, color);
-        draw_line(cx, y0, cx + half_width, y1, color);
+        int w = (half_width * i) / height;
+        int yy = up ? tip_y + i : tip_y - i;
+        draw_line(cx - w, yy, cx + w, yy, color);
     }
 }
 
@@ -480,6 +478,7 @@ static int quick_screen_value(
     int index, char *buf, int size, int *draw_degree)
 {
     struct menu_display_info info;
+    struct menu_display_info adjust_info;
     const quick_screen_item_t *item = &quick_screen_items[index];
     char *value = menu_get_str_value_from_script(
         item->value_menu, item->value_entry, &info);
@@ -490,6 +489,15 @@ static int quick_screen_value(
         "%s", value && value[0] ? value : "--");
     enabled = info.enabled;
     *draw_degree = 0;
+
+    /* Resolution is displayed by a read-only row, but adjusted by the hidden
+     * composite selector that spans every Aspect Ratio and preset. */
+    if (index == 3)
+    {
+        menu_get_str_value_from_script(
+            item->adjust_menu, item->adjust_entry, &adjust_info);
+        enabled = adjust_info.enabled;
+    }
 
     if (index == 5)
     {
@@ -516,27 +524,12 @@ static int quick_screen_value(
     }
     else if (index == 7)
     {
-        snprintf(buf, size, "%s", raw_value);
+        snprintf(buf, size, "ISO%s", raw_value);
     }
     else
     {
         snprintf(buf, size, "%s", raw_value);
-        if (index == 1 && strstr(buf, "Anamorphic"))
-            snprintf(buf, size, "A35-ANA");   /* full name is too long for the cell */
-        else if (index == 1 && streq(buf, "Academy 35mm"))
-            snprintf(buf, size, "A35");
-        if (index == 2)
-        {
-            /* Frame cell: "16:9 Crop" -> "16:9" (the word Crop is not needed here) */
-            int n = strlen(buf);
-            if (n > 5 && streq(buf + n - 5, " Crop"))
-                buf[n - 5] = 0;
-        }
     }
-
-    /* Film Edge: values are shown in capitals */
-    for (char *c = buf; *c; c++)
-        if (*c >= 'a' && *c <= 'z') *c -= 32;
 
     return enabled;
 }
@@ -602,7 +595,6 @@ static int quick_screen_adjust(int index, int delta)
 void menu_quick_screen_draw(void)
 {
     int index;
-    film_palette_apply();
     bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
 
     /* Menu task owns the screen here, so dynamic availability is safe to
@@ -624,45 +616,9 @@ void menu_quick_screen_draw(void)
             index, &cx, &value_y, &up_tip_y, &down_tip_y);
         enabled = quick_screen_value(
             index, value, sizeof(value), &draw_degree);
-        int selected = (index == quick_screen_sel && enabled);
-        int box_y = (index / QUICK_SCREEN_COLS == 0) ? 55 : 256;
-        int box_x = (index % QUICK_SCREEN_COLS) * QUICK_SCREEN_CELL_W + 6;
-        int box_w = QUICK_SCREEN_CELL_W - 12;
-        int box_h = 168;
-        int arrow_color;
-        int label_bg = selected ? COLOR_CREAM : COLOR_BLACK;
-        static const char * const labels[QUICK_SCREEN_COUNT] =
-            { "WB", "FORMAT", "FRAME", "BITS", "FPS", "SHUTTER", "APERTURE", "ISO" };
-
-        /* Film Edge cell: thin outline, or the whole box solid cream when selected */
-        if (selected)
-        {
-            bmp_fill(COLOR_CREAM, box_x, box_y, box_w, box_h);
-            bmp_draw_rect(COLOR_CREAM, box_x, box_y, box_w, box_h);
-        }
-        else
-        {
-            bmp_draw_rect(COLOR_FILM_MUTED, box_x, box_y, box_w, box_h);
-        }
-
-        color = enabled ? COLOR_RED : COLOR_FILM_MUTED;
-        arrow_color = selected ? COLOR_BLACK : enabled ? COLOR_CREAM : COLOR_FILM_FAINT;
-
-        bmp_printf(
-            FONT(FONT_SMALL, selected ? COLOR_FILM_FAINT : COLOR_FILM_DIM, label_bg),
-            cx - (int)strlen(labels[index]) * 4, box_y + 6, "%s", labels[index]);
-
+        color = enabled ? COLOR_WHITE : COLOR_GRAY(50);
         width = bmp_string_width(FONT_CANON, value);
         value_x = cx - (width + (draw_degree ? 12 : 0)) / 2;
-        if (width > box_w - 8)
-        {
-            /* too long for the cell: use a smaller font so it never spills over */
-            int w2 = bmp_string_width(FONT_MED_LARGE, value);
-            bmp_printf(
-                FONT(FONT_MED_LARGE, color, selected ? COLOR_CREAM : COLOR_BLACK),
-                cx - w2 / 2, value_y + 6, "%s", value);
-        }
-        else
         bmp_printf(
             FONT(FONT_CANON, color, NO_BG_ERASE),
             value_x, value_y, "%s", value);
@@ -674,11 +630,17 @@ void menu_quick_screen_draw(void)
             draw_circle(degree_x, degree_y, 3, color);
         }
         quick_screen_arrow(cx, up_tip_y, 1,
-            !enabled ? arrow_color :
-            quick_screen_feedback == index * 2 ? COLOR_FILM_DIM : arrow_color);
+            !enabled ? COLOR_GRAY(50) :
+            quick_screen_feedback == index * 2 ? COLOR_WHITE : COLOR_ORANGE);
         quick_screen_arrow(cx, down_tip_y, 0,
-            !enabled ? arrow_color :
-            quick_screen_feedback == index * 2 + 1 ? COLOR_FILM_DIM : arrow_color);
+            !enabled ? COLOR_GRAY(50) :
+            quick_screen_feedback == index * 2 + 1 ? COLOR_WHITE : COLOR_ORANGE);
+
+        if (index == quick_screen_sel && enabled)
+        {
+            /* Slightly narrower than the 60px arrow for a lighter highlight. */
+            bmp_fill(COLOR_YELLOW, cx - 24, up_tip_y - 17, 48, 4);
+        }
     }
 }
 
@@ -836,46 +798,37 @@ int menu_quick_screen_handle_key(int button_code)
 
 void menu_grid_draw(void)
 {
-    film_palette_apply();
     bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
 
-    int label_h = fontspec_font(FONT_CANON)->height;
+    /* Grid cards have a solid background, so the Slim font can render cleanly. */
+    int fnt = slim_ui_font_spec(COLOR_WHITE, COLOR_GRAY(20));
+    int label_h = slim_ui_font_height();
+    int b = GRID_SEL_BORDER;
 
     for (int i = 0; i < GRID_COUNT; i++)
     {
         int x, y, w, h;
         grid_cell_rect(i, &x, &y, &w, &h);
         int selected = (i == grid_sel);
-        int fg = selected ? COLOR_BLACK : COLOR_CREAM;
+        int r = MIN(GRID_RADIUS, MIN(w, h) / 2);
 
-        /* Film Edge: outlined tile; the selected tile is solid cream */
-        /* square corners and a thin outline, the same as the quick menu cells */
         if (selected)
-        {
-            bmp_fill(COLOR_CREAM, x, y, w, h);
-            bmp_draw_rect(COLOR_CREAM, x, y, w, h);
-        }
-        else
-        {
-            bmp_draw_rect(COLOR_FILM_MUTED, x, y, w, h);
-        }
+            grid_fill_round_rect(x - b, y - b, w + 2 * b, h + 2 * b, r + b, COLOR_ORANGE);
+
+        grid_fill_round_rect(x, y, w, h, r, COLOR_GRAY(20));
 
         /* Shared bottom baseline for all four labels. */
         int label_y = y + h - GRID_LABEL_PAD - label_h;
-        char label[16];
-        snprintf(label, sizeof(label), "%s", grid_tiles[i].label);
-        for (char *c = label; *c; c++)
-            if (*c >= 'a' && *c <= 'z') *c -= 32;
-        int label_w = bmp_string_width(FONT_CANON, label);
+        int label_w = bmp_string_width(fnt, (char *) grid_tiles[i].label);
         int label_x = x + (w - label_w) / 2;
 
         /* Icon centered in the remaining space above the label. */
         int icon_zone_top = y + 10;
         int icon_zone_bot = label_y - GRID_ICON_GAP;
         int icon_cy = (icon_zone_top + icon_zone_bot) / 2;
-        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, COLOR_RED);
+        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy);
 
-        bmp_printf(FONT(FONT_CANON, fg, NO_BG_ERASE), label_x, label_y, "%s", label);
+        bmp_printf(fnt, label_x, label_y, "%s", grid_tiles[i].label);
     }
 }
 
