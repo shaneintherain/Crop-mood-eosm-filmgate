@@ -614,9 +614,9 @@ void _load_fonts()
     #endif
     font_by_name("argnor28", COLOR_BLACK, COLOR_WHITE);
     font_by_name("argnor32", COLOR_BLACK, COLOR_WHITE);
-    /* Slim-only Roboto Thin.  It occupies a spare dynamic slot and is loaded
-     * with the ordinary ML fonts, never from a Live View drawing callback. */
-    font_by_name("roboto-thin", COLOR_BLACK, COLOR_WHITE);
+    /* Jost Medium for the FilmGate menus.  It occupies a spare dynamic slot and
+     * is loaded with the ordinary ML fonts, never from a Live View drawing callback. */
+    font_by_name("jost-medium", COLOR_BLACK, COLOR_WHITE);
 
     font_small = *fontspec_font(FONT_SMALL);
     font_med = *fontspec_font(FONT_MED);

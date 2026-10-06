@@ -9,6 +9,7 @@
 #include "lens.h"
 #include "shoot.h"
 #include "fps.h"
+#include "slim-font.h"
 
 extern void lens_display_set_dirty(void);
 
@@ -603,7 +604,9 @@ void menu_quick_screen_draw(void)
 {
     int index;
     film_palette_apply();
-    bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
+    bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
+    bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, 48);
+    bmp_printf(slim_ui_font_spec(COLOR_WHITE, COLOR_PEN_NAVY), 16, 4, "QUICK MENU");
 
     /* Menu task owns the screen here, so dynamic availability is safe to
      * evaluate. Never leave the yellow selector on a disabled control. */
@@ -630,41 +633,41 @@ void menu_quick_screen_draw(void)
         int box_w = QUICK_SCREEN_CELL_W - 12;
         int box_h = 168;
         int arrow_color;
-        int label_bg = selected ? COLOR_CREAM : COLOR_BLACK;
+        int label_bg = selected ? COLOR_PEN_NAVY : COLOR_PEN_BG;
         static const char * const labels[QUICK_SCREEN_COUNT] =
             { "WB", "FORMAT", "FRAME", "BITS", "FPS", "SHUTTER", "APERTURE", "ISO" };
 
         /* Film Edge cell: thin outline, or the whole box solid cream when selected */
         if (selected)
         {
-            bmp_fill(COLOR_CREAM, box_x, box_y, box_w, box_h);
-            bmp_draw_rect(COLOR_CREAM, box_x, box_y, box_w, box_h);
+            bmp_fill(COLOR_PEN_NAVY, box_x, box_y, box_w, box_h);
+            bmp_draw_rect(COLOR_PEN_NAVY, box_x, box_y, box_w, box_h);
         }
         else
         {
-            bmp_draw_rect(COLOR_FILM_MUTED, box_x, box_y, box_w, box_h);
+            bmp_draw_rect(COLOR_PEN_LINE, box_x, box_y, box_w, box_h);
         }
 
-        color = enabled ? COLOR_RED : COLOR_FILM_MUTED;
-        arrow_color = selected ? COLOR_BLACK : enabled ? COLOR_CREAM : COLOR_FILM_FAINT;
+        color = !enabled ? COLOR_PEN_MUTED : selected ? COLOR_WHITE : COLOR_PEN_NAVY;
+        arrow_color = selected ? COLOR_PEN_CYAN : enabled ? COLOR_PEN_MUTED : COLOR_PEN_LINE;
 
         bmp_printf(
-            FONT(FONT_SMALL, selected ? COLOR_FILM_FAINT : COLOR_FILM_DIM, label_bg),
+            FONT(FONT_SMALL, selected ? COLOR_PEN_SKY : COLOR_PEN_MUTED, label_bg),
             cx - (int)strlen(labels[index]) * 4, box_y + 6, "%s", labels[index]);
 
-        width = bmp_string_width(FONT_CANON, value);
+        width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value);
         value_x = cx - (width + (draw_degree ? 12 : 0)) / 2;
         if (width > box_w - 8)
         {
             /* too long for the cell: use a smaller font so it never spills over */
             int w2 = bmp_string_width(FONT_MED_LARGE, value);
             bmp_printf(
-                FONT(FONT_MED_LARGE, color, selected ? COLOR_CREAM : COLOR_BLACK),
+                FONT(FONT_MED_LARGE, color, selected ? COLOR_PEN_NAVY : COLOR_PEN_BG),
                 cx - w2 / 2, value_y + 6, "%s", value);
         }
         else
         bmp_printf(
-            FONT(FONT_CANON, color, NO_BG_ERASE),
+            slim_ui_font_spec(color, selected ? COLOR_PEN_NAVY : COLOR_PEN_BG),
             value_x, value_y, "%s", value);
         if (draw_degree)
         {
@@ -675,10 +678,10 @@ void menu_quick_screen_draw(void)
         }
         quick_screen_arrow(cx, up_tip_y, 1,
             !enabled ? arrow_color :
-            quick_screen_feedback == index * 2 ? COLOR_FILM_DIM : arrow_color);
+            quick_screen_feedback == index * 2 ? COLOR_PEN_SKY : arrow_color);
         quick_screen_arrow(cx, down_tip_y, 0,
             !enabled ? arrow_color :
-            quick_screen_feedback == index * 2 + 1 ? COLOR_FILM_DIM : arrow_color);
+            quick_screen_feedback == index * 2 + 1 ? COLOR_PEN_SKY : arrow_color);
     }
 }
 
@@ -745,12 +748,12 @@ int menu_quick_screen_handle_touch(int x, int y)
     {
         int width;
         int text_x;
-        int text_h = fontspec_font(FONT_CANON)->height;
+        int text_h = slim_ui_font_height();
         quick_screen_geometry(
             index, &cx, &value_y, &up_tip_y, &down_tip_y);
         quick_screen_value(
             index, value, sizeof(value), &draw_degree);
-        width = bmp_string_width(FONT_CANON, value) +
+        width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value) +
                 (draw_degree ? 12 : 0);
         text_x = cx - width / 2;
         if (index == 5 &&
@@ -837,27 +840,27 @@ int menu_quick_screen_handle_key(int button_code)
 void menu_grid_draw(void)
 {
     film_palette_apply();
-    bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
+    bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
 
-    int label_h = fontspec_font(FONT_CANON)->height;
+    int label_h = slim_ui_font_height();
 
     for (int i = 0; i < GRID_COUNT; i++)
     {
         int x, y, w, h;
         grid_cell_rect(i, &x, &y, &w, &h);
         int selected = (i == grid_sel);
-        int fg = selected ? COLOR_BLACK : COLOR_CREAM;
+        int fg = selected ? COLOR_WHITE : COLOR_PEN_NAVY;
 
         /* Film Edge: outlined tile; the selected tile is solid cream */
         /* square corners and a thin outline, the same as the quick menu cells */
         if (selected)
         {
-            bmp_fill(COLOR_CREAM, x, y, w, h);
-            bmp_draw_rect(COLOR_CREAM, x, y, w, h);
+            bmp_fill(COLOR_PEN_NAVY, x, y, w, h);
+            bmp_draw_rect(COLOR_PEN_NAVY, x, y, w, h);
         }
         else
         {
-            bmp_draw_rect(COLOR_FILM_MUTED, x, y, w, h);
+            bmp_draw_rect(COLOR_PEN_LINE, x, y, w, h);
         }
 
         /* Shared bottom baseline for all four labels. */
@@ -866,16 +869,16 @@ void menu_grid_draw(void)
         snprintf(label, sizeof(label), "%s", grid_tiles[i].label);
         for (char *c = label; *c; c++)
             if (*c >= 'a' && *c <= 'z') *c -= 32;
-        int label_w = bmp_string_width(FONT_CANON, label);
+        int label_w = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), label);
         int label_x = x + (w - label_w) / 2;
 
         /* Icon centered in the remaining space above the label. */
         int icon_zone_top = y + 10;
         int icon_zone_bot = label_y - GRID_ICON_GAP;
         int icon_cy = (icon_zone_top + icon_zone_bot) / 2;
-        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, COLOR_RED);
+        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, selected ? COLOR_PEN_CYAN : COLOR_PEN_NAVY);
 
-        bmp_printf(FONT(FONT_CANON, fg, NO_BG_ERASE), label_x, label_y, "%s", label);
+        bmp_printf(slim_ui_font_spec(fg, selected ? COLOR_PEN_NAVY : COLOR_PEN_BG), label_x, label_y, "%s", label);
     }
 }
 

@@ -9,12 +9,12 @@ static uint32_t slim_ui_font_base = FONT_CANON;
 
 uint32_t slim_ui_font_spec(uint32_t foreground, uint32_t background)
 {
-    /* Avoid boot-time card I/O: Roboto is loaded only once a requested Slim
-     * screen needs it.  The complete font is packaged in ML/FONTS. */
+    /* Jost Medium is normally already loaded at boot (rbf_init); if not, this
+     * loads it on first use.  The font file is packaged in ML/FONTS. */
     if (!slim_ui_font_attempted)
     {
         slim_ui_font_attempted = 1;
-        slim_ui_font_base = font_by_name("roboto-thin", foreground, background);
+        slim_ui_font_base = font_by_name("jost-medium", foreground, background);
     }
 
     return FONT(slim_ui_font_base, foreground, background);
