@@ -602,7 +602,6 @@ static int quick_screen_adjust(int index, int delta)
 
 /* Lightly rounded rectangles (radius 8 outer / 7 inner), drawn row by row. */
 static const uint8_t rr8[8] = { 5, 3, 2, 1, 1, 0, 0, 0 };
-static const uint8_t rr7[7] = { 4, 2, 1, 1, 0, 0, 0 };
 static void rr_fill(int x, int y, int w, int h, const uint8_t *t, int n, int color)
 {
     for (int i = 0; i < n; i++)
@@ -612,11 +611,12 @@ static void rr_fill(int x, int y, int w, int h, const uint8_t *t, int n, int col
     }
     bmp_fill(color, x, y + n, w, h - 2 * n);
 }
+static const uint8_t rr6[6] = { 3, 2, 1, 1, 0, 0 };
+/* 2 px outline in the "outline" colour around a "fill" coloured body */
 static void rr_tile(int x, int y, int w, int h, int outline, int fill)
 {
     rr_fill(x, y, w, h, rr8, 8, outline);
-    if (fill != outline)
-        rr_fill(x + 1, y + 1, w - 2, h - 2, rr7, 7, fill);
+    rr_fill(x + 2, y + 2, w - 4, h - 4, rr6, 6, fill);
 }
 
 void menu_quick_screen_draw(void)
@@ -659,11 +659,11 @@ void menu_quick_screen_draw(void)
         /* Film Edge cell: thin outline, or the whole box solid cream when selected */
         if (selected)
         {
-            rr_tile(box_x, box_y, box_w, box_h, COLOR_PEN_NAVY, COLOR_PEN_NAVY);
+            rr_tile(box_x, box_y, box_w, box_h, COLOR_PEN_LIGHT, COLOR_PEN_NAVY);
         }
         else
         {
-            rr_tile(box_x, box_y, box_w, box_h, COLOR_PEN_LINE, COLOR_PEN_BG);
+            rr_tile(box_x, box_y, box_w, box_h, COLOR_PEN_SKY, COLOR_PEN_BG);
         }
 
         color = !enabled ? COLOR_PEN_MUTED : selected ? COLOR_WHITE : COLOR_PEN_NAVY;
@@ -873,11 +873,11 @@ void menu_grid_draw(void)
         /* square corners and a thin outline, the same as the quick menu cells */
         if (selected)
         {
-            rr_tile(x, y, w, h, COLOR_PEN_NAVY, COLOR_PEN_NAVY);
+            rr_tile(x, y, w, h, COLOR_PEN_LIGHT, COLOR_PEN_NAVY);
         }
         else
         {
-            rr_tile(x, y, w, h, COLOR_PEN_LINE, COLOR_PEN_BG);
+            rr_tile(x, y, w, h, COLOR_PEN_SKY, COLOR_PEN_BG);
         }
 
         /* Shared bottom baseline for all four labels. */

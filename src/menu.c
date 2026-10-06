@@ -7522,11 +7522,10 @@ static void draw_longpress_indicator(struct longpress * longpress)
         int x = x0 + sin_table[MOD(i+3, 12)];
         int y = y0 + sin_table[MOD(i, 12)];
 
-        /* Film Edge: greys only */
-        int color = (!pressed)  ? COLOR_GRAY(40) :  /* button just released */
-                    (n >= 25/2) ? COLOR_WHITE    :  /* long press event fired */
-                    (i <= 12/2) ? COLOR_GRAY(60) :  /* interpreted short press if released */
-                                  COLOR_GRAY(85) ;  /* on the way to long press */
+        /* blues, matching the menus */
+        int color = (!pressed)  ? COLOR_PEN_SKY   :  /* button just released */
+                    (n >= 25/2) ? COLOR_PEN_LIGHT :  /* long press event fired */
+                                  COLOR_PEN_SKY   ;  /* on the way to long press */
         fill_circle(x, y, 2, color);
     }
 }
