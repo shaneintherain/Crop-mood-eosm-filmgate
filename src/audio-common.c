@@ -247,26 +247,25 @@ draw_meter(
     const int32_t db_peak = audio_level_to_db( level->peak );
     
     // levels go from -40 to 0
-    /* Segmented LED meter: one segment per dB from -40 to 0.
-     * Lit segments are light cyan, amber from -12 dB, red from -3 dB;
-     * unlit segments are navy.  A white tick marks the held peak. */
+    /* Solid bar: light cyan, amber from -12 dB, red from -3 dB, on a navy track.
+     * Every pixel is drawn exactly once per refresh (no clearing first), so it does not flicker.
+     * No peak-hold marker: the bar simply follows the level. */
     const int bar_x0 = x_origin + AUDIO_METER_OFFSET * 4;
-    const int bar_h = (int) meter_height - 2;
-    const int px_fast = (int32_t)width + db_peak_fast * (int32_t)width / 40;
-    const int px_peak = (int32_t)width + db_peak * (int32_t)width / 40;
-    for (int i = 0; i < 40; i++)
+    const int w = (int) width;
+    const int fast = COERCE((int32_t)w + db_peak_fast * (int32_t)w / 40, 0, w);
+    const int amber_x = w - 12 * w / 40;
+    const int red_x = w - 3 * w / 40;
+    const int edges[5] = { 0, amber_x, red_x, w, w };
+    static const uint8_t lit_color[3] = { COLOR_PEN_CYAN, 19, COLOR_RED };
+    for (int band = 0; band < 3; band++)
     {
-        int sx = (int)(width * i / 40);
-        int sw = (int)(width * (i + 1) / 40) - sx - 1;
-        if (sw < 1) sw = 1;
-        int db = -40 + i;
-        int lit = px_fast > sx;
-        int color = lit ? (db >= -3 ? COLOR_RED : db >= -12 ? 19 : COLOR_PEN_CYAN)
-                        : COLOR_PEN_NAVY;
-        bmp_fill(color, bar_x0 + sx, y_origin + 1, sw, bar_h);
+        int x0 = edges[band], x1 = edges[band + 1];
+        int xl = COERCE(fast, x0, x1);          /* lit part of this band */
+        if (xl > x0)
+            bmp_fill(lit_color[band], bar_x0 + x0, y_origin + 1, xl - x0, (int) meter_height - 2);
+        if (x1 > xl)
+            bmp_fill(COLOR_PEN_NAVY, bar_x0 + xl, y_origin + 1, x1 - xl, (int) meter_height - 2);
     }
-    if (px_peak > 0 && px_peak <= (int)width)
-        bmp_fill(COLOR_WHITE, bar_x0 + px_peak - 2, y_origin, 2, (int)meter_height);
 
     // Write the current level
     bmp_printf( FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), x_origin, y_origin, "%s %02d", label, MIN(db_peak, -1) );
