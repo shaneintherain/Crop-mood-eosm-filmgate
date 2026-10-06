@@ -36,6 +36,7 @@ install:: prepare_install_dir install_extra_data
 
 install_extra_data: prepare_install_dir
 	$(CP) $(FONT_DIR)/*.rbf $(INSTALL_FONTS_DIR)/
+	-$(CP) $(FONT_DIR)/JOST-OFL.txt $(INSTALL_FONTS_DIR)/
 	$(CP) $(VRAM_DIR)/*.lut $(INSTALL_DATA_DIR)/
 	$(CP) $(CROP_DIR)/*.bmp $(INSTALL_CROPMARKS_DIR)/
 	$(INSTALL_ALL_SCRIPTS)
