@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "data" / "fonts" / "source" / "jost-medium.ttf"
-FIRST, LAST = 32, 126
+FIRST, LAST = 32, 131   # ASCII plus the ML symbol codes 0x80..0x83
 TRACKING = 1         # extra pixel between letters
 
 # name -> (file, rbf title, cell height, Jost em size, max glyph width, cap-centre row)
@@ -21,7 +21,17 @@ PROFILES = {
     "menu": ("jost-medium.rbf", b"Jost Medium EOSM", 40, 24, 32, 18),
     # live-view info bars: 28 px cell, the same height as the Canon-style font it replaces
     "info": ("jost-info.rbf", b"Jost Info EOSM", 28, 25, 28, 13),
+    # replaces the 23 px stock font (FONT_MED): the top info bar and other small text
+    "small": ("jost-small.rbf", b"Jost Small EOSM", 23, 21, 24, 10),
 }
+
+
+# ML uses single bytes 0x80..0x83 inside strings as symbols; the stock fonts draw
+# little pictures for them.  Here they are drawn from Jost text (None = blank).
+SYMBOLS = {0x80: None,      # ISO sign: left blank, the number alone reads fine
+           0x81: "f/",      # aperture
+           0x82: "1/",      # shutter reciprocal
+           0x83: "\u00b0"}  # degree sign
 
 
 def build(profile):
@@ -39,8 +49,10 @@ def build(profile):
     advances = bytearray()
     cmap = bytearray()
     for cp in range(FIRST, LAST + 1):
-        ch = chr(cp)
-        advance = 8 if cp == 32 else max(1, round(font.getlength(ch))) + TRACKING
+        ch = SYMBOLS.get(cp, chr(cp)) if cp >= 127 else chr(cp)
+        if ch is None or cp == 127:
+            ch = ""
+        advance = 8 if cp == 32 else (0 if not ch else max(1, round(font.getlength(ch))) + TRACKING)
         img = Image.new("L", (MAX_WIDTH, HEIGHT), 0)
         d = ImageDraw.Draw(img)
         d.fontmode = "1"
