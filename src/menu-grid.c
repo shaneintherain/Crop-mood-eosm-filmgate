@@ -600,10 +600,38 @@ static int quick_screen_adjust(int index, int delta)
     return 1;
 }
 
+/* Lightly rounded rectangles (radius 8 outer / 7 inner), drawn row by row. */
+static const uint8_t rr8[8] = { 5, 3, 2, 1, 1, 0, 0, 0 };
+static const uint8_t rr7[7] = { 4, 2, 1, 1, 0, 0, 0 };
+static void rr_fill(int x, int y, int w, int h, const uint8_t *t, int n, int color)
+{
+    for (int i = 0; i < n; i++)
+    {
+        bmp_fill(color, x + t[i], y + i, w - 2 * t[i], 1);
+        bmp_fill(color, x + t[i], y + h - 1 - i, w - 2 * t[i], 1);
+    }
+    bmp_fill(color, x, y + n, w, h - 2 * n);
+}
+static void rr_tile(int x, int y, int w, int h, int outline, int fill)
+{
+    rr_fill(x, y, w, h, rr8, 8, outline);
+    if (fill != outline)
+        rr_fill(x + 1, y + 1, w - 2, h - 2, rr7, 7, fill);
+}
+
 void menu_quick_screen_draw(void)
 {
     int index;
     film_palette_apply();
+    /* TEMPORARY PALETTE TEST: shows all 256 colours with their numbers. */
+    for (int c = 0; c < 256; c++)
+    {
+        int px = (c % 16) * 45, py = (c / 16) * 30;
+        bmp_fill(c, px, py, 45, 30);
+        bmp_printf(FONT(FONT_SMALL, COLOR_BLACK, c), px + 2, py + 2, "%d", c);
+        bmp_printf(FONT(FONT_SMALL, COLOR_WHITE, c), px + 2, py + 16, "%d", c);
+    }
+    return;
     bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
     bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, 48);
     bmp_printf(slim_ui_font_spec(COLOR_WHITE, COLOR_PEN_NAVY), 16, 4, "QUICK MENU");
@@ -640,19 +668,18 @@ void menu_quick_screen_draw(void)
         /* Film Edge cell: thin outline, or the whole box solid cream when selected */
         if (selected)
         {
-            bmp_fill(COLOR_PEN_NAVY, box_x, box_y, box_w, box_h);
-            bmp_draw_rect(COLOR_PEN_NAVY, box_x, box_y, box_w, box_h);
+            rr_tile(box_x, box_y, box_w, box_h, COLOR_PEN_NAVY, COLOR_PEN_NAVY);
         }
         else
         {
-            bmp_draw_rect(COLOR_PEN_LINE, box_x, box_y, box_w, box_h);
+            rr_tile(box_x, box_y, box_w, box_h, COLOR_PEN_LINE, COLOR_PEN_BG);
         }
 
         color = !enabled ? COLOR_PEN_MUTED : selected ? COLOR_WHITE : COLOR_PEN_NAVY;
-        arrow_color = selected ? COLOR_PEN_CYAN : enabled ? COLOR_PEN_MUTED : COLOR_PEN_LINE;
+        arrow_color = selected ? COLOR_WHITE : enabled ? COLOR_PEN_MUTED : COLOR_PEN_LINE;
 
         bmp_printf(
-            FONT(FONT_SMALL, selected ? COLOR_PEN_SKY : COLOR_PEN_MUTED, label_bg),
+            FONT(FONT_SMALL, selected ? COLOR_WHITE : COLOR_PEN_MUTED, label_bg),
             cx - (int)strlen(labels[index]) * 4, box_y + 6, "%s", labels[index]);
 
         width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value);
@@ -855,12 +882,11 @@ void menu_grid_draw(void)
         /* square corners and a thin outline, the same as the quick menu cells */
         if (selected)
         {
-            bmp_fill(COLOR_PEN_NAVY, x, y, w, h);
-            bmp_draw_rect(COLOR_PEN_NAVY, x, y, w, h);
+            rr_tile(x, y, w, h, COLOR_PEN_NAVY, COLOR_PEN_NAVY);
         }
         else
         {
-            bmp_draw_rect(COLOR_PEN_LINE, x, y, w, h);
+            rr_tile(x, y, w, h, COLOR_PEN_LINE, COLOR_PEN_BG);
         }
 
         /* Shared bottom baseline for all four labels. */
@@ -876,7 +902,7 @@ void menu_grid_draw(void)
         int icon_zone_top = y + 10;
         int icon_zone_bot = label_y - GRID_ICON_GAP;
         int icon_cy = (icon_zone_top + icon_zone_bot) / 2;
-        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, selected ? COLOR_PEN_CYAN : COLOR_PEN_NAVY);
+        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, selected ? COLOR_WHITE : COLOR_PEN_NAVY);
 
         bmp_printf(slim_ui_font_spec(fg, selected ? COLOR_PEN_NAVY : COLOR_PEN_BG), label_x, label_y, "%s", label);
     }

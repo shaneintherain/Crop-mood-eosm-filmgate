@@ -3081,7 +3081,7 @@ skip_name:
     if (draw_tri_arrows && slim_locked)
         arrow_color = COLOR_PEN_MUTED;
     else if (draw_tri_arrows && entry->selected)
-        arrow_color = COLOR_PEN_CYAN;
+        arrow_color = COLOR_WHITE;
     int fonth = fontspec_font(fnt)->height;
     int tri_h = MAX(fonth - 4, 18); /* match value glyph height */
     int arrow_slot_w = (tri_h * 6) / 10 + 1;
@@ -3222,7 +3222,7 @@ skip_name:
      * read-only rows keep the muted colour chosen above. */
     if (slim_style && !customize_mode && !junkie_mode && !slim_locked)
         value_fnt = entry->selected
-            ? slim_ui_font_spec(COLOR_PEN_CYAN, COLOR_PEN_NAVY)
+            ? slim_ui_font_spec(COLOR_WHITE, COLOR_PEN_NAVY)
             : slim_ui_font_spec(COLOR_BLACK, COLOR_PEN_BG);
 #endif
     bmp_printf(
@@ -4060,7 +4060,7 @@ menu_display(
         {
             int slim_header_h = slim_ui_font_height() + 20;
             int list_y0 = slim_header_h + 12;
-            target_height = 480 - list_y0 - 6;
+            target_height = 430 - list_y0 - 2;   /* stop above the bottom bar */
         }
         else
             target_height = 430;
@@ -4676,7 +4676,7 @@ show_vscroll(struct menu * parent){
     {
         int slim_header_h = slim_ui_font_height() + 20;
         int list_y0 = slim_header_h + 12;
-        target_height = 480 - list_y0 - 6;
+        target_height = 430 - list_y0 - 2;   /* stop above the bottom bar */
     }
     int menu_len = MAX(1, target_height / MAX(row_h, 1));
 #else
@@ -4690,7 +4690,7 @@ show_vscroll(struct menu * parent){
         int far_right = 1;
         int y_lo = far_right
             ? slim_header_h + 12 : 44;
-        int h_bot = submenu_level ? 422 : (far_right ? 472 : 429);
+        int h_bot = submenu_level ? 422 : (far_right ? 426 : 429);
         /* Larger touch boxes than the visible arrows; top and bottom remain
          * separated by the scrollbar track. */
         int arrow_h = 34;
