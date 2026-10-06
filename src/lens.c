@@ -2827,9 +2827,6 @@ static LVINFO_UPDATE_FUNC(free_space_update)
 static LVINFO_UPDATE_FUNC(mode_update)
 {
     LVINFO_BUFFER(8);
-    /* Film Edge: in movie mode the tag is always "Mv", so leave it out */
-    if (is_movie_mode())
-        return;
     snprintf(buffer, sizeof(buffer), get_shootmode_name_short(shooting_mode_custom));
 }
 

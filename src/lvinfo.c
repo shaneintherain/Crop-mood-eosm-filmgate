@@ -6,7 +6,7 @@
 #include <lens.h>
 #include <fps.h>
 #include <module.h>
-#include <propvalues.h>
+#include "slim-font.h"
 
 #ifdef CONFIG_SLIM_MENUS
 static int (*dual_iso_is_enabled)() = MODULE_FUNCTION(dual_iso_is_enabled);
@@ -16,25 +16,6 @@ static int (*dual_iso_get_recovery_iso)() = MODULE_FUNCTION(dual_iso_get_recover
 #define MAX_ITEMS 64
 #define MIN_SPACING 24
 #define TOTAL_WIDTH 720
-
-/* Film Edge look: capital letters, warm cream instead of white/blue/green. */
-#define REC_DOT_SPACE 56   /* top-bar room reserved at the far right for the record dot */
-
-static void lvinfo_upper(char * dst, const char * src, int size)
-{
-    int i;
-    for (i = 0; src && src[i] && i < size - 1; i++)
-        dst[i] = (src[i] >= 'a' && src[i] <= 'z') ? src[i] - 32 : src[i];
-    dst[i] = 0;
-}
-
-static int lvinfo_film_color(int c)
-{
-    if (c == COLOR_WHITE || c == COLOR_CYAN || c == COLOR_LIGHT_BLUE ||
-        c == COLOR_BLUE || c == COLOR_GREEN1 || c == COLOR_GREEN2)
-        return COLOR_CREAM;
-    return c;
-}
 
 //~ #define LVINFO_PERF_MON
 
@@ -136,7 +117,8 @@ static void lvinfo_touch_draw_value(int slot, int cx, int value_y,
                                     const char *value, int enabled)
 {
     int color = enabled ? COLOR_WHITE : COLOR_GRAY(50);
-    int width = bmp_string_width(FONT_CANON, value);
+    uint32_t fnt = slim_ui_font_spec(color, COLOR_BLACK);
+    int width = bmp_string_width(fnt, value);
     int up_color = enabled ? COLOR_ORANGE : color;
     int down_color = enabled ? COLOR_ORANGE : color;
 
@@ -146,7 +128,7 @@ static void lvinfo_touch_draw_value(int slot, int cx, int value_y,
         if (lvinfo_touch_feedback_sign < 0) down_color = COLOR_WHITE;
     }
     lvinfo_touch_draw_arrow(cx, LVINFO_TOUCH_UP_TIP_Y, 1, up_color);
-    bmp_printf(FONT(FONT_CANON, color, NO_BG_ERASE),
+    bmp_printf(fnt,
                cx - width / 2, value_y, "%s", value);
     lvinfo_touch_draw_arrow(cx, LVINFO_TOUCH_DOWN_TIP_Y, 0, down_color);
 }
@@ -235,9 +217,7 @@ void lvinfo_update_items(struct lvinfo_item * items[], int count, int override_f
         /* no width/height specified? use defaults */
         if (!items[i]->width && items[i]->value)
         {
-            char up[64];
-            lvinfo_upper(up, items[i]->value, sizeof(up));
-            items[i]->width = bmp_string_width(fnt, up);
+            items[i]->width = bmp_string_width(fnt, items[i]->value);
         }
         if (!items[i]->height)
         {
@@ -576,6 +556,7 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
     int touch_hh = 0;
     
     int prev_right = bar_x;
+    int prev_bg = default_bg_out;
     for (int i = 0; i < count; i++)
     {
         /* don't process empty items */
@@ -601,23 +582,21 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
         int fnt = items[i]->fontspec;
         
         /* override colors */
-        fnt = FONT(fnt, lvinfo_film_color(items[i]->color_fg), items[i]->color_bg);
+        fnt = FONT(fnt, items[i]->color_fg, items[i]->color_bg);
         
         int bg = FONT_BG(fnt);
 
         /* fill the gap between this item and previous one */
         /* the Voronoi cell associated with each item will get filled by the same background color */
-        /* Film Edge: gaps stay neutral, so a coloured box (e.g. the red countdown)
-         * stays tight around its own text instead of spreading into the gaps. */
-        int pad = (bg != default_bg_out) ? 5 : 0;
         if (prev_right >= 0 && now_left > prev_right)
         {
             int gap = now_left - prev_right + 1;
-            bmp_fill(default_bg_out, prev_right, y0, gap, bar_height);
+            bmp_fill(prev_bg, prev_right, y0, gap/2, bar_height);
+            bmp_fill(bg, prev_right+gap/2, y0, gap/2, bar_height);
         }
 
         /* clear the space for current box */
-        bmp_fill(bg, x0 - pad, y0, w + 2 * pad, bar_height);
+        bmp_fill(bg, x0, y0, w, bar_height);
         
         /* for debugging: show the center of each item */
         //~ bmp_fill(COLOR_RED, x-1, y0-2, 2, 2);
@@ -633,9 +612,7 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
         else
         {
             /* no custom draw? use our default print routine */
-            char up[64];
-            lvinfo_upper(up, items[i]->value, sizeof(up));
-            bmp_printf(fnt, x, y, "%s", up);
+            bmp_printf(fnt, x, y, "%s", items[i]->value);
         }
 
         if (lvinfo_touch_field_name(lvinfo_touch_field) &&
@@ -650,7 +627,8 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
             touch_hw = hx1 - hx0 + 1;
             touch_hh = hy1 - hy0 + 1;
         }
-        prev_right = x + w/2 + pad;
+        prev_right = x + w/2;
+        prev_bg = bg;
     }
 
     /* fill the remaining space till the far right */
@@ -658,7 +636,8 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
     {
         int now_left = TOTAL_WIDTH;
         int gap = now_left - prev_right;
-        bmp_fill(default_bg_out, prev_right, bar_y, gap, bar_height);
+        bmp_fill(prev_bg, prev_right, bar_y, gap / 2, bar_height);
+        bmp_fill(default_bg_out, prev_right + gap / 2, bar_y, gap / 2, bar_height);
     }
 
     /* Draw selection last.  Gap and neighboring-item background fills used
@@ -678,8 +657,8 @@ void lvinfo_align_and_display(struct lvinfo_item * items[], int count, int bar_x
     /* try to borrow the color from the cropmarks; if it's fully transparent, use transparent gray */
     int bg = (items == top_items) ? TOPBAR_BGCOLOR : BOTTOMBAR_BGCOLOR;
     if (bg == 0) bg = COLOR_BG_DARK;
-    default_font = FONT(default_font, COLOR_CREAM, bg);
-    small_font = FONT(small_font, COLOR_CREAM, bg);
+    default_font = FONT(default_font, COLOR_WHITE, bg);
+    small_font = FONT(small_font, COLOR_WHITE, bg);
     
     int font_changed = 0;
 
@@ -753,7 +732,6 @@ EXCLUDES(lvinfo_sem)
 void lvinfo_display(int top, int bottom)
 {
     take_semaphore(lvinfo_sem, 0);
-    film_palette_apply();
 
     static int refresh_timer = INT_MIN;
     if (layout_dirty && should_run_polling_action(2000, &refresh_timer))
@@ -764,38 +742,7 @@ void lvinfo_display(int top, int bottom)
     
     if (top)
     {
-        int top_y = get_ml_topbar_pos();
-        lvinfo_align_and_display(top_items, top_count, 0, top_y, TOTAL_WIDTH - REC_DOT_SPACE, 32);
-
-        /* Record dot, far right: solid red while recording, a quiet ring while ready. */
-        if (is_movie_mode())
-        {
-            int dot_x = TOTAL_WIDTH - 26;
-            int dot_y = top_y + 16;
-            /* True disc / ring, built row by row so it is as round as the pixels allow */
-            const int r = 12;
-            const int ring = RECORDING ? r + 1 : 2;   /* ring width; solid when recording */
-            const int color = RECORDING ? COLOR_RED : COLOR_FILM_DIM;
-            for (int dy = -r; dy <= r; dy++)
-            {
-                int ho = r;
-                while (ho > 0 && 4 * (ho * ho + dy * dy) > (2 * r + 1) * (2 * r + 1)) ho--;
-                int ri = r - ring;   /* inner radius of the ring */
-                int hi = -1;
-                if (ri >= 0 && ABS(dy) <= ri)
-                {
-                    hi = ri;
-                    while (hi > 0 && 4 * (hi * hi + dy * dy) > (2 * ri + 1) * (2 * ri + 1)) hi--;
-                }
-                if (hi < 0)
-                    bmp_fill(color, dot_x - ho, dot_y + dy, 2 * ho + 1, 1);
-                else
-                {
-                    bmp_fill(color, dot_x - ho, dot_y + dy, ho - hi, 1);
-                    bmp_fill(color, dot_x + hi + 1, dot_y + dy, ho - hi, 1);
-                }
-            }
-        }
+        lvinfo_align_and_display(top_items, top_count, 0, get_ml_topbar_pos(), TOTAL_WIDTH, 32);
     }
     
     if (bottom)
