@@ -777,6 +777,10 @@ void lvinfo_display(int top, int bottom)
         {
             int dot_x = TOTAL_WIDTH - 26;
             int dot_y = top_y + 16;
+            /* While recording, Canon draws its own red dot a little lower right of ours.
+             * Cover it with a small solid block so only one dot is visible. */
+            if (RECORDING)
+                bmp_fill(COLOR_BLACK, TOTAL_WIDTH - 44, top_y, 44, 44);
             /* True disc / ring, built row by row so it is as round as the pixels allow */
             const int r = 12;
             const int ring = RECORDING ? r + 1 : 2;   /* ring width; solid when recording */

@@ -204,7 +204,7 @@ void draw_meters(void)
 static char left_label[10] = "LEFT ";
 static char right_label[10] = "RIGHT";
 
-static uint8_t
+static uint8_t __attribute__((unused))
 db_to_color(
             int                 db
             )
@@ -219,7 +219,7 @@ db_to_color(
     return COLOR_RED;
 }
 
-static uint8_t
+static uint8_t __attribute__((unused))
 db_peak_to_color(
                  int                    db
                  )
@@ -240,57 +240,34 @@ draw_meter(
            unsigned int width
            )
 {
-    const uint32_t pitch = BMPPITCH;
-    uint32_t * row = (uint32_t*) bmp_vram();
-    if( !row )
+    if( !bmp_vram() )
         return;
-    
-    // Skip to the desired y coord and over the
-    // space for the numerical levels
-    // .. and the space for showing the channel and source.
-    row += (pitch/4) * y_origin + AUDIO_METER_OFFSET + x_origin/4;
     
     const int32_t db_peak_fast = audio_level_to_db( level->peak_fast );
     const int32_t db_peak = audio_level_to_db( level->peak );
     
     // levels go from -40 to 0
-    const int32_t x_db_peak_fast = ((int32_t)width + db_peak_fast * (int32_t)width / 40) / 4;
-    const int32_t x_db_peak = ((int32_t)width + db_peak * (int32_t)width / 40) / 4;
-    
-    const uint8_t bar_color = db_to_color( db_peak_fast );
-    const uint8_t peak_color = db_peak_to_color( db_peak );
-    
-    const uint32_t bar_color_word = color_word( bar_color );
-    const uint32_t peak_color_word = color_word( peak_color );
-    const uint32_t bg_color_word = color_word(COLOR_BLACK);
-    
-    // Write the meter an entire scan line at a time
-    int32_t y;
-    for(y = 0; y < (int32_t)meter_height; y++)
+    /* Segmented LED meter: one segment per dB from -40 to 0.
+     * Lit segments are light cyan, amber from -12 dB, red from -3 dB;
+     * unlit segments are navy.  A white tick marks the held peak. */
+    const int bar_x0 = x_origin + AUDIO_METER_OFFSET * 4;
+    const int bar_h = (int) meter_height - 2;
+    const int px_fast = (int32_t)width + db_peak_fast * (int32_t)width / 40;
+    const int px_peak = (int32_t)width + db_peak * (int32_t)width / 40;
+    for (int i = 0; i < 40; i++)
     {
-        int32_t x;
-        for(x = 0; x < (int32_t)(width / 4); x++)
-        {
-            if( x < x_db_peak_fast )
-            {
-                row[x] = bar_color_word;
-            }
-            else if( x < x_db_peak )
-            {
-                row[x] = bg_color_word;
-            }
-            else if( x < x_db_peak + 4 )
-            {
-                row[x] = peak_color_word;
-            }
-            else
-            {
-                row[x] = bg_color_word;
-            }
-        }
-        row += pitch / 4;
+        int sx = (int)(width * i / 40);
+        int sw = (int)(width * (i + 1) / 40) - sx - 1;
+        if (sw < 1) sw = 1;
+        int db = -40 + i;
+        int lit = px_fast > sx;
+        int color = lit ? (db >= -3 ? COLOR_RED : db >= -12 ? 19 : COLOR_PEN_CYAN)
+                        : COLOR_PEN_NAVY;
+        bmp_fill(color, bar_x0 + sx, y_origin + 1, sw, bar_h);
     }
-    
+    if (px_peak > 0 && px_peak <= (int)width)
+        bmp_fill(COLOR_WHITE, bar_x0 + px_peak - 2, y_origin, 2, (int)meter_height);
+
     // Write the current level
     bmp_printf( FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), x_origin, y_origin, "%s %02d", label, MIN(db_peak, -1) );
 }
@@ -313,8 +290,8 @@ draw_ticks(
     row += (pitch/2) * y_origin + AUDIO_METER_OFFSET*2 + x_origin/2;
     
     const uint16_t white_word = 0
-        | ( COLOR_WHITE <<  8 )
-        | ( COLOR_WHITE <<  0 );
+        | ( COLOR_PEN_MUTED <<  8 )
+        | ( COLOR_PEN_MUTED <<  0 );
     
     for( ; tick_height > 0 ; tick_height--, row += pitch/2 )
     {

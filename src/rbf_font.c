@@ -43,6 +43,14 @@ static font *new_font() {
 /* Jost font for the Live View info bars; 0 = not loaded (set once at boot) */
 uint32_t font_jost_info = 0;
 
+static int rbf_font_file_exists(const char *name)
+{
+    char filename[128];
+    uint32_t size;
+    snprintf(filename, sizeof(filename), "ML/FONTS/%s.RBF", name);
+    return (FIO_GetFileSize(filename, &size) == 0) && size > 0;
+}
+
 uint32_t font_by_name(char *file, uint32_t fg_color, uint32_t bg_color)
 {
     /* check if this font was already loaded */
@@ -613,7 +621,9 @@ void _load_fonts()
     #ifdef CONFIG_LOW_RESOLUTION_DISPLAY
     font_by_name("arghlf22", COLOR_BLACK, COLOR_WHITE);
     #else
-    font_by_name("argnor23", COLOR_BLACK, COLOR_WHITE);
+    /* FONT_MED (slot 2): Jost if its file is present, otherwise the stock font.
+     * Either way it takes slot 2, so the other font IDs never move. */
+    font_by_name(rbf_font_file_exists("jost-small") ? "jost-small" : "argnor23", COLOR_BLACK, COLOR_WHITE);
     #endif
     font_by_name("argnor28", COLOR_BLACK, COLOR_WHITE);
     font_by_name("argnor32", COLOR_BLACK, COLOR_WHITE);

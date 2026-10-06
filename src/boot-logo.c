@@ -1631,7 +1631,7 @@ static void boot_logo_task(void *unused)
 
         /* Canon sometimes punches a small transparent hole in the canvas (live video
          * shows through at the lower right).  Keep the empty bottom strip opaque. */
-        BMP_LOCK( bmp_fill(COLOR_PEN_BG, 0, 345, 720, 135); boot_logo_bars(); )
+        BMP_LOCK( bmp_fill(COLOR_PEN_BG, 0, 345, 720, 480 - BOOT_LOGO_BAR_H - 345); bmp_fill(COLOR_PEN_NAVY, 0, 480 - BOOT_LOGO_BAR_H, 720, BOOT_LOGO_BAR_H); )
         msleep(20);
     }
 
