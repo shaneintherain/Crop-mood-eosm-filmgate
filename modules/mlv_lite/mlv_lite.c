@@ -52,7 +52,6 @@
 #include <config.h>
 #include <math.h>
 #include <cropmarks.h>
-#include <vram.h>
 #include <screenshot.h>
 #include "../lv_rec/lv_rec.h"
 #include "edmac.h"
@@ -173,55 +172,6 @@ static CONFIG_INT("raw.card_spanning", card_spanning, 0);
 static CONFIG_INT("raw.res_x", resolution_index_x, 11);
 static CONFIG_INT("raw.res_x_fine", res_x_fine, 0);
 static CONFIG_INT("raw.aspect.ratio", aspect_ratio_index, 17);
-
-/* ---- Film Format presets ------------------------------------------------
- * Recording windows that match real film gates at 1:1 pixel scale on the
- * EOS M sensor (22.3 mm / 5184 px = ~4.30 um per pixel).
- * "Actual"  = the true physical gate size at 1:1.
- * "Crop"   = a smaller window, because the true gate would need more
- *             pixels than the camera can read out in a stable video mode.
- * The window is centered inside the current crop_rec 1:1 readout, so pick
- * the matching 1:1 crop mode (see 'mode' column).
- * Widths are multiples of 16; heights are aligned at runtime.
- */
-struct film_format
-{
-    const char * name;      /* menu text */
-    int w;                  /* target width  (pixels) */
-    int h;                  /* target height (pixels) */
-    const char * gate;      /* physical size, for the help text */
-    const char * mode;      /* crop_rec 1:1 mode needed */
-};
-
-static const struct film_format film_formats[] =
-{
-    { "OFF",                   0,    0, "",                                  "" },
-    { "A35 16:9 Crop",      1696,  954, "Academy 35mm gate width, cropped to 16:9",   "3x3 3:2 1736x1160" },
-    { "A35 1.85:1 Crop",    1696,  916, "Academy 35mm gate width, cropped to 1.85:1", "3x3 3:2 1736x1160" },
-    { "A35 2.35:1 Crop",    1696,  722, "Academy 35mm gate width, cropped to 2.35:1", "3x3 3:2 1736x1160" },
-    { "A35 Anamorphic 2x",  1376, 1152, "2x anamorphic gate (1.18:1), full sensor height", "3x3 3:2 1736x1160" },
-    { "A35 Anamorphic 1.33x",1536,1152, "1.33x anamorphic gate (4:3)",       "3x3 3:2 1736x1160" },
-    { "Super 16 2.35:1 Crop",2912,1239, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest" },
-    { "16mm 16:9 Crop",     2384, 1341, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440" },
-    { "16mm 1.85:1 Crop",   2384, 1289, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440" },
-    { "16mm 2.35:1 Crop",   2384, 1014, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440" },
-    { "Super 8 Actual",     1344,  931, "5.79x4.01mm gate",                  "1:1 3:2 1920x1280" },
-    { "Super 8 16:9 Crop",  1344,  756, "Super 8 gate width, cropped to 16:9","1:1 3:2 1920x1280" },
-    { "8mm Actual",         1040,  763, "4.5x3.3mm gate",                    "1:1 3:2 1920x1280" },
-    { "8mm 16:9 Crop",      1040,  585, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280" },
-};
-
-static CONFIG_INT("raw.film.format", film_format_index, 0);
-
-/* The Movie menu Film Format / Frame rows (crop_rec, 1x1 mode) take priority when they
- * offer a film format; otherwise use this module's own Film Format setting. */
-static int film_format_effective(void)
-{
-    int f = crop_rec_film_format();
-    if (f > 0 && f < COUNT(film_formats))
-        return f;
-    return COERCE(film_format_index, 0, COUNT(film_formats) - 1);
-}
 
 static CONFIG_INT("raw.write.speed", measured_write_speed, 0);
 static int measured_write_speed_thread[MAX_WRITER_THREADS] = {0};
@@ -705,55 +655,9 @@ int crop_rec_cropmarks()
     return 0;
 }
 
-/* Film Format frame on the LCD.
- *
- * The generic raw->screen model (lv2raw) assumes the live view is a plain scaled
- * copy of the raw frame.  The crop_rec 1x1 modes are not: the picture is the full
- * readout width, but its vertical scale differs per mode (measured on an EOS M LCD,
- * in the 720x480 layer used by cropmarks).  Measured: x = 720 / readout width;
- *   3:2   1920x1280 : y = 3/8     (LCD shows the centre 16:9 slice)
- *   4:3   2160x1620 : y = 437/1620 (picture is stretched horizontally, ~1.24x)
- *   16:9  2560x1440 : y = 9/32
- *   2.35  3072x1308 : y = 15/64
- * The film window is centred in the readout, so the frame is centred on the screen.
- * Only calibrated for the camera LCD; other outputs use the generic model. */
-static int film_frame_possible(void)
-{
-    /* The EOS M crop_rec presets run in Canon's x5 zoom state (lv_dispsize == 5),
-     * so x5 must be accepted here; x10 (focus zoom) is not. */
-    return crop_rec_film_format() > 0 &&
-           (lv_dispsize == 1 || lv_dispsize == 5) &&
-           squeeze_factor == 1.0f &&
-           (is_LCD_Output() || is_480p_Output() || is_1080i_Full_Output() || is_1080i_Info_Output());
-}
-
-static int film_frame_rect(int * x, int * y, int * w, int * h)
-{
-    if (!film_frame_possible())
-        return 0;
-
-    int f = crop_rec_film_format();
-
-    int rw, kn, kd; /* readout width, vertical scale numerator / denominator */
-
-    if (f <= 5)      { rw = 1736; kn = 90;  kd = 217;  } /* S35: 3x3 3:2 readout */
-    else if (f == 6) { rw = 3072; kn = 15;  kd = 64;   } /* Super 16     */
-    else if (f <= 9) { rw = 2560; kn = 9;   kd = 32;   } /* 16mm         */
-    else             { rw = 1920; kn = 3;   kd = 8;    } /* Super 8, 8mm */
-
-    int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
-    int nh = res_y * kn / kd;
-
-    *x = N2BM_X(360 - nw / 2);
-    *y = N2BM_Y(240 - nh / 2);
-    *w = N2BM_X(nw) - N2BM_X(0);
-    *h = N2BM_Y(nh) - N2BM_Y(0);
-    return 1;
-}
-
 static void refresh_cropmarks()
 {
-    if ((lv_dispsize > 1 && !crop_rec_cropmarks() && !film_frame_possible()) || lv_dispsize > 5 || raw_rec_should_preview() || !raw_video_enabled)
+    if ((lv_dispsize > 1 && !crop_rec_cropmarks()) || lv_dispsize > 5 || raw_rec_should_preview() || !raw_video_enabled)
     {
         reset_movie_cropmarks();
     }
@@ -791,9 +695,6 @@ static void refresh_cropmarks()
         int y = RAW2BM_Y(skip_y);
         int w = RAW2BM_DX(res_x);
         int h = RAW2BM_DY(res_y);
-
-        /* Film Format: place the frame from the measured per-mode scales */
-        film_frame_rect(&x, &y, &w, &h);
 
         set_movie_cropmarks(x, y, w, h);
     }
@@ -838,24 +739,6 @@ static int calc_res_y(int res_x, int max_res_y, int num, int den, float squeeze)
 
         default:    /* should be unreachable */
             return res_y & ~15;
-    }
-}
-
-/* same height alignment rules as calc_res_y, for an explicit target height */
-static int film_align_res_y(int rx, int ry, int max_y)
-{
-    ry = MIN(ry, max_y);
-
-    if (OUTPUT_COMPRESSION)
-        return ry & ~1;
-
-    switch (MOD(rx * BPP / 8, 8))
-    {
-        case 0:  return ry & ~1;
-        case 4:  return ry & ~3;
-        case 2:
-        case 6:  return ry & ~7;
-        default: return ry & ~15;
     }
 }
 
@@ -931,24 +814,6 @@ void update_resolution_params()
     int num = aspect_ratio_presets_num[aspect_ratio_index];
     int den = aspect_ratio_presets_den[aspect_ratio_index];
     res_y = calc_res_y(res_x, max_res_y, num, den, squeeze_factor);
-
-    /* Film Format override (square pixels only) */
-    int film_idx = film_format_effective();
-    if (film_idx > 0 && squeeze_factor == 1.0f)
-    {
-        int fw = film_formats[film_idx].w;
-        int fh = film_formats[film_idx].h;
-
-        if (fw > max_res_x)
-        {
-            /* current video mode is too small: shrink, keeping the aspect ratio */
-            fh = fh * max_res_x / fw;
-            fw = max_res_x;
-        }
-
-        res_x = fw & ~15;
-        res_y = film_align_res_y(res_x, fh, max_res_y);
-    }
 
     if (!OUTPUT_COMPRESSION)
     {
@@ -1351,52 +1216,6 @@ static MENU_UPDATE_FUNC(aspect_ratio_update_info)
     }
 }
 
-static MENU_UPDATE_FUNC(film_format_update)
-{
-    if (!raw_video_enabled || !lv)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Enable RAW video first.");
-        MENU_SET_VALUE("N/A");
-        return;
-    }
-
-    refresh_raw_settings(0);
-
-    int i = film_format_effective();
-    int from_movie_menu = crop_rec_film_format() > 0;
-
-    if (from_movie_menu)
-        MENU_SET_VALUE("%s", film_formats[i].name);
-
-    if (i == 0)
-    {
-        MENU_SET_HELP("OFF: use Resolution and Aspect ratio below.");
-        return;
-    }
-
-    MENU_SET_RINFO("%dx%d", res_x, res_y);
-
-    if (squeeze_factor != 1.0f)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Film Format needs a square-pixel 1:1 crop mode.");
-    }
-    else if (film_formats[i].w > max_res_x || film_formats[i].h > max_res_y)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Too big for current mode (%dx%d). Use %s.",
-            max_res_x, max_res_y, film_formats[i].mode);
-    }
-    else if (from_movie_menu)
-    {
-        MENU_SET_WARNING(MENU_WARN_ADVICE, "Set by Movie menu > Preset. Records %dx%d (%s).",
-            res_x, res_y, film_formats[i].gate);
-    }
-    else
-    {
-        MENU_SET_HELP("%s. Records %dx%d at 1:1. Best in %s.",
-            film_formats[i].gate, res_x, res_y, film_formats[i].mode);
-    }
-}
-
 static MENU_UPDATE_FUNC(resolution_update)
 {
     if (!raw_video_enabled || !lv)
@@ -1409,8 +1228,6 @@ static MENU_UPDATE_FUNC(resolution_update)
     refresh_raw_settings(1);
 
     MENU_SET_VALUE("%dx%d", res_x, res_y);
-    if (film_format_effective() > 0)
-        MENU_SET_WARNING(MENU_WARN_ADVICE, "Overridden by Film Format.");
     int crop_factor = calc_crop_factor();
     if (crop_factor) MENU_SET_RINFO("%s%d.%02dx", FMT_FIXEDPOINT2( crop_factor ));
 
@@ -1482,13 +1299,6 @@ static MENU_UPDATE_FUNC(aspect_ratio_update)
     }
     
     refresh_raw_settings(0);
-
-    if (film_format_effective() > 0)
-    {
-        MENU_SET_WARNING(MENU_WARN_ADVICE, "Overridden by Film Format.");
-        write_speed_update(entry, info);
-        return;
-    }
 
     int num = aspect_ratio_presets_num[aspect_ratio_index];
     int den = aspect_ratio_presets_den[aspect_ratio_index];
@@ -2167,7 +1977,7 @@ static int update_status(char * buffer, int buffer_size)
     /* Calculate the stats */
     int fps = fps_get_current_x1000();  /* FPS x1000 */
     if (fps == 0)
-        return COLOR_GRAY(25);
+        return COLOR_DARK_RED;
 
     int p = pre_recorded_frames();      /* pre-recorded frames */
     int r = (frame_count - 1 - p);      /* recorded frames */
@@ -2217,13 +2027,13 @@ static int update_status(char * buffer, int buffer_size)
             if (1)  len += snprintf(buffer + len, buffer_size - len, " + %02d", ps);
             if (pd) len += snprintf(buffer + len, buffer_size - len, ".%df", pf);
 
-            /* Film Edge: dark grey (pre-recording) */
-            return COLOR_GRAY(25);
+            /* display in blue */
+            return COLOR_BLUE;
         }
         else if (predicted_frames_left > 10000)
         {
-            /* assume continuous recording: plain black, no alarm */
-            return COLOR_BLACK;
+            /* assume continuous recording */
+            return COLOR_GREEN1;
         }
         else if (RAW_IS_RECORDING)
         {
@@ -2232,23 +2042,20 @@ static int update_status(char * buffer, int buffer_size)
                 len += snprintf(buffer + len, buffer_size - len, " ~ %02d", time_left);
             }
 
-            /* warning - recording not continuous.
-             * Film Edge: grey, then amber (under 30 s), then bright red (under 10 s). */
-            return (time_left < 10) ? COLOR_RED :
-                   (time_left < 30) ? 19 /* amber (palette 19) */ :
-                                      COLOR_GRAY(30);
+            /* warning - recording not continuous */
+            return (time_left < 10) ? COLOR_DARK_RED : COLOR_ORANGE;
         }
         else
         {
             /* preparing, finishing */
-            return COLOR_GRAY(25);
+            return COLOR_YELLOW;
         }
     } 
     else 
     {
         /* recording stopped - show number of frames */ 
         len = snprintf(buffer, buffer_size, "%d frames", frame_count - 1);
-        return COLOR_BLACK;
+        return COLOR_DARK_RED;
     }
 }
 
@@ -2261,7 +2068,6 @@ static LVINFO_UPDATE_FUNC(recording_status)
     {
         /* don't update much more often than 1 second */
         item->color_bg = prev_color;
-        if (prev_color == 19) item->color_fg = COLOR_BLACK;   /* dark text on amber */
         return;
     }
 
@@ -2271,7 +2077,6 @@ static LVINFO_UPDATE_FUNC(recording_status)
     if (!measured_write_speed) return;
 
     prev_color = item->color_bg = update_status(buffer, sizeof(buffer));
-    if (prev_color == 19) item->color_fg = COLOR_BLACK;   /* dark text on amber */
 }
 
 /* Display the 'Recording...' icon and status */
@@ -2571,37 +2376,16 @@ int mlv_raw_rec_busy()
 static REQUIRES(RawRecTask)
 void hack_liveview(int unhack)
 {
-    /* Kill Global Draw: stop all ML drawing during recording (saves CPU and
-     * memory bandwidth). In Film Format modes the frame is made of ML-drawn
-     * bars, which would vanish with the rest of the overlays; so, after
-     * clearing the screen, draw the bars once (static, no further redraws). */
-    static int gd_was_killed = 0;
     if (kill_gd)
     {
         if (!unhack)
         {
             idle_globaldraw_dis();
             clrscr();
-            gd_was_killed = 1;
-
-            int fx, fy, fw, fh;
-            if (film_frame_rect(&fx, &fy, &fw, &fh))
-            {
-                int x1 = COERCE(fx, 0, BMP_W_PLUS);
-                int y1 = COERCE(fy, 0, BMP_H_PLUS);
-                int x2 = COERCE(fx + fw, 0, BMP_W_PLUS);
-                int y2 = COERCE(fy + fh, 0, BMP_H_PLUS);
-                bmp_fill(COLOR_BLACK, 0, 0, BMP_W_PLUS, y1);                          /* top    */
-                bmp_fill(COLOR_BLACK, 0, y2, BMP_W_PLUS, BMP_H_PLUS - y2);            /* bottom */
-                bmp_fill(COLOR_BLACK, 0, y1, x1, y2 - y1);                            /* left   */
-                bmp_fill(COLOR_BLACK, x2, y1, BMP_W_PLUS - x2, y2 - y1);              /* right  */
-                bmp_draw_rect(COLOR_GRAY(70), x1, y1, x2 - x1, y2 - y1);              /* edge   */
-            }
         }
-        else if (gd_was_killed)
+        else
         {
             idle_globaldraw_en();
-            gd_was_killed = 0;
         }
     }
     
@@ -4447,7 +4231,9 @@ abort_and_check_early_stop:
         * so there shouldn't be any starving issues - at least in theory */
         for (; writing_queue_head != writing_queue_tail; INC_MOD(writing_queue_head, COUNT(writing_queue)))
         {
-            /* Film Edge: no "Flushing buffers..." message (it only flashes by) */
+            bmp_printf( FONT_MED, 30, 110, 
+                "Flushing buffers... %d frames left  ", MOD(writing_queue_tail - writing_queue_head, COUNT(writing_queue))
+            );
             int slot_index = writing_queue[writing_queue_head];
 
             if (slots[slot_index].status != SLOT_FULL)
@@ -4706,18 +4492,6 @@ static struct menu_entry raw_video_menu[] =
         .help = "Record RAW video (MLV format, lossless compression, basic metadata).",
         .help2 = "Press LiveView to start recording.",
         .children =  (struct menu_entry[]) {
-            {
-                .name = "Film Format",
-                .priv = &film_format_index,
-                .max = COUNT(film_formats) - 1,
-                .update = film_format_update,
-                .choices = CHOICES("OFF", "A35 16:9 Crop", "A35 1.85:1 Crop", "A35 2.35:1 Crop",
-                                   "A35 Anamorphic 2x", "A35 Anamorphic 1.33x", "Super 16 2.35:1 Crop", "16mm 16:9 Crop", "16mm 1.85:1 Crop",
-                                   "16mm 2.35:1 Crop", "Super 8 Actual", "Super 8 16:9 Crop",
-                                   "8mm Actual", "8mm 16:9 Crop"),
-                .help = "Record a window that matches a real film gate (1:1 pixels).",
-                .help2 = "Actual = true gate size. Crop = a smaller window inside the gate.",
-            },
             {
                 .name = "Resolution",
                 .priv = &resolution_index_x,
@@ -5523,7 +5297,6 @@ MODULE_CONFIGS_START()
     MODULE_CONFIG(resolution_index_x)
     MODULE_CONFIG(res_x_fine)    
     MODULE_CONFIG(aspect_ratio_index)
-    MODULE_CONFIG(film_format_index)
     MODULE_CONFIG(measured_write_speed)
     MODULE_CONFIG(pre_record)
     MODULE_CONFIG(rec_trigger)
