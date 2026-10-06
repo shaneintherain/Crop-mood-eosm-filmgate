@@ -209,13 +209,14 @@ db_to_color(
             int                 db
             )
 {
+    /* Film Edge: greys, red only when close to clipping */
     if( db < -25 )
-        return 0x2F; // white
+        return COLOR_GRAY(45);
     if( db < -12 )
-        return 0x06; // dark green
+        return COLOR_GRAY(70);
     if( db < -3 )
-        return 0x0F; // yellow
-    return 0x0c; // dull red
+        return COLOR_WHITE;
+    return COLOR_RED;
 }
 
 static uint8_t
@@ -223,13 +224,9 @@ db_peak_to_color(
                  int                    db
                  )
 {
-    if( db < -25 )
-        return 11; // dark blue
-    if( db < -12 )
-        return 11; // dark blue
     if( db < -3 )
-        return 15; // bright yellow
-    return 0x08; // bright red
+        return COLOR_WHITE;
+    return COLOR_RED;
 }
 
 
