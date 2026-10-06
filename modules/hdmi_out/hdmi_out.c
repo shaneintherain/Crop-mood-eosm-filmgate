@@ -16,7 +16,7 @@
 #define OUTPUT_1080p_24Hz 3
 
 static CONFIG_INT("hdmi.patch.enabled", hdmi_patch_enabled, 0);
-static CONFIG_INT("hdmi.output_resolution", output_resolution, 2);
+static CONFIG_INT("hdmi.output_resolution", output_resolution, 0);
 
 static int hdmi_output_patch_status = 0;
 
