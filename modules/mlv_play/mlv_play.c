@@ -745,6 +745,7 @@ static void mlv_play_osd_act(void *handler)
 }
 
 /* DIAGNOSTIC counters */
+static volatile int diag_osd_try = 0, diag_osd_ret0 = 0;
 static volatile int diag_t_render = 0, diag_t_osd = 0, diag_osd_started = 0, diag_osd_loops = 0, diag_osd_keys = 0;
 
 static void mlv_play_osd_task(void *priv)
@@ -2593,7 +2594,19 @@ static void mlv_play_enter_playback()
     mlv_play_render_abort = 0;
     mlv_play_rendering = 1;
     diag_t_render = (int) task_create("mlv_play_render", 0x1d, 0x4000, mlv_play_render_task, NULL);
-    diag_t_osd = (int) task_create("mlv_play_osd_task", 0x15, 0x4000, mlv_play_osd_task, 0);
+    /* The controls task fails to start on some builds (task_create returns a small
+     * error code). Retry with smaller stacks; the player works with any of them. */
+    {
+        static const uint32_t osd_stack[] = { 0x4000, 0x3000, 0x2000, 0x1800 };
+        diag_osd_try = 0;
+        for (int i = 0; i < 4; i++)
+        {
+            diag_osd_try = i;
+            diag_t_osd = (int) task_create("mlv_play_osd_task", 0x15, osd_stack[i], mlv_play_osd_task, 0);
+            if (i == 0) diag_osd_ret0 = diag_t_osd;
+            if ((unsigned) diag_t_osd > 0x1000) break;   /* looks like a real task pointer */
+        }
+    }
     
     mlv_play_zoom = 0;
     mlv_play_zoom_x_pct = 0;
@@ -2806,6 +2819,8 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
             (int)mlv_play_osd_state, (int)mlv_play_paused);
         uint32_t diag_q = 0;
         msg_queue_count(mlv_play_queue_osd, &diag_q);
+        bmp_printf(FONT_MED, 30, 350, "O:first=%x try=%d fa=%dK   ",
+            diag_osd_ret0, diag_osd_try, GetFreeMemForAllocateMemory() / 1024);
         bmp_printf(FONT_MED, 30, 375, "T:r=%x o=%x st=%d lp=%d ky=%d q=%d fm=%d   ",
             diag_t_render, diag_t_osd, diag_osd_started, diag_osd_loops, diag_osd_keys,
             (int)diag_q, GetFreeMemForMalloc() / 1024);
