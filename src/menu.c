@@ -3218,11 +3218,11 @@ skip_name:
     // print value field
     int value_fnt = fnt;
 #ifdef CONFIG_SLIM_MENUS
-    /* Value colours: cyan on the selected (navy) row, black on the others;
+    /* Value colours: light blue (117) on the selected (navy) row, black on the others;
      * read-only rows keep the muted colour chosen above. */
     if (slim_style && !customize_mode && !junkie_mode && !slim_locked)
         value_fnt = entry->selected
-            ? slim_ui_font_spec(COLOR_WHITE, COLOR_PEN_NAVY)
+            ? slim_ui_font_spec(COLOR_PEN_LIGHT, COLOR_PEN_NAVY)
             : slim_ui_font_spec(COLOR_BLACK, COLOR_PEN_BG);
 #endif
     bmp_printf(

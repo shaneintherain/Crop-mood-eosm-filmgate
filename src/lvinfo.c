@@ -28,6 +28,8 @@ static void lvinfo_upper(char * dst, const char * src, int size)
     dst[i] = 0;
 }
 
+extern uint32_t font_jost_info;   /* rbf_font.c */
+
 static int lvinfo_film_color(int c)
 {
     if (c == COLOR_WHITE || c == COLOR_CYAN || c == COLOR_LIGHT_BLUE ||
@@ -678,7 +680,10 @@ void lvinfo_align_and_display(struct lvinfo_item * items[], int count, int bar_x
     /* try to borrow the color from the cropmarks; if it's fully transparent, use transparent gray */
     int bg = (items == top_items) ? TOPBAR_BGCOLOR : BOTTOMBAR_BGCOLOR;
     if (bg == 0) bg = COLOR_BG_DARK;
-    default_font = FONT(default_font, COLOR_CREAM, bg);
+    if (font_jost_info)    /* Jost, if its font file was loaded at boot; otherwise the stock font */
+        default_font = FONT(font_jost_info | FONT_ALIGN_CENTER, COLOR_CREAM, bg);
+    else
+        default_font = FONT(default_font, COLOR_CREAM, bg);
     small_font = FONT(small_font, COLOR_CREAM, bg);
     
     int font_changed = 0;

@@ -1531,10 +1531,17 @@ static const struct boot_logo_span boot_logo_spans[] = {
 #define BOOT_LOGO_W (720 * BOOT_LOGO_SCALE)
 #define BOOT_LOGO_H (480 * BOOT_LOGO_SCALE)
 #define BOOT_LOGO_X ((720 - BOOT_LOGO_W) / 2)
-/* The artwork occupies rows 216..316 of the 480-row canvas (centre at 266.5),
- * so it is lifted by 26 rows to sit on the true vertical centre (240).
- * Horizontally it is already exactly centred (ink spans x 97..623). */
-#define BOOT_LOGO_Y (((480 - BOOT_LOGO_H) / 2) - 26 * BOOT_LOGO_SCALE)
+/* The artwork is generated already centred on (360, 240). */
+#define BOOT_LOGO_Y 0
+
+/* Light start-up screen with navy bars, matching the menus. */
+#define BOOT_LOGO_BAR_H 48
+
+static void boot_logo_bars(void)
+{
+    bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, BOOT_LOGO_BAR_H);
+    bmp_fill(COLOR_PEN_NAVY, 0, 480 - BOOT_LOGO_BAR_H, 720, BOOT_LOGO_BAR_H);
+}
 
 extern int ml_started;
 
@@ -1543,9 +1550,10 @@ static void boot_logo_draw(void)
     film_palette_apply();
     /* Keep splash writes inside ML's normal LCD canvas.  The surrounding
      * 960x540 backing surface is changed by Canon during LV/zoom switches. */
-    bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
-    /* span colours 26..29 = white and three greys (fixed palette entries) */
-    static const uint8_t logo_colors[4] = { COLOR_CREAM, COLOR_FILM_DIM, COLOR_FILM_MUTED, COLOR_FILM_FAINT };
+    bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
+    boot_logo_bars();
+    /* span colours 26..29 = light blue, sky blue, navy, sky blue (fixed palette entries) */
+    static const uint8_t logo_colors[4] = { COLOR_PEN_LIGHT, COLOR_PEN_SKY, COLOR_PEN_NAVY, COLOR_PEN_SKY };
     for (unsigned int i = 0; i < BOOT_LOGO_SPANS; i++)
     {
         const struct boot_logo_span *s = &boot_logo_spans[i];
@@ -1623,7 +1631,7 @@ static void boot_logo_task(void *unused)
 
         /* Canon sometimes punches a small transparent hole in the canvas (live video
          * shows through at the lower right).  Keep the empty bottom strip opaque. */
-        BMP_LOCK( bmp_fill(COLOR_BLACK, 0, 345, 720, 135); )
+        BMP_LOCK( bmp_fill(COLOR_PEN_BG, 0, 345, 720, 135); boot_logo_bars(); )
         msleep(20);
     }
 

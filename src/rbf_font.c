@@ -40,6 +40,9 @@ static font *new_font() {
     return 0;
 }
 
+/* Jost font for the Live View info bars; 0 = not loaded (set once at boot) */
+uint32_t font_jost_info = 0;
+
 uint32_t font_by_name(char *file, uint32_t fg_color, uint32_t bg_color)
 {
     /* check if this font was already loaded */
@@ -617,6 +620,13 @@ void _load_fonts()
     /* Jost Medium for the FilmGate menus.  It occupies a spare dynamic slot and
      * is loaded with the ordinary ML fonts, never from a Live View drawing callback. */
     font_by_name("jost-medium", COLOR_BLACK, COLOR_WHITE);
+    /* Smaller Jost for the Live View info bars (28 px cell, same as argnor28).
+     * font_jost_info stays 0 if the file is missing, and the info bars then keep
+     * their normal font. */
+    {
+        uint32_t jf = font_by_name("jost-info", COLOR_BLACK, COLOR_WHITE);
+        font_jost_info = (FONT_ID(jf) != FONT_ID(FONT_CANON)) ? jf : 0;
+    }
 
     font_small = *fontspec_font(FONT_SMALL);
     font_med = *fontspec_font(FONT_MED);
