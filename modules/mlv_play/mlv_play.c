@@ -744,8 +744,12 @@ static void mlv_play_osd_act(void *handler)
     }
 }
 
+/* DIAGNOSTIC counters */
+static volatile int diag_t_render = 0, diag_t_osd = 0, diag_osd_started = 0, diag_osd_loops = 0, diag_osd_keys = 0;
+
 static void mlv_play_osd_task(void *priv)
 {
+    diag_osd_started++;
     uint32_t next_render_time = get_ms_clock() + mlv_play_render_timestep;
  
     mlv_play_osd_state = MLV_PLAY_MENU_IDLE;
@@ -756,6 +760,7 @@ static void mlv_play_osd_task(void *priv)
     TASK_LOOP
     {
         uint32_t key;
+        diag_osd_loops++;
         uint32_t timeout = next_render_time - get_ms_clock();
         
         timeout = MIN(timeout, mlv_play_idle_timestep);
@@ -763,6 +768,7 @@ static void mlv_play_osd_task(void *priv)
         if(!msg_queue_receive(mlv_play_queue_osd, &key, timeout))
         {
             /* there was a keypress */
+            diag_osd_keys++;
             last_keypress_time = get_ms_clock();
             
             /* no matter which state - these are handled */
@@ -2586,8 +2592,8 @@ static void mlv_play_enter_playback()
     /* render task is slave and controlled via these variables */
     mlv_play_render_abort = 0;
     mlv_play_rendering = 1;
-    task_create("mlv_play_render", 0x1d, 0x4000, mlv_play_render_task, NULL);
-    task_create("mlv_play_osd_task", 0x15, 0x4000, mlv_play_osd_task, 0);
+    diag_t_render = (int) task_create("mlv_play_render", 0x1d, 0x4000, mlv_play_render_task, NULL);
+    diag_t_osd = (int) task_create("mlv_play_osd_task", 0x15, 0x4000, mlv_play_osd_task, 0);
     
     mlv_play_zoom = 0;
     mlv_play_zoom_x_pct = 0;
@@ -2798,6 +2804,11 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
         bmp_printf(FONT_MED, 30, 450, "K:%x n=%d rend=%d gui=%d osd=%d pau=%d   ",
             key, diag_k, (int)mlv_play_rendering, (int)gui_state,
             (int)mlv_play_osd_state, (int)mlv_play_paused);
+        uint32_t diag_q = 0;
+        msg_queue_count(mlv_play_queue_osd, &diag_q);
+        bmp_printf(FONT_MED, 30, 375, "T:r=%x o=%x st=%d lp=%d ky=%d q=%d fm=%d   ",
+            diag_t_render, diag_t_osd, diag_osd_started, diag_osd_loops, diag_osd_keys,
+            (int)diag_q, GetFreeMemForMalloc() / 1024);
     }
     if (mlv_play_rendering)
     {
