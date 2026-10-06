@@ -2167,7 +2167,7 @@ static int update_status(char * buffer, int buffer_size)
     /* Calculate the stats */
     int fps = fps_get_current_x1000();  /* FPS x1000 */
     if (fps == 0)
-        return COLOR_GRAY(25);
+        return COLOR_PEN_NAVY;
 
     int p = pre_recorded_frames();      /* pre-recorded frames */
     int r = (frame_count - 1 - p);      /* recorded frames */
@@ -2217,13 +2217,13 @@ static int update_status(char * buffer, int buffer_size)
             if (1)  len += snprintf(buffer + len, buffer_size - len, " + %02d", ps);
             if (pd) len += snprintf(buffer + len, buffer_size - len, ".%df", pf);
 
-            /* Film Edge: dark grey (pre-recording) */
-            return COLOR_GRAY(25);
+            /* pre-recording: sky blue box */
+            return COLOR_PEN_SKY;
         }
         else if (predicted_frames_left > 10000)
         {
-            /* assume continuous recording: plain black, no alarm */
-            return COLOR_BLACK;
+            /* assume continuous recording: navy box, no alarm */
+            return COLOR_PEN_NAVY;
         }
         else if (RAW_IS_RECORDING)
         {
@@ -2233,22 +2233,22 @@ static int update_status(char * buffer, int buffer_size)
             }
 
             /* warning - recording not continuous.
-             * Film Edge: grey, then amber (under 30 s), then bright red (under 10 s). */
+             * navy, then amber (under 30 s), then bright red (under 10 s). */
             return (time_left < 10) ? COLOR_RED :
                    (time_left < 30) ? 19 /* amber (palette 19) */ :
-                                      COLOR_GRAY(30);
+                                      COLOR_PEN_NAVY;
         }
         else
         {
             /* preparing, finishing */
-            return COLOR_GRAY(25);
+            return COLOR_PEN_NAVY;
         }
     } 
     else 
     {
         /* recording stopped - show number of frames */ 
         len = snprintf(buffer, buffer_size, "%d frames", frame_count - 1);
-        return COLOR_BLACK;
+        return COLOR_PEN_NAVY;
     }
 }
 
