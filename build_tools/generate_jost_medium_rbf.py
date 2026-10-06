@@ -12,17 +12,21 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "data" / "fonts" / "source" / "jost-medium.ttf"
-OUTPUT = ROOT / "data" / "fonts" / "jost-medium.rbf"
-
 FIRST, LAST = 32, 126
-HEIGHT = 40          # cell height (menu code sizes rows from this)
-PIXEL_SIZE = 24      # Jost em size in pixels
-MAX_WIDTH = 32
-CAP_CENTER = 18      # capital letters are centred on this row (0.45 * 40)
 TRACKING = 1         # extra pixel between letters
 
+# name -> (file, rbf title, cell height, Jost em size, max glyph width, cap-centre row)
+PROFILES = {
+    # menus: 40 px cell (menu code sizes rows from this), caps centred at 0.45 * 40
+    "menu": ("jost-medium.rbf", b"Jost Medium EOSM", 40, 24, 32, 18),
+    # live-view info bars: 28 px cell, the same height as the Canon-style font it replaces
+    "info": ("jost-info.rbf", b"Jost Info EOSM", 28, 25, 28, 13),
+}
 
-def main():
+
+def build(profile):
+    fname, title, HEIGHT, PIXEL_SIZE, MAX_WIDTH, CAP_CENTER = PROFILES[profile]
+    OUTPUT = ROOT / "data" / "fonts" / fname
     font = ImageFont.truetype(str(SOURCE), PIXEL_SIZE)
     cap = font.getbbox("H", anchor="ls")
     cap_h = -cap[1]
@@ -50,7 +54,7 @@ def main():
         advances.append(min(MAX_WIDTH, advance))
         cmap.extend(rows)
 
-    name = b"Jost Medium EOSM"
+    name = title
     name += b"\0" * (64 - len(name))
     header = struct.pack("<II64s11i", 0x0DF00EE0, 3, name,
                          char_size, PIXEL_SIZE, HEIGHT, MAX_WIDTH,
@@ -58,6 +62,11 @@ def main():
     assert len(header) == 0x74
     OUTPUT.write_bytes(header + bytes(advances) + bytes(cmap))
     print(f"wrote {OUTPUT} ({OUTPUT.stat().st_size} bytes), cap height {cap_h}px")
+
+
+def main():
+    for profile in PROFILES:
+        build(profile)
 
 
 if __name__ == "__main__":
