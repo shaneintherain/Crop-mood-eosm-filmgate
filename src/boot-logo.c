@@ -1531,7 +1531,10 @@ static const struct boot_logo_span boot_logo_spans[] = {
 #define BOOT_LOGO_W (720 * BOOT_LOGO_SCALE)
 #define BOOT_LOGO_H (480 * BOOT_LOGO_SCALE)
 #define BOOT_LOGO_X ((720 - BOOT_LOGO_W) / 2)
-#define BOOT_LOGO_Y ((480 - BOOT_LOGO_H) / 2)
+/* The artwork occupies rows 216..316 of the 480-row canvas (centre at 266.5),
+ * so it is lifted by 26 rows to sit on the true vertical centre (240).
+ * Horizontally it is already exactly centred (ink spans x 97..623). */
+#define BOOT_LOGO_Y (((480 - BOOT_LOGO_H) / 2) - 26 * BOOT_LOGO_SCALE)
 
 extern int ml_started;
 
