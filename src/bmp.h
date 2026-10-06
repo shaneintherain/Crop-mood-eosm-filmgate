@@ -320,9 +320,10 @@ void bmp_draw_antialiased_triangle(int tip_x, int tip_y, int direction,
 void film_palette_apply(void);
 
 /* Light "instrument panel" look for the menus: only fixed Canon palette entries. */
-#define COLOR_PEN_NAVY   126            /* deep navy  (4,60,107)    */
-#define COLOR_PEN_CYAN   142            /* cyan       (14,220,233)  */
-#define COLOR_PEN_SKY    143            /* sky blue   (12,179,232)  */
+/* Entry numbers checked on a real EOS M with the on-camera colour chart. */
+#define COLOR_PEN_NAVY   216            /* deep navy blue           */
+#define COLOR_PEN_CYAN   116            /* light cyan               */
+#define COLOR_PEN_SKY    104            /* sky blue                 */
 #define COLOR_PEN_BG     COLOR_WHITE    /* pale grey panel (235)    */
 #define COLOR_PEN_LINE   COLOR_GRAY(80) /* divider lines            */
 #define COLOR_PEN_MUTED  COLOR_GRAY(49) /* locked / secondary text  */

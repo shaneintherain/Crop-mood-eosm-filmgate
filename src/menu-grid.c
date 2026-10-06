@@ -623,15 +623,6 @@ void menu_quick_screen_draw(void)
 {
     int index;
     film_palette_apply();
-    /* TEMPORARY PALETTE TEST: shows all 256 colours with their numbers. */
-    for (int c = 0; c < 256; c++)
-    {
-        int px = (c % 16) * 45, py = (c / 16) * 30;
-        bmp_fill(c, px, py, 45, 30);
-        bmp_printf(FONT(FONT_SMALL, COLOR_BLACK, c), px + 2, py + 2, "%d", c);
-        bmp_printf(FONT(FONT_SMALL, COLOR_WHITE, c), px + 2, py + 16, "%d", c);
-    }
-    return;
     bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
     bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, 48);
     bmp_printf(slim_ui_font_spec(COLOR_WHITE, COLOR_PEN_NAVY), 16, 4, "QUICK MENU");
