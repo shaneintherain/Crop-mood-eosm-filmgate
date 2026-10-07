@@ -817,22 +817,11 @@ static int calc_res_y(int res_x, int max_res_y, int num, int den, float squeeze)
     }
 }
 
-/* same height alignment rules as calc_res_y, for an explicit target height */
+/* same height alignment rules as calc_res_y, for an explicit target height
+ * (the rule itself lives in src/film-formats.h so it can be tested on a computer) */
 static int film_align_res_y(int rx, int ry, int max_y)
 {
-    ry = MIN(ry, max_y);
-
-    if (OUTPUT_COMPRESSION)
-        return ry & ~1;
-
-    switch (MOD(rx * BPP / 8, 8))
-    {
-        case 0:  return ry & ~1;
-        case 4:  return ry & ~3;
-        case 2:
-        case 6:  return ry & ~7;
-        default: return ry & ~15;
-    }
+    return film_align_height(rx, ry, max_y, BPP, OUTPUT_COMPRESSION);
 }
 
 /* fixme: called from many tasks */
@@ -1360,52 +1349,6 @@ static MENU_UPDATE_FUNC(aspect_ratio_update_info)
         int sq100 = (int)roundf(squeeze_factor*100);
         int res_y_corrected = calc_res_y(res_x, max_res_y*squeeze_factor, num, den, 1.0f);
         MENU_SET_HELP("%dx%d. Stretch by %s%d.%02dx to get %dx%d (%s) in post.", res_x, res_y, FMT_FIXEDPOINT2(sq100), res_x, res_y_corrected, aspect_ratio_choices[aspect_ratio_index]);
-    }
-}
-
-static MENU_UPDATE_FUNC(film_format_update)
-{
-    if (!raw_video_enabled || !lv)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Enable RAW video first.");
-        MENU_SET_VALUE("N/A");
-        return;
-    }
-
-    refresh_raw_settings(0);
-
-    int i = film_format_effective();
-    int from_movie_menu = crop_rec_film_format() > 0;
-
-    if (from_movie_menu)
-        MENU_SET_VALUE("%s", film_frames[i].name);
-
-    if (i == 0)
-    {
-        MENU_SET_HELP("OFF: use Resolution and Aspect ratio below.");
-        return;
-    }
-
-    MENU_SET_RINFO("%dx%d", res_x, res_y);
-
-    if (squeeze_factor != 1.0f)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Film Format needs a square-pixel 1:1 crop mode.");
-    }
-    else if (film_frames[i].w > max_res_x || film_frames[i].h > max_res_y)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Too big for current mode (%dx%d). Use %s.",
-            max_res_x, max_res_y, film_frames[i].mode);
-    }
-    else if (from_movie_menu)
-    {
-        MENU_SET_WARNING(MENU_WARN_ADVICE, "Set by Movie menu > Preset. Records %dx%d (%s).",
-            res_x, res_y, film_frames[i].gate);
-    }
-    else
-    {
-        MENU_SET_HELP("%s. Records %dx%d at 1:1. Best in %s.",
-            film_frames[i].gate, res_x, res_y, film_frames[i].mode);
     }
 }
 
@@ -4764,18 +4707,6 @@ static struct menu_entry raw_video_menu[] =
         .help = "Record RAW video (MLV format, lossless compression, basic metadata).",
         .help2 = "Press LiveView to start recording.",
         .children =  (struct menu_entry[]) {
-            {
-                .name = "Film Format",
-                .priv = &film_format_index,
-                .max = COUNT(film_frames) - 1,
-                .update = film_format_update,
-                .choices = CHOICES("OFF", "A35 16:9 Crop", "A35 1.85:1 Crop", "A35 2.35:1 Crop",
-                                   "A35 Anamorphic 2x", "A35 Anamorphic 1.33x", "Super 16 2.35:1 Crop", "16mm 16:9 Crop", "16mm 1.85:1 Crop",
-                                   "16mm 2.35:1 Crop", "Super 8 Actual", "Super 8 16:9 Crop",
-                                   "8mm Actual", "8mm 16:9 Crop"),
-                .help = "Record a window that matches a real film gate (1:1 pixels).",
-                .help2 = "Actual = true gate size. Crop = a smaller window inside the gate.",
-            },
             {
                 .name = "Resolution",
                 .priv = &resolution_index_x,

@@ -8,7 +8,7 @@
  *              camera can read out in a stable video mode.
  * The window is centered inside the current crop_rec readout (see the 'mode' column).
  *
- * Widths are multiples of 16 and heights are multiples of 4, so film_align_res_y() in
+ * Widths are multiples of 16 and heights are even, so film_align_res_y() in
  * mlv_lite leaves them unchanged and the "Recorded Size" shown in the Movie menu is
  * exactly what is written.  tests/film_tests.c checks this (and the rest of this table)
  * on a computer.
@@ -86,6 +86,29 @@ static inline int film_frame_index(int fmt, int frame)
     if (frame < 0) frame = 0;
     if (frame >= film_formats[fmt].count) frame = film_formats[fmt].count - 1;
     return film_formats[fmt].first + frame;
+}
+
+/* Height rule for a recording window w pixels wide (bpp = bits per pixel in the file):
+ * lossless frames only need an even height; uncompressed frames must be a multiple of
+ * 16 bytes (the EDMAC rule), which fixes the height step from the width in bytes.
+ * Used by mlv_lite for every window; every entry of film_frames[] is already aligned,
+ * so for the film formats this returns h unchanged (tests/film_tests.c checks that). */
+static inline int film_align_height(int w, int h, int max_h, int bpp, int compressed)
+{
+    if (h > max_h)
+        h = max_h;
+
+    if (compressed)
+        return h & ~1;
+
+    switch ((w * bpp / 8) % 8)
+    {
+        case 0:  return h & ~1;
+        case 4:  return h & ~3;
+        case 2:
+        case 6:  return h & ~7;
+        default: return h & ~15;
+    }
 }
 
 #endif
