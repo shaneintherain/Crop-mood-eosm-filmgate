@@ -2712,11 +2712,7 @@ static LVINFO_UPDATE_FUNC(picq_update)
     {
         /* make it obvious that LiveView is in RAW mode */
         /* (primarily for troubleshooting the raw backend, proper raw_lv_request/release calls and Magic Zoom slowdowns) */
-        if (is_movie_mode())
-        {
-            /* todo: icon? */
-            snprintf(buffer, sizeof(buffer), "RAW");
-        }
+        /* movie mode: no "RAW" text in the top bar (more room for the other items) */
         item->color_fg = raw_lv == 1 ? COLOR_GREEN1 : COLOR_GRAY(20);
     }
 }

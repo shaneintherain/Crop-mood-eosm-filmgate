@@ -219,6 +219,20 @@ static int audio_tc_text(char * buf, int size)
     return (now - tc_rec_start_ms) < AUDIO_TC_GRACE ? COLOR_CREAM : COLOR_RED;
 }
 
+/* "Sound Recording" (mlv_snd) must be on for timecode to be recorded.
+ * If the entry can't be found, assume it is on rather than disabling the feature. */
+static int audio_sound_recording_on(void)
+{
+    int v = menu_get_value_from_script("Movie", "Sound Recording");
+    return v != 0;
+}
+
+/* timecode mode is active only if selected and sound recording is on */
+static int audio_tc_mode(void)
+{
+    return audio_tc_input && audio_sound_recording_on();
+}
+
 // from linux snd_soc_update_bits()
 static void masked_audio_ic_write(
                            unsigned reg,     // the register we wish to manipulate (eg AUDIO_IC_SIG1)
@@ -426,7 +440,9 @@ static void draw_timecode(int x0, int y0, int width)
 {
     char text[16];
     int color = audio_tc_text(text, sizeof(text));
+    /* the top bar font is centre-aligned: force left alignment so the text starts at x0 */
     uint32_t font = FONT(audio_meter_font, color, FONT_BG(audio_meter_font));
+    font = (font & ~(FONT_ALIGN_MASK | FONT_TEXT_WIDTH_MASK)) | FONT_ALIGN_LEFT;
     int w = bmp_string_width(font, "00:00:00:00") + 6;
     if (width > 0 && w > width) w = width;
     bmp_fill(FONT_BG(font), x0, y0, w, fontspec_height(font));
@@ -455,7 +471,7 @@ static void draw_meters(void)
         return;
     }
 
-    if (audio_tc_input)
+    if (audio_tc_mode())
     {
         draw_timecode(x0, y0, width);
         return;
@@ -489,7 +505,7 @@ static LVINFO_UPDATE_FUNC(audio_meter_update)
         int label_width = AUDIO_METER_OFFSET*4;
         item->width = MIN((is_big ? 720 : 360) / 40 * 40, 720-item->x);
         audio_meter_font = item->fontspec;
-        if (audio_tc_input)
+        if (audio_tc_mode())
         {
             /* timecode mode: only as wide as the timecode, so the other items keep their room */
             item->width = bmp_string_width(item->fontspec, "00:00:00:00") + 6;
@@ -1210,24 +1226,18 @@ void input_toggle()
 }
 
 
-/* ---- "Timecode In" menu entry (added to the existing Audio menu) ---- */
-
-static MENU_SELECT_FUNC(audio_tc_select)
-{
-    audio_tc_input = MOD(audio_tc_input + (delta < 0 ? -1 : 1), 3);
-    if (audio_tc_input)
-        NotifyBox(3000, "Timecode shows while recording");
-}
+/* ---- "Timecode In" menu entry (Movie page, under Sound Recording) ---- */
 
 static MENU_UPDATE_FUNC(audio_tc_update)
 {
-    MENU_SET_VALUE("%s",
-        audio_tc_input == 1 ? "Left channel" :
-        audio_tc_input == 2 ? "Right channel" : "OFF (camera mics)");
-    if (audio_tc_input)
+    if (!audio_sound_recording_on())
+    {
+        /* grey it out: timecode rides on the recorded audio */
+        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Turn Sound Recording on to use Timecode In.");
+        MENU_SET_HELP("Needs Sound Recording ON. Timecode is read from the recorded audio.");
+    }
+    else if (audio_tc_input)
         MENU_SET_HELP("Top bar shows TC before REC, then the timecode while recording.");
-    else
-        MENU_SET_HELP("Timecode on one audio channel (e.g. Deity TC-1). Shows while recording.");
 }
 
 static struct menu_entry audio_tc_menus[] = {
@@ -1235,10 +1245,11 @@ static struct menu_entry audio_tc_menus[] = {
         .name       = "Timecode In",
         .priv       = &audio_tc_input,
         .max        = 2,
-        .icon_type  = IT_DICE,   /* always enabled: value 0 (OFF) must not grey the row */
-        .select     = audio_tc_select,
+        .choices    = CHOICES("Off", "L Channel", "R Channel"),
+        .icon_type  = IT_DICE,   /* always enabled: value 0 (Off) must not grey the row */
+        .edit_mode  = EM_INLINE_ADJUST,
         .update     = audio_tc_update,
-        .help       = "Timecode on one audio channel. Shows in the top bar while recording.",
+        .help       = "Timecode on one audio channel (e.g. Deity TC-1). Shows while recording.",
         .help2      = "Orange = level too hot, blue = too low, red = no timecode while recording.",
     },
 };
