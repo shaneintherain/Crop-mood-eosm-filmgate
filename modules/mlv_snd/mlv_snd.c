@@ -667,7 +667,7 @@ static void mlv_snd_trace_buf(char *caption, uint8_t *buffer, uint32_t length)
 static struct menu_entry mlv_snd_menu[] =
 {
     {
-        .name       = "Sound recording",
+        .name       = "Sound Recording",
         .select     = menu_open_submenu,
         .priv       = &mlv_snd_enabled,
         .help       = "Sound recording options provided by mlv_snd.",
@@ -710,7 +710,7 @@ static struct menu_entry mlv_snd_menu[] =
 static struct menu_entry mlv_snd_menu_eosm[] =
 {
     {
-        .name       = "Sound recording",
+        .name       = "Sound Recording",
         .priv       = &mlv_snd_enabled,
         .max        = 1,
         .choices    = CHOICES("OFF", "ON"),
