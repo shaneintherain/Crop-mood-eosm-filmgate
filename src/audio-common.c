@@ -1224,7 +1224,6 @@ static MENU_UPDATE_FUNC(audio_tc_update)
     MENU_SET_VALUE("%s",
         audio_tc_input == 1 ? "Left channel" :
         audio_tc_input == 2 ? "Right channel" : "OFF (camera mics)");
-    MENU_SET_ENABLED(audio_tc_input != 0);
     if (audio_tc_input)
         MENU_SET_HELP("Top bar shows TC before REC, then the timecode while recording.");
     else
