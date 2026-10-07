@@ -32,6 +32,7 @@ static struct menu_entry movie_menu_raw_toggle[] =
     { .name = "Frame Rate",           .placeholder = 1 },
     { .name = "Bit Depth",            .placeholder = 1 },
     { .name = "Sound recording",      .placeholder = 1 },
+    { .name = "Timecode In",          .placeholder = 1 },
     { .name = "Kill Global Draw",     .placeholder = 1 },
 #else
     { .name = "Crop Mode",            .placeholder = 1 },
