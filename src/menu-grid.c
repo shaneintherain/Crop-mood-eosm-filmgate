@@ -43,9 +43,8 @@ static volatile int white_card_wb_paint_pending = 0;
 static volatile int white_card_wb_close_pending = 0;
 /* Session-only: starts at White Balance after boot and is remembered. */
 static int quick_screen_sel = 0;
-/* Shutter speed / angle choice is shared with the info bar (lens.c). */
-extern int shutter_display_angle;
-extern int lens_shutter_angle_x10(int shutter_reciprocal_x1000);
+/* Persisted Quick Panel preference: 0 = shutter angle, 1 = shutter speed. */
+CONFIG_INT("menu.quick.shutter.speed", quick_screen_shutter_speed, 0);
 
 #define QUICK_SCREEN_COLS  4
 #define QUICK_SCREEN_ROWS  2
@@ -495,18 +494,7 @@ static int quick_screen_value(
 
     if (index == 5)
     {
-        int angle_x10 = shutter_display_angle ?
-            lens_shutter_angle_x10(get_current_shutter_reciprocal_x1000()) : -1;
-        if (angle_x10 >= 0)
-        {
-            /* angle from the current frame rate, with the degree ring drawn after it */
-            if (angle_x10 % 10 == 0)
-                snprintf(buf, size, "%d", angle_x10 / 10);
-            else
-                snprintf(buf, size, "%d.%d", angle_x10 / 10, angle_x10 % 10);
-            *draw_degree = 1;
-        }
-        else if (!shutter_display_angle)
+        if (quick_screen_shutter_speed)
         {
             /* This is the effective current shutter speed, including the
              * active FPS/timing adjustment, e.g. 1/60.04. */
@@ -795,8 +783,8 @@ int menu_quick_screen_handle_touch(int x, int y)
         {
             quick_screen_touch_latched = 1;
             set_config_var_ptr(
-                &shutter_display_angle,
-                !shutter_display_angle);
+                &quick_screen_shutter_speed,
+                !quick_screen_shutter_speed);
             menu_redraw();
             return 0;
         }
