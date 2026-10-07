@@ -1,7 +1,8 @@
-FilmGate v15 - everything since v13, in one zip (5 files). Upload the "modules" and "src" folders
+FilmGate v17 - everything since v13, in one zip (6 files). Upload the "modules" and "src" folders
 over the repo (replace files; ltc-decode.h is new). Not compiled or run on a camera - please build and test.
+NEW (v17): Quick menu has a navy bottom bar like the other pages; the two rows of buttons are centred between the bars (src/menu-grid.c).
 
-NEW: Timecode In (Audio menu): OFF (camera mics) / Left channel / Right channel
+NEW: Timecode In (Movie menu, bottom of the list): OFF (camera mics) / Left channel / Right channel
   - Top bar: the audio meters are replaced by "TC" before REC, then by the SMPTE timecode while recording
     (the timecode is read from the audio the recorder is already capturing; nothing extra is captured)
   - Colours: cream = fine, orange = peak near full scale (held 1 s), blue = level very low,
