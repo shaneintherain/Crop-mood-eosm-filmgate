@@ -31,7 +31,7 @@ static struct menu_entry movie_menu_raw_toggle[] =
     { .name = "Resolution",           .placeholder = 1 },
     { .name = "Frame Rate",           .placeholder = 1 },
     { .name = "Bit Depth",            .placeholder = 1 },
-    { .name = "Sound recording",      .placeholder = 1 },
+    { .name = "Sound Recording",      .placeholder = 1 },
     { .name = "Timecode In",          .placeholder = 1 },
     { .name = "Kill Global Draw",     .placeholder = 1 },
 #else
@@ -42,7 +42,7 @@ static struct menu_entry movie_menu_raw_toggle[] =
     { .name = "Aspect ratio:",        .placeholder = 1 },
     { .name = "Customize buttons",    .placeholder = 1 },
     { .name = "Custom modes",         .placeholder = 1 },
-    { .name = "Sound recording",      .placeholder = 1 },
+    { .name = "Sound Recording",      .placeholder = 1 },
     { .name = "Shutter Expo",         .placeholder = 1 },
     { .name = "Aperture Expo",        .placeholder = 1 },
     { .name = "ISO Expo",             .placeholder = 1 },

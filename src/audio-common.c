@@ -1235,6 +1235,7 @@ static struct menu_entry audio_tc_menus[] = {
         .name       = "Timecode In",
         .priv       = &audio_tc_input,
         .max        = 2,
+        .icon_type  = IT_DICE,   /* always enabled: value 0 (OFF) must not grey the row */
         .select     = audio_tc_select,
         .update     = audio_tc_update,
         .help       = "Timecode on one audio channel. Shows in the top bar while recording.",
