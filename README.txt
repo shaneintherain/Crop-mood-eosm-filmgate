@@ -1,19 +1,19 @@
-FilmGate v14 - all fixes since v13 (2 files). Upload the "modules" folder over the repo (replace files).
-Sits on top of v13. Not compiled or run by me - please build and test.
+FilmGate v15 - everything since v13, in one zip (5 files). Upload the "modules" and "src" folders
+over the repo (replace files; ltc-decode.h is new). Not compiled or run on a camera - please build and test.
 
-modules/mlv_lite/mlv_lite.c
-  - A failed REC start ("LiveView stabilizing", "Raw detect error") no longer deletes the previous clip
-  - INFO button "Framing" works again (list position was out of step with crop_rec.c)
-  - "N frames" (recording stopped, buffer full) is red again
-  - Film window heights adjusted so Recorded Size is exactly what is written
-    (8mm Actual 762->764, 16mm 2.35:1 1014->1012 lines; all other formats unchanged)
-  - Time-left pill: counts free memory in bytes for lossless (was about half the real time),
-    smooths the compression ratio (~1 s) and uses the recent write speed (~4 s) instead of
-    the whole-clip average. Only the pill's number and colour change, not the recording.
-modules/crop_rec/crop_rec.c
-  - fps setting no longer shares a saved name with another setting (18 fps returning after reboot)
-  - Film Format (8mm vs S8, A35 Anamorphic vs A35) and the Frame choice are remembered after reboot
-  - Recorded Size text matches the written size
+NEW: Timecode In (Audio menu): OFF (camera mics) / Left channel / Right channel
+  - Top bar: the audio meters are replaced by "TC" before REC, then by the SMPTE timecode while recording
+    (the timecode is read from the audio the recorder is already capturing; nothing extra is captured)
+  - Colours: cream = fine, orange = peak near full scale (held 1 s), blue = level very low,
+    red dashes = recording but no valid timecode for 1 s. No dots/ticks in this mode.
+  - Selecting a timecode mode shows a one-time notice: "Timecode shows while recording"
+  - Mode OFF = nothing changes from v14.
+  src/audio-common.c, src/ltc-decode.h (new, decoder), modules/mlv_snd/mlv_snd.c (one added call)
 
-After the first boot: if S8/8mm still starts at 18 fps, pick the rate you want once; the old
-shared line in CROP.CFG is replaced the next time the config is saved.
+From v14 (fixes):
+  - A failed REC start no longer deletes the previous clip
+  - fps setting no longer shares a saved name with another setting
+  - Film Format (8mm/S8, A35 Anamorphic/A35) and Frame choice are remembered after reboot
+  - INFO button "Framing" works again; "N frames" pill is red again
+  - Recorded Size text matches the written size (8mm Actual 762->764, 16mm 2.35:1 1014->1012 lines)
+  - Time-left pill: byte-based capacity in lossless, smoothed ratio, recent write speed
