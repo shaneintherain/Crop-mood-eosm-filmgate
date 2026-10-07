@@ -43,8 +43,9 @@ static volatile int white_card_wb_paint_pending = 0;
 static volatile int white_card_wb_close_pending = 0;
 /* Session-only: starts at White Balance after boot and is remembered. */
 static int quick_screen_sel = 0;
-/* Persisted Quick Panel preference: 0 = shutter angle, 1 = shutter speed. */
-CONFIG_INT("menu.quick.shutter.speed", quick_screen_shutter_speed, 0);
+/* Shutter speed / angle choice is shared with the info bar (lens.c). */
+extern int shutter_display_angle;
+extern int lens_shutter_angle_x10(int shutter_reciprocal_x1000);
 
 #define QUICK_SCREEN_COLS  4
 #define QUICK_SCREEN_ROWS  2
@@ -494,7 +495,18 @@ static int quick_screen_value(
 
     if (index == 5)
     {
-        if (quick_screen_shutter_speed)
+        int angle_x10 = shutter_display_angle ?
+            lens_shutter_angle_x10(get_current_shutter_reciprocal_x1000()) : -1;
+        if (angle_x10 >= 0)
+        {
+            /* angle from the current frame rate, with the degree ring drawn after it */
+            if (angle_x10 % 10 == 0)
+                snprintf(buf, size, "%d", angle_x10 / 10);
+            else
+                snprintf(buf, size, "%d.%d", angle_x10 / 10, angle_x10 % 10);
+            *draw_degree = 1;
+        }
+        else if (!shutter_display_angle)
         {
             /* This is the effective current shutter speed, including the
              * active FPS/timing adjustment, e.g. 1/60.04. */
@@ -570,7 +582,7 @@ static void quick_screen_geometry(
 {
     int row = index / QUICK_SCREEN_COLS;
     int col = index % QUICK_SCREEN_COLS;
-    static const int row_up_tip_y[2] = { 77, 278 };
+    static const int row_up_tip_y[2] = { 78, 276 };
     *cx = QUICK_SCREEN_CELL_W / 2 + col * QUICK_SCREEN_CELL_W;
     *up_tip_y = row_up_tip_y[row];
     *value_y = *up_tip_y + 42;
@@ -626,6 +638,9 @@ void menu_quick_screen_draw(void)
     bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
     bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, 48);
     bmp_printf(slim_ui_font_spec(COLOR_WHITE, COLOR_PEN_NAVY), 16, 4, "QUICK MENU");
+    /* Bottom bar, same position and colour as the other menu pages. The two
+     * rows of cells sit evenly (8 px) between the title bar and this bar. */
+    bmp_fill(COLOR_PEN_NAVY, 0, 430, 720, 50);
 
     /* Menu task owns the screen here, so dynamic availability is safe to
      * evaluate. Never leave the yellow selector on a disabled control. */
@@ -647,7 +662,7 @@ void menu_quick_screen_draw(void)
         enabled = quick_screen_value(
             index, value, sizeof(value), &draw_degree);
         int selected = (index == quick_screen_sel && enabled);
-        int box_y = (index / QUICK_SCREEN_COLS == 0) ? 55 : 256;
+        int box_y = (index / QUICK_SCREEN_COLS == 0) ? 56 : 254;
         int box_x = (index % QUICK_SCREEN_COLS) * QUICK_SCREEN_CELL_W + 6;
         int box_w = QUICK_SCREEN_CELL_W - 12;
         int box_h = 168;
@@ -780,8 +795,8 @@ int menu_quick_screen_handle_touch(int x, int y)
         {
             quick_screen_touch_latched = 1;
             set_config_var_ptr(
-                &quick_screen_shutter_speed,
-                !quick_screen_shutter_speed);
+                &shutter_display_angle,
+                !shutter_display_angle);
             menu_redraw();
             return 0;
         }

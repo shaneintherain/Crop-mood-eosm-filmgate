@@ -1245,7 +1245,8 @@ static struct menu_entry audio_tc_menus[] = {
 
 static void audio_tc_init()
 {
-    menu_add("Audio", audio_tc_menus, COUNT(audio_tc_menus));
+    /* The slim UI has no Audio tab, so this lives on the Movie page. */
+    menu_add("Movie", audio_tc_menus, COUNT(audio_tc_menus));
 }
 
 INIT_FUNC("audio.tc.init", audio_tc_init);
