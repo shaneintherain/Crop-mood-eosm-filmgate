@@ -60,7 +60,9 @@ static int is_basic = 0;
 
 static CONFIG_INT("crop.fps_over", fps_over, 0);
 static CONFIG_INT("crop.tapdisp", tapdisp, 1);
-static CONFIG_INT("crop.preset_fps", crop_preset_fps_reduce, 1);
+/* Own key: this used to share "crop.preset_fps" with crop_preset_fps_menu, so each saved
+ * value was loaded into both variables (an 18 fps choice came back after every reboot). */
+static CONFIG_INT("crop.preset_fps_reduce", crop_preset_fps_reduce, 1);
 static CONFIG_INT("crop.preset", crop_preset_index, 3); /* default: 3x3 = S35 */
 static CONFIG_INT("crop.shutter_range", shutter_range, 0);
 static CONFIG_INT("crop.fix_dual_iso_flicker", fix_dual_iso_flicker, 1);
@@ -5777,12 +5779,22 @@ static const char * const slim_film_frame_names[13] = {
     "Actual", "16:9 Crop",                               /* S8      */
     "Actual", "16:9 Crop"                                /* 8mm     */
 };
-static int slim_film_fmt = 0;                        /* selected Film Format (S8 / 8mm share a readout) */
-static int slim_film_frame[SLIM_FILM_FORMATS];       /* remembered Frame choice per format */
+/* Both are saved in the module config, so the choice survives a reboot.  The sensor
+ * readout is already saved by the crop_preset_* settings, but A35 and A35 Anamorphic
+ * share a readout, and so do S8 and 8mm: without these the pair would fall back to
+ * the first one (and the Frame choice back to the first entry) at every start. */
+static CONFIG_INT("crop.film_fmt", slim_film_fmt, 0);        /* selected Film Format 0..5 */
+static CONFIG_INT("crop.film_frames", slim_film_frames, 0);  /* Frame choice per format, 2 bits each */
 
 static int slim_film_frame_get(int fmt)
 {
-    return COERCE(slim_film_frame[fmt], 0, slim_film_fmt_count[fmt] - 1);
+    int v = (slim_film_frames >> (2 * fmt)) & 3;
+    return COERCE(v, 0, slim_film_fmt_count[fmt] - 1);
+}
+
+static void slim_film_frame_set(int fmt, int v)
+{
+    slim_film_frames = (slim_film_frames & ~(3 << (2 * fmt))) | ((v & 3) << (2 * fmt));
 }
 
 /* Which Film Format does the current menu state correspond to?  Returns
@@ -6232,7 +6244,7 @@ static MENU_SELECT_FUNC(slim_crop_preset_select)
     {
         /* Frame: Actual / 16:9 Crop / ... (either arrow cycles) */
         int cur = slim_film_frame_get(film_fmt);
-        slim_film_frame[film_fmt] = MOD(cur + (delta < 0 ? -1 : 1), slim_film_fmt_count[film_fmt]);
+        slim_film_frame_set(film_fmt, MOD(cur + (delta < 0 ? -1 : 1), slim_film_fmt_count[film_fmt]));
         return;
     }
 
@@ -6261,10 +6273,11 @@ static MENU_SELECT_FUNC(slim_crop_preset_select)
     slim_crop_clamp_fps();
 }
 
-/* Recorded size of each film-format frame (matches mlv_lite film_formats). */
+/* Recorded size of each film-format frame (matches mlv_lite film_formats, whose
+ * heights are already aligned, so this is exactly what is written to the file). */
 static const short film_size[13][2] = {
-    {1696,954},{1696,916},{1696,722},{1376,1152},{1536,1152},{2912,1239},
-    {2384,1341},{2384,1289},{2384,1014},{1344,931},{1344,756},{1040,763},{1040,585}
+    {1696,954},{1696,916},{1696,722},{1376,1152},{1536,1152},{2912,1238},
+    {2384,1340},{2384,1288},{2384,1012},{1344,930},{1344,756},{1040,764},{1040,584}
 };
 
 /* Like slim_crop_expected_res, but for film formats returns the size that is
@@ -9307,6 +9320,8 @@ MODULE_CONFIGS_START()
     MODULE_CONFIG(crop_preset_ar_menu)
     MODULE_CONFIG(crop_preset_fps_menu)
     MODULE_CONFIG(crop_preset_fps_reduce)
+    MODULE_CONFIG(slim_film_fmt)
+    MODULE_CONFIG(slim_film_frames)
     MODULE_CONFIG(fix_dual_iso_flicker)
     MODULE_CONFIG(brighten_lv_method)
     MODULE_CONFIG(Half_Shutter)
