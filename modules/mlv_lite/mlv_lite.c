@@ -55,6 +55,7 @@
 #include <vram.h>
 #include <screenshot.h>
 #include <film-formats.h>
+#include <settings-check.h>
 #include "../lv_rec/lv_rec.h"
 #include "edmac.h"
 #include "edmac-memcpy.h"
@@ -164,6 +165,11 @@ static const int aspect_ratio_presets_den[]      = {   1,    1,    1,       3,  
 static const char * aspect_ratio_choices[] =       {"5:1","4:1","3:1","2.67:1","2.50:1","2.39:1","2.35:1","2.20:1","2:1","1.85:1", "16:9","5:3","3:2","4:3","1.2:1","1.175:1","1:1","1:2"};
 
 /* config variables */
+
+/* Settings version (see raw_settings_load).  Raise it, and add a block there, when the
+ * meaning of a saved value changes. */
+#define RAW_SETTINGS_VERSION 1
+static CONFIG_INT("raw.cfg_ver", raw_settings_ver, 0);
 
 CONFIG_INT("raw.video.enabled", raw_video_enabled, 1);
 
@@ -5304,8 +5310,47 @@ static struct lvinfo_item info_items[] = {
     }
 };
 
+/* ---- Saved settings -----------------------------------------------------------
+ * Every saved setting is listed in MODULE_CONFIGS at the end of this file.  The table gives
+ * the range each one can really have (taken from the menus); a value outside its range is
+ * reset to the one in the last column.  Several of these are used directly as an index into
+ * a table (resolution, aspect ratio, film format), so a damaged value must never get through.
+ */
+static const struct setting_range raw_settings[] = {
+    SETTING(raw_video_enabled,   0, 1, 1),
+    SETTING(resolution_index_x,  0, COUNT(resolution_presets_x) - 1, 11),
+    SETTING(res_x_fine,      -2048, 2048, 0),
+    SETTING(aspect_ratio_index,  0, COUNT(aspect_ratio_presets_num) - 1, 17),
+    SETTING(film_format_index,   0, FILM_FRAME_COUNT - 1, 0),
+    SETTING(measured_write_speed, 0, 100000, 0),
+    SETTING(pre_record,          0, 10, 0),
+    SETTING(rec_trigger,         0, 3, 0),
+    SETTING(card_spanning,       0, 1, 0),
+    SETTING(dolly_mode,          0, 1, 0),
+    SETTING(preview_mode,        0, 3, 1),
+    SETTING(preview_toggle,      0, 1, 0),
+    SETTING(warm_up,             0, 7, 0),
+    SETTING(use_srm_memory,      0, 1, 1),
+    SETTING(small_hacks,         0, 3, 1),
+    SETTING(kill_gd,             0, 1, 0),
+    SETTING(h264_proxy_menu,     0, 1, 0),
+    SETTING(sync_beep,           0, 1, 1),
+    SETTING(output_format,       0, 5, 3),
+};
+
+static void raw_settings_load(void)
+{
+    /* (no conversions yet: version 1 is the first numbered one) */
+    if (raw_settings_ver < RAW_SETTINGS_VERSION)
+        raw_settings_ver = RAW_SETTINGS_VERSION;
+
+    settings_check(raw_settings, COUNT(raw_settings));
+}
+
 static unsigned int raw_rec_init()
 {
+    raw_settings_load();
+
     if (is_camera("5D3", "1.1.3"))
     {
         lvfaceEnd  = (void *) 0xFF16D77C;
@@ -5482,6 +5527,7 @@ static unsigned int raw_rec_init()
     {
         use_srm_memory = 1;
         sync_beep = 1;
+        film_format_index = 0;  /* the slim menu has no such row: only crop_rec's Film Format applies */
     }
     
     /* Hide More/All hacks options from not supported models  */
@@ -5573,6 +5619,7 @@ MODULE_CBRS_START()
 MODULE_CBRS_END()
 
 MODULE_CONFIGS_START()
+    MODULE_CONFIG(raw_settings_ver)
     MODULE_CONFIG(raw_video_enabled)
     MODULE_CONFIG(resolution_index_x)
     MODULE_CONFIG(res_x_fine)    

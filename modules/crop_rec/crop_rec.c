@@ -17,6 +17,7 @@
 #include <vram.h>
 #include "../mlv_lite/mlv_lite.h"
 #include <film-formats.h>
+#include <settings-check.h>
 #include "../dual_iso/dual_iso.h"
 #include "histogram.h"
 
@@ -132,7 +133,9 @@ CONFIG_INT("crop.shutter_zoom", Shutter_zoom, 0); /* EOS M slim: 0=OFF, 1=hold x
 CONFIG_INT("crop.arrows_U_D",       Arrows_U_D, 3); /* ISO */
 CONFIG_INT("crop.more_hacks",       more_hacks, 1);
 static CONFIG_INT("crop.arrows_L_R",       Arrows_L_R, 2); /* Aperture */
-static CONFIG_INT("crop.button_map_v",     button_map_v, 0); /* remap old configs once */
+/* Settings version.  Keeps the old key name so existing config files keep their number
+ * (the button conversions below must run only once).  See crop_settings_load(). */
+static CONFIG_INT("crop.button_map_v",     crop_settings_ver, 0);
 
 enum crop_preset {
     CROP_PRESET_OFF = 0,
@@ -8913,6 +8916,76 @@ static unsigned int raw_info_update_cbr(unsigned int unused)
     return 0;
 }
 
+/* ---- Saved settings -----------------------------------------------------------
+ * Every saved setting is listed in MODULE_CONFIGS at the end of this file.  The table below
+ * gives the range each one can really have (taken from the menus); a value outside its
+ * range is reset to the one in the last column.  crop_settings_ver is the settings version:
+ * to change what a saved value MEANS, add a block to crop_settings_load() for the new
+ * version and raise CROP_SETTINGS_VERSION.  Blocks run once per config file.
+ */
+#define CROP_SETTINGS_VERSION 3
+
+static const struct setting_range crop_settings[] = {
+    SETTING(crop_preset_index,          1,       3,      1),  /* slim: 1..3 (3x3 / 1x1 / 1x3) */
+    SETTING(crop_preset_ar_menu,        0,       4,      4),
+    SETTING(crop_preset_1x1_res_menu,   0,       7,      3),
+    SETTING(crop_preset_1x3_res_menu,   0,       3,      1),
+    SETTING(crop_preset_3x3_res_menu,   0,       2,      2),
+    SETTING(crop_preset_fps_menu,       0,       3,      0),
+    SETTING(crop_preset_fps_reduce,     0,       1,      1),
+    SETTING(slim_film_fmt,              0,       FILM_FORMAT_COUNT - 1, 0),
+    SETTING(slim_film_frames,           0,       (1 << (2 * FILM_FORMAT_COUNT)) - 1, 0),
+    SETTING(bit_depth_analog,           0,       3,      1),
+    SETTING(shutter_range,              0,       1,      0),
+    SETTING(fix_dual_iso_flicker,       0,       1,      1),
+    SETTING(brighten_lv_method,         0,       1,      0),
+    SETTING(fps_over,             -100000,  100000,      0),
+    SETTING(SET_button,                 1,       2,      1),  /* slim: x10 zoom / last settings */
+    SETTING(INFO_button,                0,       6,      0),
+    SETTING(Arrows_U_D,                 0,       3,      3),
+    SETTING(Shutter_zoom,               0,       2,      0),
+    SETTING(tapdisp,                    0,       5,      1),
+};
+
+static void crop_settings_load(void)
+{
+    /* version 1: arrow and INFO button choices were renumbered */
+    if (crop_settings_ver < 1)
+    {
+        /* Old arrows: 0=OFF, 1=ISO, 2=Aperture -> New: 0=OFF, 1=Shutter, 2=Aperture, 3=ISO */
+        if (Arrows_U_D == 1) Arrows_U_D = 3;
+        if (Arrows_L_R == 1) Arrows_L_R = 3;
+        /* Old INFO: 0=OFF,1=Aperture,2=FC,3=DualISO,4=framing
+         * New INFO: 0=OFF,1=DualISO,2=Hist,3=Wave,4=FC,5=framing */
+        if (INFO_button == 1) INFO_button = 0;
+        else if (INFO_button == 2) INFO_button = 4;
+        else if (INFO_button == 3) INFO_button = 1;
+        else if (INFO_button == 4) INFO_button = 5;
+        crop_settings_ver = 1;
+    }
+    /* version 2: INFO 4=False Color, 5=framing -> 4=Zebras, 5=False Color, 6=framing */
+    if (crop_settings_ver < 2)
+    {
+        if (INFO_button == 5) INFO_button = 6;
+        else if (INFO_button == 4) INFO_button = 5;
+        crop_settings_ver = 2;
+    }
+    /* version 3: Dual ISO removed from the list: 2..7 -> 1..6, old Dual ISO -> OFF */
+    if (crop_settings_ver < 3)
+    {
+        if (INFO_button == 1) INFO_button = 0;
+        else if (INFO_button > 1) INFO_button--;
+        crop_settings_ver = 3;
+    }
+
+    /* never lower the number (a config file touched by a newer build keeps its version) */
+    if (crop_settings_ver < CROP_SETTINGS_VERSION)
+        crop_settings_ver = CROP_SETTINGS_VERSION;
+
+    /* every setting inside its range (old SET button choices, damaged files, ...) */
+    settings_check(crop_settings, COUNT(crop_settings));
+}
+
 static unsigned int crop_rec_init()
 {
     //Will place afframe so that 2_1 HFR presets will work at least after restart
@@ -9203,53 +9276,18 @@ static unsigned int crop_rec_init()
 
     if (is_EOSM)
     {
-        slim_crop_sync_from_backend();
-        /* Slim Movie: never leave Mode on OFF. */
-        if (crop_preset_index < 1 || crop_preset_index > 3)
-            crop_preset_index = 1;
+        /* Saved settings: convert older values, then range-check all of them. */
+        crop_settings_load();
+
         /* Derive Mode UI (incl. LV) then push 1x1 combo / Full-Res. */
         slim_crop_sync_from_backend();
         slim_crop_apply_mode();
         slim_crop_apply_bit_depth();
+
+        /* EOS M slim: fixed, not user choices */
         more_hacks = 1;
-
-        /* Preserve SET Button choice; migrate old assignments to x10 zoom. */
-        if (SET_button != 1 && SET_button != 2)
-            SET_button = 1;
-        Half_Shutter = 0; /* EOS M slim: half-shutter x10 only via Shutter zoom setting */
-
-        /* One-time remap: old arrow/INFO meanings → new Settings options. */
-        if (button_map_v < 1)
-        {
-            /* Old arrows: 0=OFF, 1=ISO, 2=Aperture → New: 0=OFF, 1=Shutter, 2=Aperture, 3=ISO */
-            if (Arrows_U_D == 1) Arrows_U_D = 3;
-            if (Arrows_L_R == 1) Arrows_L_R = 3;
-            /* Old INFO: 0=OFF,1=Aperture,2=FC,3=DualISO,4=framing
-             * New INFO: 0=OFF,1=DualISO,2=Hist,3=Wave,4=FC,5=framing */
-            if (INFO_button == 1) INFO_button = 0;
-            else if (INFO_button == 2) INFO_button = 4;
-            else if (INFO_button == 3) INFO_button = 1;
-            else if (INFO_button == 4) INFO_button = 5;
-            button_map_v = 1;
-        }
-        /* v1 INFO: 4=False Color, 5=framing → v2: 4=Zebras, 5=False Color, 6=framing */
-        if (button_map_v < 2)
-        {
-            if (INFO_button == 5) INFO_button = 6;
-            else if (INFO_button == 4) INFO_button = 5;
-            button_map_v = 2;
-        }
-        /* v3: Dual ISO removed from the list: 2..7 -> 1..6, old Dual ISO -> OFF */
-        if (button_map_v < 3)
-        {
-            if (INFO_button == 1) INFO_button = 0;
-            else if (INFO_button > 1) INFO_button--;
-            button_map_v = 3;
-        }
-        if (Arrows_U_D < 0 || Arrows_U_D > 3) Arrows_U_D = 3;
-        /* Slim: no Left/Right Button remap — leave L/R to Canon. */
-        Arrows_L_R = 0;
-        if (INFO_button < 0 || INFO_button > 6) INFO_button = 0;
+        Half_Shutter = 0;   /* half-shutter x10 only via Shutter zoom setting */
+        Arrows_L_R = 0;     /* no Left/Right remap: leave L/R to Canon */
 
         /* Flat Movie-page crop settings (no Crop Mode submenu / Customize Buttons). */
         menu_add("Movie", crop_rec_menu_eosm, COUNT(crop_rec_menu_eosm));
@@ -9307,7 +9345,7 @@ MODULE_CONFIGS_START()
     MODULE_CONFIG(Arrows_L_R)
     MODULE_CONFIG(Arrows_U_D)
     MODULE_CONFIG(more_hacks)
-    MODULE_CONFIG(button_map_v)
+    MODULE_CONFIG(crop_settings_ver)
 MODULE_CONFIGS_END()
 
 MODULE_CBRS_START()
