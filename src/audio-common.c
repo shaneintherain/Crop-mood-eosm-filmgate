@@ -4,6 +4,8 @@
 #include "raw.h"
 #include "zebra.h"
 #include "ml-cbr.h"
+#include "fps.h"
+#include "ltc-decode.h"
 #ifdef CONFIG_SLIM_MENUS
 #include "menu-grid.h"
 #endif
@@ -132,6 +134,89 @@ static struct audio_level audio_levels[2];
 struct audio_level *get_audio_levels(void)
 {
     return audio_levels;
+}
+
+/* ------------------------------------------------------------------------------------
+ * Timecode input (SMPTE LTC recorded on one audio channel, e.g. from a Deity TC-1)
+ *
+ * "Timecode In" (Audio menu): 0 = camera mics (normal meters), 1 = timecode on the left
+ * channel, 2 = timecode on the right channel.  In timecode mode the meters in the top bar
+ * are replaced by a "TC" label, and while recording by the timecode read from the audio
+ * the recorder (mlv_snd) is capturing.  Nothing is captured while not recording: the
+ * "TC" label only uses the level Canon already reports.
+ *
+ *   cream  = level fine         orange = peak near full scale (held for 1 s)
+ *   blue   = level very low     red    = recording, but no valid timecode for 1 s
+ * ------------------------------------------------------------------------------------ */
+static CONFIG_INT("audio.tc.input", audio_tc_input, 0);
+
+#define AUDIO_TC_HOT_DB     (-2)    /* peak at or above this (dB) = hot */
+#define AUDIO_TC_LOW_DB     (-30)   /* peak at or below this (dB) = too low */
+#define AUDIO_TC_HOT_HOLD   1000    /* ms the hot colour stays after a peak */
+#define AUDIO_TC_GRACE      1000    /* ms after REC starts before "no timecode" turns red */
+
+static ltc_t tc_dec;
+static int tc_dec_ready = 0;
+static int tc_last_feed_ms = -100000;
+static int tc_hot_until = 0;
+static int tc_rec_start_ms = 0;
+static int tc_was_recording = 0;
+
+/* called by mlv_snd for every audio buffer it records (a task, not an interrupt) */
+void audio_tc_feed(const int16_t * data, int bytes, int channels, int rate)
+{
+    if (!audio_tc_input || !data || channels < 1 || channels > 2 || rate < 8000)
+        return;
+
+    int now = get_ms_clock();
+
+    /* start fresh for every take (feeding stops between takes) */
+    if (!tc_dec_ready || tc_dec.rate != rate || (now - tc_last_feed_ms) > 1500)
+    {
+        ltc_init(&tc_dec, rate, fps_get_current_x1000());
+        tc_dec_ready = 1;
+    }
+    tc_last_feed_ms = now;
+
+    int ch = audio_tc_input - 1;
+    if (ch >= channels) ch = 0;
+    ltc_feed(&tc_dec, data + ch, bytes / (2 * channels), channels);
+}
+
+/* text and colour for the top bar; returns the colour */
+static int audio_tc_text(char * buf, int size)
+{
+    int now = get_ms_clock();
+    int ch = (audio_tc_input == 2) ? 1 : 0;
+    int db = audio_level_to_db(audio_levels[ch].peak_fast);
+
+    if (db >= AUDIO_TC_HOT_DB)
+        tc_hot_until = now + AUDIO_TC_HOT_HOLD;
+    int level_color =
+        (now < tc_hot_until)    ? 19 /* orange (palette 19) */ :
+        (db <= AUDIO_TC_LOW_DB) ? COLOR_PEN_SKY :
+                                  COLOR_CREAM;
+
+    int rec = RECORDING;
+    if (rec && !tc_was_recording)
+        tc_rec_start_ms = now;
+    tc_was_recording = rec;
+
+    if (!rec)
+    {
+        snprintf(buf, size, "TC");
+        return level_color;
+    }
+
+    ltc_t t = tc_dec;   /* snapshot: the recorder updates it from another task */
+    if (tc_dec_ready && (now - tc_last_feed_ms) < 1000 && ltc_recent(&t, 1000))
+    {
+        snprintf(buf, size, "%02d:%02d:%02d:%02d", t.h, t.m, t.s, t.f);
+        return level_color;
+    }
+
+    snprintf(buf, size, "--:--:--:--");
+    return (now - tc_rec_start_ms) < AUDIO_TC_GRACE ? COLOR_CREAM : COLOR_RED;
 }
 
 // from linux snd_soc_update_bits()
@@ -333,6 +418,21 @@ static int audio_meters_are_drawn_common()
 #endif
 }
 
+/* font of the audio item in the top bar (set by audio_meter_update) */
+static uint32_t audio_meter_font = FONT(FONT_MED_LARGE, COLOR_CREAM, COLOR_BLACK);
+
+/* timecode mode: draw the timecode (or the "TC" label) instead of the meters */
+static void draw_timecode(int x0, int y0, int width)
+{
+    char text[16];
+    int color = audio_tc_text(text, sizeof(text));
+    uint32_t font = FONT(audio_meter_font, color, FONT_BG(audio_meter_font));
+    int w = bmp_string_width(font, "00:00:00:00") + 6;
+    if (width > 0 && w > width) w = width;
+    bmp_fill(FONT_BG(font), x0, y0, w, fontspec_height(font));
+    bmp_printf(font, x0, y0, "%s", text);
+}
+
 /* Normal VU meter */
 static void draw_meters(void)
 {
@@ -341,7 +441,7 @@ static void draw_meters(void)
     int x0 = audio_meter_x;
     int y0 = audio_meter_y;
     int width = audio_meter_width;
-    
+
     if (menu_active_and_not_hidden()) /* not managed by LV info bars; show the meters in the help bar */
     {
         x0 = 0;
@@ -354,7 +454,13 @@ static void draw_meters(void)
         /* don't know yet where to draw */
         return;
     }
-    
+
+    if (audio_tc_input)
+    {
+        draw_timecode(x0, y0, width);
+        return;
+    }
+
     draw_meter( x0, y0 + 0, 10, &audio_levels[0], left_label, width);
     draw_ticks( x0, y0 + 10, 2, width);
 #if !(defined(CONFIG_500D) || defined(CONFIG_1100D))         // mono mic on 500d and 1100d
@@ -382,7 +488,14 @@ static LVINFO_UPDATE_FUNC(audio_meter_update)
         int is_big = fontspec_width(item->fontspec) >= fontspec_width(FONT_MED_LARGE);
         int label_width = AUDIO_METER_OFFSET*4;
         item->width = MIN((is_big ? 720 : 360) / 40 * 40, 720-item->x);
-        
+        audio_meter_font = item->fontspec;
+        if (audio_tc_input)
+        {
+            /* timecode mode: only as wide as the timecode, so the other items keep their room */
+            item->width = bmp_string_width(item->fontspec, "00:00:00:00") + 6;
+            label_width = 0;
+        }
+
         audio_meter_x = item->x - item->width/2;
         audio_meter_y = item->y;
         audio_meter_width = item->width - label_width;
@@ -1096,3 +1209,43 @@ void input_toggle()
 #endif
 }
 
+
+/* ---- "Timecode In" menu entry (added to the existing Audio menu) ---- */
+
+static MENU_SELECT_FUNC(audio_tc_select)
+{
+    audio_tc_input = MOD(audio_tc_input + (delta < 0 ? -1 : 1), 3);
+    if (audio_tc_input)
+        NotifyBox(3000, "Timecode shows while recording");
+}
+
+static MENU_UPDATE_FUNC(audio_tc_update)
+{
+    MENU_SET_VALUE("%s",
+        audio_tc_input == 1 ? "Left channel" :
+        audio_tc_input == 2 ? "Right channel" : "OFF (camera mics)");
+    MENU_SET_ENABLED(audio_tc_input != 0);
+    if (audio_tc_input)
+        MENU_SET_HELP("Top bar shows TC before REC, then the timecode while recording.");
+    else
+        MENU_SET_HELP("Timecode on one audio channel (e.g. Deity TC-1). Shows while recording.");
+}
+
+static struct menu_entry audio_tc_menus[] = {
+    {
+        .name       = "Timecode In",
+        .priv       = &audio_tc_input,
+        .max        = 2,
+        .select     = audio_tc_select,
+        .update     = audio_tc_update,
+        .help       = "Timecode on one audio channel. Shows in the top bar while recording.",
+        .help2      = "Orange = level too hot, blue = too low, red = no timecode while recording.",
+    },
+};
+
+static void audio_tc_init()
+{
+    menu_add("Audio", audio_tc_menus, COUNT(audio_tc_menus));
+}
+
+INIT_FUNC("audio.tc.init", audio_tc_init);
