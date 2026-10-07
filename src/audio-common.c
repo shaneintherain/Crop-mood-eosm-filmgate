@@ -143,7 +143,8 @@ struct audio_level *get_audio_levels(void)
  * channel, 2 = timecode on the right channel.  In timecode mode the meters in the top bar
  * are replaced by a "TC" label, and while recording by the timecode read from the audio
  * the recorder (mlv_snd) is capturing.  Nothing is captured while not recording: the
- * "TC" label only uses the level Canon already reports.
+ * "TC" label only uses the level Canon already reports.  After a take, the last valid
+ * timecode stays up (dimmed) until the next REC.
  *
  *   cream  = level fine         orange = peak near full scale (held for 1 s)
  *   blue   = level very low     red    = recording, but no valid timecode for 1 s
@@ -161,6 +162,10 @@ static int tc_last_feed_ms = -100000;
 static int tc_hot_until = 0;
 static int tc_rec_start_ms = 0;
 static int tc_was_recording = 0;
+
+/* last valid timecode of the previous take, shown dimmed in standby until the next REC */
+static volatile int tc_last_valid = 0;
+static volatile int tc_last_h, tc_last_m, tc_last_s, tc_last_f;
 
 /* called by mlv_snd for every audio buffer it records (a task, not an interrupt) */
 void audio_tc_feed(const int16_t * data, int bytes, int channels, int rate)
@@ -181,6 +186,13 @@ void audio_tc_feed(const int16_t * data, int bytes, int channels, int rate)
     int ch = audio_tc_input - 1;
     if (ch >= channels) ch = 0;
     ltc_feed(&tc_dec, data + ch, bytes / (2 * channels), channels);
+
+    /* remember the freshest valid timecode (for the standby readout after the take) */
+    if (ltc_recent(&tc_dec, 1000))
+    {
+        tc_last_h = tc_dec.h; tc_last_m = tc_dec.m; tc_last_s = tc_dec.s; tc_last_f = tc_dec.f;
+        tc_last_valid = 1;
+    }
 }
 
 /* text and colour for the top bar; returns the colour */
@@ -199,11 +211,21 @@ static int audio_tc_text(char * buf, int size)
 
     int rec = RECORDING;
     if (rec && !tc_was_recording)
+    {
         tc_rec_start_ms = now;
+        tc_last_valid = 0;      /* new take: forget the previous one */
+    }
     tc_was_recording = rec;
 
     if (!rec)
     {
+        if (tc_last_valid)
+        {
+            /* standby after a take: where the last clip ended, dimmed so it reads as "old".
+             * Level warnings (orange / blue) still take priority. */
+            snprintf(buf, size, "%02d:%02d:%02d:%02d", tc_last_h, tc_last_m, tc_last_s, tc_last_f);
+            return (level_color == COLOR_CREAM) ? COLOR_PEN_MUTED : level_color;
+        }
         snprintf(buf, size, "TC");
         return level_color;
     }
@@ -1237,7 +1259,7 @@ static MENU_UPDATE_FUNC(audio_tc_update)
         MENU_SET_HELP("Needs Sound Recording ON. Timecode is read from the recorded audio.");
     }
     else if (audio_tc_input)
-        MENU_SET_HELP("Top bar shows TC before REC, then the timecode while recording.");
+        MENU_SET_HELP("Top bar: TC before REC, live timecode while recording, last take's end (dim) after.");
 }
 
 static struct menu_entry audio_tc_menus[] = {
@@ -1245,8 +1267,8 @@ static struct menu_entry audio_tc_menus[] = {
         .name       = "Timecode In",
         .priv       = &audio_tc_input,
         .max        = 2,
-        .choices    = CHOICES("Off", "L Channel", "R Channel"),
-        .icon_type  = IT_DICE,   /* always enabled: value 0 (Off) must not grey the row */
+        .choices    = CHOICES("OFF", "L Channel", "R Channel"),
+        .icon_type  = IT_DICE,   /* always enabled: value 0 (OFF) must not grey the row */
         .edit_mode  = EM_INLINE_ADJUST,
         .update     = audio_tc_update,
         .help       = "Timecode on one audio channel (e.g. Deity TC-1). Shows while recording.",

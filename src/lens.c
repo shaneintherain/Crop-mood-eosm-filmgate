@@ -2662,9 +2662,8 @@ int get_ae_state() { return AE_STATE; }
 static LVINFO_UPDATE_FUNC(clock_update)
 {
     LVINFO_BUFFER(8);
-    struct tm now;
-    LoadCalendarFromRTC( &now );
-    snprintf(buffer, sizeof(buffer), "%02d:%02d", now.tm_hour, now.tm_min);
+    /* Film Edge: no clock in the top bar. The empty text makes the item inactive,
+     * so the other items (timecode, temperature, ...) keep the room. */
 }
 
 static LVINFO_UPDATE_FUNC(disp_preset_update)
