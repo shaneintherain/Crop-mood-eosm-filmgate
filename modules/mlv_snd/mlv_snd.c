@@ -60,6 +60,8 @@ extern WEAK_FUNC(ret_0) int SoundDevShutDownIn();
 extern WEAK_FUNC(ret_0) int StopASIFDMAADC();
 extern void SetSamplingRate(int sample_rate, int channels);
 extern uint64_t get_us_clock();
+/* core (audio-common.c): reads timecode from the audio when "Timecode In" is on; harmless otherwise */
+extern WEAK_FUNC(ret_0) void audio_tc_feed(const int16_t *data, int bytes, int channels, int rate);
 
 extern void mlv_rec_get_slot_info(int32_t slot, uint32_t *size, void **address);
 extern int32_t mlv_rec_get_free_slot();
@@ -420,7 +422,10 @@ static void mlv_snd_writer(int unused)
                 
                 mlv_audf_hdr_t *hdr = (mlv_audf_hdr_t *)buffer->mlv_slot_buffer;
                 mlv_set_type((mlv_hdr_t *)hdr, "AUDF");
-                
+
+                /* read only: look for timecode in this buffer (before the slot is released for writing) */
+                audio_tc_feed((const int16_t *)buffer->data, buffer->length, mlv_snd_in_channels, mlv_snd_in_sample_rate);
+
                 /* fill recording information */
                 hdr->frameNumber = buffer->frameNumber;
                 mlv_rec_set_rel_timestamp((mlv_hdr_t*)hdr, buffer->timestamp);
