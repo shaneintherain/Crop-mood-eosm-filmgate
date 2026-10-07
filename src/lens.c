@@ -3058,7 +3058,8 @@ extern LVINFO_UPDATE_FUNC(focus_dist_update);
 static LVINFO_UPDATE_FUNC(af_mf_update)
 {
     LVINFO_BUFFER(4);
-    snprintf(buffer, sizeof(buffer), is_manual_focus() ? "MF" : "AF");
+    /* Film Edge: no AF/MF text in the bottom bar (RAW video is manual focus anyway).
+     * The empty text makes the item inactive, so the other items keep the room. */
 }
 
 static LVINFO_UPDATE_FUNC(batt_update)

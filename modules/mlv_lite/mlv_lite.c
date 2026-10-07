@@ -54,6 +54,8 @@
 #include <cropmarks.h>
 #include <vram.h>
 #include <screenshot.h>
+#include <film-formats.h>
+#include <settings-check.h>
 #include "../lv_rec/lv_rec.h"
 #include "edmac.h"
 #include "edmac-memcpy.h"
@@ -164,6 +166,11 @@ static const char * aspect_ratio_choices[] =       {"5:1","4:1","3:1","2.67:1","
 
 /* config variables */
 
+/* Settings version (see raw_settings_load).  Raise it, and add a block there, when the
+ * meaning of a saved value changes. */
+#define RAW_SETTINGS_VERSION 1
+static CONFIG_INT("raw.cfg_ver", raw_settings_ver, 0);
+
 CONFIG_INT("raw.video.enabled", raw_video_enabled, 1);
 
 /* Card spanning */
@@ -174,46 +181,7 @@ static CONFIG_INT("raw.res_x", resolution_index_x, 11);
 static CONFIG_INT("raw.res_x_fine", res_x_fine, 0);
 static CONFIG_INT("raw.aspect.ratio", aspect_ratio_index, 17);
 
-/* ---- Film Format presets ------------------------------------------------
- * Recording windows that match real film gates at 1:1 pixel scale on the
- * EOS M sensor (22.3 mm / 5184 px = ~4.30 um per pixel).
- * "Actual"  = the true physical gate size at 1:1.
- * "Crop"   = a smaller window, because the true gate would need more
- *             pixels than the camera can read out in a stable video mode.
- * The window is centered inside the current crop_rec 1:1 readout, so pick
- * the matching 1:1 crop mode (see 'mode' column).
- * Widths are multiples of 16 and heights are multiples of 4 (2 for the 1696, 1344
- * and larger widths), so film_align_res_y() leaves them unchanged and the
- * "Recorded Size" shown by crop_rec is exactly what is written.  If you edit a
- * height here, change film_size[] in crop_rec.c to match.
- */
-struct film_format
-{
-    const char * name;      /* menu text */
-    int w;                  /* target width  (pixels) */
-    int h;                  /* target height (pixels) */
-    const char * gate;      /* physical size, for the help text */
-    const char * mode;      /* crop_rec 1:1 mode needed */
-};
-
-static const struct film_format film_formats[] =
-{
-    { "OFF",                   0,    0, "",                                  "" },
-    { "A35 16:9 Crop",      1696,  954, "Academy 35mm gate width, cropped to 16:9",   "3x3 3:2 1736x1160" },
-    { "A35 1.85:1 Crop",    1696,  916, "Academy 35mm gate width, cropped to 1.85:1", "3x3 3:2 1736x1160" },
-    { "A35 2.35:1 Crop",    1696,  722, "Academy 35mm gate width, cropped to 2.35:1", "3x3 3:2 1736x1160" },
-    { "A35 Anamorphic 2x",  1376, 1152, "2x anamorphic gate (1.18:1), full sensor height", "3x3 3:2 1736x1160" },
-    { "A35 Anamorphic 1.33x",1536,1152, "1.33x anamorphic gate (4:3)",       "3x3 3:2 1736x1160" },
-    { "Super 16 2.35:1 Crop",2912,1238, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest" },
-    { "16mm 16:9 Crop",     2384, 1340, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440" },
-    { "16mm 1.85:1 Crop",   2384, 1288, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440" },
-    { "16mm 2.35:1 Crop",   2384, 1012, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440" },
-    { "Super 8 Actual",     1344,  930, "5.79x4.01mm gate",                  "1:1 3:2 1920x1280" },
-    { "Super 8 16:9 Crop",  1344,  756, "Super 8 gate width, cropped to 16:9","1:1 3:2 1920x1280" },
-    { "8mm Actual",         1040,  764, "4.5x3.3mm gate",                    "1:1 3:2 1920x1280" },
-    { "8mm 16:9 Crop",      1040,  584, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280" },
-};
-
+/* ---- Film Format presets: see src/film-formats.h (shared with crop_rec) ---- */
 static CONFIG_INT("raw.film.format", film_format_index, 0);
 
 /* The Movie menu Film Format / Frame rows (crop_rec, 1x1 mode) take priority when they
@@ -221,9 +189,9 @@ static CONFIG_INT("raw.film.format", film_format_index, 0);
 static int film_format_effective(void)
 {
     int f = crop_rec_film_format();
-    if (f > 0 && f < COUNT(film_formats))
+    if (f > 0 && f < COUNT(film_frames))
         return f;
-    return COERCE(film_format_index, 0, COUNT(film_formats) - 1);
+    return COERCE(film_format_index, 0, COUNT(film_frames) - 1);
 }
 
 static CONFIG_INT("raw.write.speed", measured_write_speed, 0);
@@ -849,22 +817,11 @@ static int calc_res_y(int res_x, int max_res_y, int num, int den, float squeeze)
     }
 }
 
-/* same height alignment rules as calc_res_y, for an explicit target height */
+/* same height alignment rules as calc_res_y, for an explicit target height
+ * (the rule itself lives in src/film-formats.h so it can be tested on a computer) */
 static int film_align_res_y(int rx, int ry, int max_y)
 {
-    ry = MIN(ry, max_y);
-
-    if (OUTPUT_COMPRESSION)
-        return ry & ~1;
-
-    switch (MOD(rx * BPP / 8, 8))
-    {
-        case 0:  return ry & ~1;
-        case 4:  return ry & ~3;
-        case 2:
-        case 6:  return ry & ~7;
-        default: return ry & ~15;
-    }
+    return film_align_height(rx, ry, max_y, BPP, OUTPUT_COMPRESSION);
 }
 
 /* fixme: called from many tasks */
@@ -944,8 +901,8 @@ void update_resolution_params()
     int film_idx = film_format_effective();
     if (film_idx > 0 && squeeze_factor == 1.0f)
     {
-        int fw = film_formats[film_idx].w;
-        int fh = film_formats[film_idx].h;
+        int fw = film_frames[film_idx].w;
+        int fh = film_frames[film_idx].h;
 
         if (fw > max_res_x)
         {
@@ -1392,52 +1349,6 @@ static MENU_UPDATE_FUNC(aspect_ratio_update_info)
         int sq100 = (int)roundf(squeeze_factor*100);
         int res_y_corrected = calc_res_y(res_x, max_res_y*squeeze_factor, num, den, 1.0f);
         MENU_SET_HELP("%dx%d. Stretch by %s%d.%02dx to get %dx%d (%s) in post.", res_x, res_y, FMT_FIXEDPOINT2(sq100), res_x, res_y_corrected, aspect_ratio_choices[aspect_ratio_index]);
-    }
-}
-
-static MENU_UPDATE_FUNC(film_format_update)
-{
-    if (!raw_video_enabled || !lv)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Enable RAW video first.");
-        MENU_SET_VALUE("N/A");
-        return;
-    }
-
-    refresh_raw_settings(0);
-
-    int i = film_format_effective();
-    int from_movie_menu = crop_rec_film_format() > 0;
-
-    if (from_movie_menu)
-        MENU_SET_VALUE("%s", film_formats[i].name);
-
-    if (i == 0)
-    {
-        MENU_SET_HELP("OFF: use Resolution and Aspect ratio below.");
-        return;
-    }
-
-    MENU_SET_RINFO("%dx%d", res_x, res_y);
-
-    if (squeeze_factor != 1.0f)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Film Format needs a square-pixel 1:1 crop mode.");
-    }
-    else if (film_formats[i].w > max_res_x || film_formats[i].h > max_res_y)
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Too big for current mode (%dx%d). Use %s.",
-            max_res_x, max_res_y, film_formats[i].mode);
-    }
-    else if (from_movie_menu)
-    {
-        MENU_SET_WARNING(MENU_WARN_ADVICE, "Set by Movie menu > Preset. Records %dx%d (%s).",
-            res_x, res_y, film_formats[i].gate);
-    }
-    else
-    {
-        MENU_SET_HELP("%s. Records %dx%d at 1:1. Best in %s.",
-            film_formats[i].gate, res_x, res_y, film_formats[i].mode);
     }
 }
 
@@ -4797,18 +4708,6 @@ static struct menu_entry raw_video_menu[] =
         .help2 = "Press LiveView to start recording.",
         .children =  (struct menu_entry[]) {
             {
-                .name = "Film Format",
-                .priv = &film_format_index,
-                .max = COUNT(film_formats) - 1,
-                .update = film_format_update,
-                .choices = CHOICES("OFF", "A35 16:9 Crop", "A35 1.85:1 Crop", "A35 2.35:1 Crop",
-                                   "A35 Anamorphic 2x", "A35 Anamorphic 1.33x", "Super 16 2.35:1 Crop", "16mm 16:9 Crop", "16mm 1.85:1 Crop",
-                                   "16mm 2.35:1 Crop", "Super 8 Actual", "Super 8 16:9 Crop",
-                                   "8mm Actual", "8mm 16:9 Crop"),
-                .help = "Record a window that matches a real film gate (1:1 pixels).",
-                .help2 = "Actual = true gate size. Crop = a smaller window inside the gate.",
-            },
-            {
                 .name = "Resolution",
                 .priv = &resolution_index_x,
                 .max = COUNT(resolution_presets_x) - 1,
@@ -5342,8 +5241,47 @@ static struct lvinfo_item info_items[] = {
     }
 };
 
+/* ---- Saved settings -----------------------------------------------------------
+ * Every saved setting is listed in MODULE_CONFIGS at the end of this file.  The table gives
+ * the range each one can really have (taken from the menus); a value outside its range is
+ * reset to the one in the last column.  Several of these are used directly as an index into
+ * a table (resolution, aspect ratio, film format), so a damaged value must never get through.
+ */
+static const struct setting_range raw_settings[] = {
+    SETTING(raw_video_enabled,   0, 1, 1),
+    SETTING(resolution_index_x,  0, COUNT(resolution_presets_x) - 1, 11),
+    SETTING(res_x_fine,      -2048, 2048, 0),
+    SETTING(aspect_ratio_index,  0, COUNT(aspect_ratio_presets_num) - 1, 17),
+    SETTING(film_format_index,   0, FILM_FRAME_COUNT - 1, 0),
+    SETTING(measured_write_speed, 0, 100000, 0),
+    SETTING(pre_record,          0, 10, 0),
+    SETTING(rec_trigger,         0, 3, 0),
+    SETTING(card_spanning,       0, 1, 0),
+    SETTING(dolly_mode,          0, 1, 0),
+    SETTING(preview_mode,        0, 3, 1),
+    SETTING(preview_toggle,      0, 1, 0),
+    SETTING(warm_up,             0, 7, 0),
+    SETTING(use_srm_memory,      0, 1, 1),
+    SETTING(small_hacks,         0, 3, 1),
+    SETTING(kill_gd,             0, 1, 0),
+    SETTING(h264_proxy_menu,     0, 1, 0),
+    SETTING(sync_beep,           0, 1, 1),
+    SETTING(output_format,       0, 5, 3),
+};
+
+static void raw_settings_load(void)
+{
+    /* (no conversions yet: version 1 is the first numbered one) */
+    if (raw_settings_ver < RAW_SETTINGS_VERSION)
+        raw_settings_ver = RAW_SETTINGS_VERSION;
+
+    settings_check(raw_settings, COUNT(raw_settings));
+}
+
 static unsigned int raw_rec_init()
 {
+    raw_settings_load();
+
     if (is_camera("5D3", "1.1.3"))
     {
         lvfaceEnd  = (void *) 0xFF16D77C;
@@ -5520,6 +5458,7 @@ static unsigned int raw_rec_init()
     {
         use_srm_memory = 1;
         sync_beep = 1;
+        film_format_index = 0;  /* the slim menu has no such row: only crop_rec's Film Format applies */
     }
     
     /* Hide More/All hacks options from not supported models  */
@@ -5611,6 +5550,7 @@ MODULE_CBRS_START()
 MODULE_CBRS_END()
 
 MODULE_CONFIGS_START()
+    MODULE_CONFIG(raw_settings_ver)
     MODULE_CONFIG(raw_video_enabled)
     MODULE_CONFIG(resolution_index_x)
     MODULE_CONFIG(res_x_fine)    
