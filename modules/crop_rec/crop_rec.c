@@ -16,6 +16,7 @@
 #include <focus.h>
 #include <vram.h>
 #include "../mlv_lite/mlv_lite.h"
+#include <film-formats.h>
 #include "../dual_iso/dual_iso.h"
 #include "histogram.h"
 
@@ -5754,31 +5755,11 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
  *   S16            1:1 2.35:1 3K    16mm  1:1 16:9 2560x1440
  *   S8, 8mm        1:1 3:2 1920x1280
  * mlv_lite cuts the film window out of the readout and asks
- * crop_rec_film_format() which window to use.  Numbering matches the
- * film_formats[] table in mlv_lite.c:
- *    1 S35 16:9 Crop  2 S35 1.85:1 Crop  3 S35 2.35:1 Crop
- *    4 S35 Anamorphic 2x (1.18:1)   5 S35 Anamorphic 1.33x (4:3)
- *    6 Super 16 2.35:1 Crop
- *    7 16mm 16:9 Crop 8 16mm 1.85:1 Crop 9 16mm 2.35:1 Crop
- *   10 Super 8 Actual 11 Super 8 16:9 Crop 12 8mm Actual  13 8mm 16:9 Crop
+ * crop_rec_film_format() which window to use: the number it returns is the
+ * index into film_frames[] in src/film-formats.h (0 = not a film format).
  */
-#define SLIM_FILM_FORMATS 6
-static const char * const slim_film_fmt_names[SLIM_FILM_FORMATS] = {
-    "Academy 35mm", "A35 Anamorphic", "S16", "16mm", "S8", "8mm"
-};
-static const char * const slim_film_fmt_labels[SLIM_FILM_FORMATS] = {
-    "A35", "A35-ANA", "S16", "16mm", "S8", "8mm"   /* bottom bar */
-};
-static const int slim_film_fmt_first[SLIM_FILM_FORMATS] = { 1, 4, 6, 7, 10, 12 }; /* first table index */
-static const int slim_film_fmt_count[SLIM_FILM_FORMATS] = { 3, 2, 1, 3, 2, 2 };  /* Frame choices */
-static const char * const slim_film_frame_names[13] = {
-    "16:9 Crop", "1.85:1 Crop", "2.35:1 Crop",           /* S35     */
-    "2x 1.18:1", "1.33x 4:3",            /* S35 Anamorphic */
-    "2.35:1 Crop",                                       /* S16     */
-    "16:9 Crop", "1.85:1 Crop", "2.35:1 Crop",           /* 16mm    */
-    "Actual", "16:9 Crop",                               /* S8      */
-    "Actual", "16:9 Crop"                                /* 8mm     */
-};
+/* names, labels, frame choices and recorded sizes all come from src/film-formats.h */
+#define SLIM_FILM_FORMATS FILM_FORMAT_COUNT
 /* Both are saved in the module config, so the choice survives a reboot.  The sensor
  * readout is already saved by the crop_preset_* settings, but A35 and A35 Anamorphic
  * share a readout, and so do S8 and 8mm: without these the pair would fall back to
@@ -5789,7 +5770,7 @@ static CONFIG_INT("crop.film_frames", slim_film_frames, 0);  /* Frame choice per
 static int slim_film_frame_get(int fmt)
 {
     int v = (slim_film_frames >> (2 * fmt)) & 3;
-    return COERCE(v, 0, slim_film_fmt_count[fmt] - 1);
+    return COERCE(v, 0, film_formats[fmt].count - 1);
 }
 
 static void slim_film_frame_set(int fmt, int v)
@@ -5853,7 +5834,7 @@ int crop_rec_film_format()
     int fmt = slim_film_active();
     if (fmt < 0)
         return 0; /* not a film format */
-    return slim_film_fmt_first[fmt] + slim_film_frame_get(fmt);
+    return film_frame_index(fmt, slim_film_frame_get(fmt));
 }
 
 static void slim_crop_apply_mode(void);
@@ -6221,7 +6202,7 @@ static MENU_UPDATE_FUNC(slim_crop_mode_update)
     MENU_SET_NAME("Film Format");
     if (fmt >= 0)
     {
-        MENU_SET_VALUE("%s", slim_film_fmt_names[fmt]);
+        MENU_SET_VALUE("%s", film_formats[fmt].name);
         MENU_SET_HELP("Film gate. Sets the sensor readout and the recorded window.");
     }
     else
@@ -6240,11 +6221,11 @@ static MENU_SELECT_FUNC(slim_crop_size_select)
 static MENU_SELECT_FUNC(slim_crop_preset_select)
 {
     int film_fmt = slim_film_sync();
-    if (film_fmt >= 0 && slim_film_fmt_count[film_fmt] > 1)
+    if (film_fmt >= 0 && film_formats[film_fmt].count > 1)
     {
         /* Frame: Actual / 16:9 Crop / ... (either arrow cycles) */
         int cur = slim_film_frame_get(film_fmt);
-        slim_film_frame_set(film_fmt, MOD(cur + (delta < 0 ? -1 : 1), slim_film_fmt_count[film_fmt]));
+        slim_film_frame_set(film_fmt, MOD(cur + (delta < 0 ? -1 : 1), film_formats[film_fmt].count));
         return;
     }
 
@@ -6273,13 +6254,6 @@ static MENU_SELECT_FUNC(slim_crop_preset_select)
     slim_crop_clamp_fps();
 }
 
-/* Recorded size of each film-format frame (matches mlv_lite film_formats, whose
- * heights are already aligned, so this is exactly what is written to the file). */
-static const short film_size[13][2] = {
-    {1696,954},{1696,916},{1696,722},{1376,1152},{1536,1152},{2912,1238},
-    {2384,1340},{2384,1288},{2384,1012},{1344,930},{1344,756},{1040,764},{1040,584}
-};
-
 /* Like slim_crop_expected_res, but for film formats returns the size that is
  * actually recorded (not the sensor readout). */
 static void slim_crop_shown_res(int *w, int *h)
@@ -6288,8 +6262,9 @@ static void slim_crop_shown_res(int *w, int *h)
     if (slim_film_active() >= 0 || slim_film_sync() >= 0)
     {
         int fmt = slim_film_active() >= 0 ? slim_film_active() : slim_film_sync();
-        int i = slim_film_fmt_first[fmt] - 1 + slim_film_frame_get(fmt);
-        if (i >= 0 && i < 13) { *w = film_size[i][0]; *h = film_size[i][1]; }
+        int i = film_frame_index(fmt, slim_film_frame_get(fmt));
+        *w = film_frames[i].w;
+        *h = film_frames[i].h;
     }
 }
 
@@ -6305,8 +6280,8 @@ static MENU_UPDATE_FUNC(slim_crop_preset_update)
         {
             MENU_SET_NAME("Recorded Size");
             {
-                int i = slim_film_fmt_first[film_fmt] - 1 + slim_film_frame_get(film_fmt);
-                MENU_SET_VALUE("%dx%d", film_size[i][0], film_size[i][1]);
+                int i = film_frame_index(film_fmt, slim_film_frame_get(film_fmt));
+                MENU_SET_VALUE("%dx%d", film_frames[i].w, film_frames[i].h);
             }
             MENU_SET_HELP("Size of the recorded picture (read-only).");
             MENU_SET_ENABLED(0);
@@ -6350,9 +6325,9 @@ static MENU_UPDATE_FUNC(slim_crop_ar_update)
         MENU_SET_ENABLED(0);
         return;
     }
-    MENU_SET_VALUE("%s", slim_film_frame_names[slim_film_fmt_first[fmt] - 1 + slim_film_frame_get(fmt)]);
-    MENU_SET_HELP("Frame inside the %s gate: Actual size or a crop.", slim_film_fmt_names[fmt]);
-    MENU_SET_ENABLED(slim_film_fmt_count[fmt] > 1);
+    MENU_SET_VALUE("%s", film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].frame);
+    MENU_SET_HELP("Frame inside the %s gate: Actual size or a crop.", film_formats[fmt].name);
+    MENU_SET_ENABLED(film_formats[fmt].count > 1);
 }
 
 static MENU_SELECT_FUNC(slim_crop_ar_select)
@@ -6639,7 +6614,7 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
         if (slot == 0)
         {
             int fmt = slim_film_sync();
-            snprintf(value, size, "%s", fmt >= 0 ? slim_film_fmt_labels[fmt] : "-");
+            snprintf(value, size, "%s", fmt >= 0 ? film_formats[fmt].label : "-");
         }
         else
         {
@@ -8626,7 +8601,7 @@ static void slim_film_label(char * buffer, int size)
 {
     int fmt = slim_film_active();
     if (fmt >= 0)
-        snprintf(buffer, size, "%s", slim_film_fmt_labels[fmt]);
+        snprintf(buffer, size, "%s", film_formats[fmt].label);
 }
 
 /* Display recording status in top info bar */
@@ -8788,7 +8763,7 @@ static LVINFO_UPDATE_FUNC(frame_info)
     if (patch_active && fmt >= 0)
     {
         snprintf(buffer, sizeof(buffer), "%s",
-            slim_film_frame_names[slim_film_fmt_first[fmt] - 1 + slim_film_frame_get(fmt)]);
+            film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].frame);
         int n = strlen(buffer);
         if (n > 5 && streq(buffer + n - 5, " Crop"))
             buffer[n - 5] = 0;

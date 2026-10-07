@@ -54,6 +54,7 @@
 #include <cropmarks.h>
 #include <vram.h>
 #include <screenshot.h>
+#include <film-formats.h>
 #include "../lv_rec/lv_rec.h"
 #include "edmac.h"
 #include "edmac-memcpy.h"
@@ -174,46 +175,7 @@ static CONFIG_INT("raw.res_x", resolution_index_x, 11);
 static CONFIG_INT("raw.res_x_fine", res_x_fine, 0);
 static CONFIG_INT("raw.aspect.ratio", aspect_ratio_index, 17);
 
-/* ---- Film Format presets ------------------------------------------------
- * Recording windows that match real film gates at 1:1 pixel scale on the
- * EOS M sensor (22.3 mm / 5184 px = ~4.30 um per pixel).
- * "Actual"  = the true physical gate size at 1:1.
- * "Crop"   = a smaller window, because the true gate would need more
- *             pixels than the camera can read out in a stable video mode.
- * The window is centered inside the current crop_rec 1:1 readout, so pick
- * the matching 1:1 crop mode (see 'mode' column).
- * Widths are multiples of 16 and heights are multiples of 4 (2 for the 1696, 1344
- * and larger widths), so film_align_res_y() leaves them unchanged and the
- * "Recorded Size" shown by crop_rec is exactly what is written.  If you edit a
- * height here, change film_size[] in crop_rec.c to match.
- */
-struct film_format
-{
-    const char * name;      /* menu text */
-    int w;                  /* target width  (pixels) */
-    int h;                  /* target height (pixels) */
-    const char * gate;      /* physical size, for the help text */
-    const char * mode;      /* crop_rec 1:1 mode needed */
-};
-
-static const struct film_format film_formats[] =
-{
-    { "OFF",                   0,    0, "",                                  "" },
-    { "A35 16:9 Crop",      1696,  954, "Academy 35mm gate width, cropped to 16:9",   "3x3 3:2 1736x1160" },
-    { "A35 1.85:1 Crop",    1696,  916, "Academy 35mm gate width, cropped to 1.85:1", "3x3 3:2 1736x1160" },
-    { "A35 2.35:1 Crop",    1696,  722, "Academy 35mm gate width, cropped to 2.35:1", "3x3 3:2 1736x1160" },
-    { "A35 Anamorphic 2x",  1376, 1152, "2x anamorphic gate (1.18:1), full sensor height", "3x3 3:2 1736x1160" },
-    { "A35 Anamorphic 1.33x",1536,1152, "1.33x anamorphic gate (4:3)",       "3x3 3:2 1736x1160" },
-    { "Super 16 2.35:1 Crop",2912,1238, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest" },
-    { "16mm 16:9 Crop",     2384, 1340, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440" },
-    { "16mm 1.85:1 Crop",   2384, 1288, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440" },
-    { "16mm 2.35:1 Crop",   2384, 1012, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440" },
-    { "Super 8 Actual",     1344,  930, "5.79x4.01mm gate",                  "1:1 3:2 1920x1280" },
-    { "Super 8 16:9 Crop",  1344,  756, "Super 8 gate width, cropped to 16:9","1:1 3:2 1920x1280" },
-    { "8mm Actual",         1040,  764, "4.5x3.3mm gate",                    "1:1 3:2 1920x1280" },
-    { "8mm 16:9 Crop",      1040,  584, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280" },
-};
-
+/* ---- Film Format presets: see src/film-formats.h (shared with crop_rec) ---- */
 static CONFIG_INT("raw.film.format", film_format_index, 0);
 
 /* The Movie menu Film Format / Frame rows (crop_rec, 1x1 mode) take priority when they
@@ -221,9 +183,9 @@ static CONFIG_INT("raw.film.format", film_format_index, 0);
 static int film_format_effective(void)
 {
     int f = crop_rec_film_format();
-    if (f > 0 && f < COUNT(film_formats))
+    if (f > 0 && f < COUNT(film_frames))
         return f;
-    return COERCE(film_format_index, 0, COUNT(film_formats) - 1);
+    return COERCE(film_format_index, 0, COUNT(film_frames) - 1);
 }
 
 static CONFIG_INT("raw.write.speed", measured_write_speed, 0);
@@ -944,8 +906,8 @@ void update_resolution_params()
     int film_idx = film_format_effective();
     if (film_idx > 0 && squeeze_factor == 1.0f)
     {
-        int fw = film_formats[film_idx].w;
-        int fh = film_formats[film_idx].h;
+        int fw = film_frames[film_idx].w;
+        int fh = film_frames[film_idx].h;
 
         if (fw > max_res_x)
         {
@@ -1410,7 +1372,7 @@ static MENU_UPDATE_FUNC(film_format_update)
     int from_movie_menu = crop_rec_film_format() > 0;
 
     if (from_movie_menu)
-        MENU_SET_VALUE("%s", film_formats[i].name);
+        MENU_SET_VALUE("%s", film_frames[i].name);
 
     if (i == 0)
     {
@@ -1424,20 +1386,20 @@ static MENU_UPDATE_FUNC(film_format_update)
     {
         MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Film Format needs a square-pixel 1:1 crop mode.");
     }
-    else if (film_formats[i].w > max_res_x || film_formats[i].h > max_res_y)
+    else if (film_frames[i].w > max_res_x || film_frames[i].h > max_res_y)
     {
         MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Too big for current mode (%dx%d). Use %s.",
-            max_res_x, max_res_y, film_formats[i].mode);
+            max_res_x, max_res_y, film_frames[i].mode);
     }
     else if (from_movie_menu)
     {
         MENU_SET_WARNING(MENU_WARN_ADVICE, "Set by Movie menu > Preset. Records %dx%d (%s).",
-            res_x, res_y, film_formats[i].gate);
+            res_x, res_y, film_frames[i].gate);
     }
     else
     {
         MENU_SET_HELP("%s. Records %dx%d at 1:1. Best in %s.",
-            film_formats[i].gate, res_x, res_y, film_formats[i].mode);
+            film_frames[i].gate, res_x, res_y, film_frames[i].mode);
     }
 }
 
@@ -4799,7 +4761,7 @@ static struct menu_entry raw_video_menu[] =
             {
                 .name = "Film Format",
                 .priv = &film_format_index,
-                .max = COUNT(film_formats) - 1,
+                .max = COUNT(film_frames) - 1,
                 .update = film_format_update,
                 .choices = CHOICES("OFF", "A35 16:9 Crop", "A35 1.85:1 Crop", "A35 2.35:1 Crop",
                                    "A35 Anamorphic 2x", "A35 Anamorphic 1.33x", "Super 16 2.35:1 Crop", "16mm 16:9 Crop", "16mm 1.85:1 Crop",
