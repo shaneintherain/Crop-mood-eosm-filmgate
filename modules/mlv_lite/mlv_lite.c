@@ -182,7 +182,10 @@ static CONFIG_INT("raw.aspect.ratio", aspect_ratio_index, 17);
  *             pixels than the camera can read out in a stable video mode.
  * The window is centered inside the current crop_rec 1:1 readout, so pick
  * the matching 1:1 crop mode (see 'mode' column).
- * Widths are multiples of 16; heights are aligned at runtime.
+ * Widths are multiples of 16 and heights are multiples of 4 (2 for the 1696, 1344
+ * and larger widths), so film_align_res_y() leaves them unchanged and the
+ * "Recorded Size" shown by crop_rec is exactly what is written.  If you edit a
+ * height here, change film_size[] in crop_rec.c to match.
  */
 struct film_format
 {
@@ -201,14 +204,14 @@ static const struct film_format film_formats[] =
     { "A35 2.35:1 Crop",    1696,  722, "Academy 35mm gate width, cropped to 2.35:1", "3x3 3:2 1736x1160" },
     { "A35 Anamorphic 2x",  1376, 1152, "2x anamorphic gate (1.18:1), full sensor height", "3x3 3:2 1736x1160" },
     { "A35 Anamorphic 1.33x",1536,1152, "1.33x anamorphic gate (4:3)",       "3x3 3:2 1736x1160" },
-    { "Super 16 2.35:1 Crop",2912,1239, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest" },
-    { "16mm 16:9 Crop",     2384, 1341, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440" },
-    { "16mm 1.85:1 Crop",   2384, 1289, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440" },
-    { "16mm 2.35:1 Crop",   2384, 1014, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440" },
-    { "Super 8 Actual",     1344,  931, "5.79x4.01mm gate",                  "1:1 3:2 1920x1280" },
+    { "Super 16 2.35:1 Crop",2912,1238, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest" },
+    { "16mm 16:9 Crop",     2384, 1340, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440" },
+    { "16mm 1.85:1 Crop",   2384, 1288, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440" },
+    { "16mm 2.35:1 Crop",   2384, 1012, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440" },
+    { "Super 8 Actual",     1344,  930, "5.79x4.01mm gate",                  "1:1 3:2 1920x1280" },
     { "Super 8 16:9 Crop",  1344,  756, "Super 8 gate width, cropped to 16:9","1:1 3:2 1920x1280" },
-    { "8mm Actual",         1040,  763, "4.5x3.3mm gate",                    "1:1 3:2 1920x1280" },
-    { "8mm 16:9 Crop",      1040,  585, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280" },
+    { "8mm Actual",         1040,  764, "4.5x3.3mm gate",                    "1:1 3:2 1920x1280" },
+    { "8mm 16:9 Crop",      1040,  584, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280" },
 };
 
 static CONFIG_INT("raw.film.format", film_format_index, 0);
@@ -226,6 +229,11 @@ static int film_format_effective(void)
 static CONFIG_INT("raw.write.speed", measured_write_speed, 0);
 static int measured_write_speed_thread[MAX_WRITER_THREADS] = {0};
 static int measured_compression_ratio = 0;
+/* For the recording-time pill only (the menu and pre-record keep using the values above):
+ * the compression ratio averaged over about a second, and the card's write speed over the
+ * last few seconds (MiB/s x100, like measured_write_speed).  0 = no measurement yet. */
+static volatile int pill_compression_ratio = 0;
+static int pill_write_speed = 0;
 
 static CONFIG_INT("raw.pre-record", pre_record, 0);
 static int pre_record_triggered = 0;    /* becomes 1 once you press REC twice */
@@ -1096,6 +1104,42 @@ static int predict_frames(int write_speed, int available_slots)
     float buffer_fill_time = available_slots * avg_frame_size / (float) buffer_fill_speed;
     int frames = buffer_fill_time * fps / 1000;
     return frames;
+}
+
+/* Same idea as predict_frames, for the recording-time pill.
+ * In lossless modes every captured frame is shrunk to its compressed size and the memory
+ * it gives back is handed to the next slot (see shrink_slot), so a free slot holds about
+ * max_frame_size / compressed_size frames, not one.  predict_frames counts one frame per
+ * slot, which underestimates the time left by roughly that factor.  Here the memory is
+ * counted in bytes, and the ratio is the smoothed one. */
+static int predict_frames_pill(int write_speed, int free_slots)
+{
+    int fps = fps_get_current_x1000();
+    if (fps == 0)
+        return INT_MAX;
+
+    int avg_frame_size;
+    float free_bytes;
+    if (OUTPUT_COMPRESSION)
+    {
+        int ratio = pill_compression_ratio ? pill_compression_ratio : get_estimated_compression_ratio();
+        avg_frame_size = frame_size_uncompressed / 100 * ratio;
+        free_bytes = (float) free_slots * max_frame_size;
+    }
+    else
+    {
+        avg_frame_size = max_frame_size;
+        free_bytes = (float) free_slots * max_frame_size;
+    }
+
+    int buffer_fill_speed = avg_frame_size / 1000 * fps - write_speed;
+    if (buffer_fill_speed <= 0)
+        return INT_MAX;
+
+    float frames = free_bytes / (float) buffer_fill_speed * fps / 1000;
+    if (frames > 100000)
+        return INT_MAX;
+    return (int) frames;
 }
 
 /* how many frames can we record with current settings, without dropping? */
@@ -2174,13 +2218,16 @@ static int update_status(char * buffer, int buffer_size)
     int t = (r * 1000) / fps;           /* recorded time - truncated */
 
     /* estimate how many number of frames we can record from now on */
-    int predicted_frames_left = predict_frames(
-        measured_write_speed * 1024 / 105 * 1024,
+    /* (recent write speed if we have one, else the average of the whole clip;
+     *  5% safety margin, as before) */
+    int speed_for_pill = pill_write_speed ? pill_write_speed : measured_write_speed;
+    int predicted_frames_left = predict_frames_pill(
+        speed_for_pill * 1024 / 105 * 1024,
         count_free_slots()
     );
 
-    /* estimate time left */
-    int time_left = predicted_frames_left * 1000 / fps;
+    /* estimate time left (only meaningful below 10000 frames, see below) */
+    int time_left = (predicted_frames_left > 10000) ? 9999 : predicted_frames_left * 1000 / fps;
 
     /* string length */
     int len = 0;
@@ -2248,7 +2295,7 @@ static int update_status(char * buffer, int buffer_size)
     {
         /* recording stopped - show number of frames */ 
         len = snprintf(buffer, buffer_size, "%d frames", frame_count - 1);
-        return COLOR_PEN_NAVY;
+        return COLOR_RED;   /* recording stopped because the buffer filled: keep it an alarm */
     }
 }
 
@@ -2302,6 +2349,28 @@ void show_recording_status()
                 measured_write_speed_thread[thread] = speed[thread];
                 measured_write_speed += measured_write_speed_thread[thread];
                 speed[thread] /= 10;
+            }
+        }
+
+        /* recent write speed for the pill: speed over the time since the last check,
+         * averaged over about four checks.  Needs at least half a second of actual
+         * writing, so short intervals are skipped.  Measures thread 0 (single card). */
+        {
+            static int64_t last_total = 0;
+            static int last_wtime = 0;
+            if (written_total[0] < last_total || writing_time[0] < last_wtime)
+            {
+                /* new clip */
+                last_total = 0;
+                last_wtime = 0;
+            }
+            int dt = writing_time[0] - last_wtime;
+            if (dt >= 500)
+            {
+                int now = (int)((written_total[0] - last_total) / 1024) * 100 / dt;
+                pill_write_speed = pill_write_speed ? (pill_write_speed * 3 + now) / 4 : now;
+                last_total = written_total[0];
+                last_wtime = writing_time[0];
             }
         }
     }
@@ -3404,6 +3473,11 @@ static void compress_task()
             if (compressed_size > 0)
             {
                 measured_compression_ratio = (compressed_size/128) * 100 / (frame_size_uncompressed/128);
+
+                /* smoothed copy for the pill: about 1 s at 24 fps */
+                pill_compression_ratio = pill_compression_ratio
+                    ? (pill_compression_ratio * 23 + measured_compression_ratio) / 24
+                    : measured_compression_ratio;
             }
         }
         else
@@ -3937,6 +4011,7 @@ void raw_video_rec_task(uint32_t thread)
     
     /* locals */
     FILE* f = 0;
+    int named_clip = 0;      /* set once this run has picked a new movie file name */
     int last_block_size = 0; /* for detecting early stops */
     int liveview_hacked = 0;
     int last_write_timestamp = 0;    /* last FIO_WriteFile call */        
@@ -3969,6 +4044,8 @@ void raw_video_rec_task(uint32_t thread)
         }
         mlv_chunk = 0;
         buffer_full = 0;
+        pill_compression_ratio = 0;   /* start the pill's averages fresh for each clip */
+        pill_write_speed = 0;
 
         if (lv_dispsize == 10)
         {
@@ -4067,6 +4144,7 @@ void raw_video_rec_task(uint32_t thread)
 
         /* create output file */
         raw_movie_filename = get_next_raw_movie_file_name();
+        named_clip = 1;
         strcpy(chunk_filename[thread], raw_movie_filename);
         f = FIO_CreateFile(raw_movie_filename);
         if (!f)
@@ -4511,8 +4589,20 @@ cleanup:
     if (f) finish_chunk(f, thread);
     if (!written_total[thread])
     {
-        FIO_RemoveFile(raw_movie_filename);
-        raw_movie_filename[0] = 0;
+        /* Only touch the movie file name if this run actually chose one.  An early
+         * abort ("Raw detect error", "LiveView stabilizing", ...) jumps here before
+         * a name is picked, when raw_movie_filename is still NULL or still names the
+         * previous (good) clip: removing it would delete that clip, or write to NULL. */
+        if (named_clip)
+        {
+            FIO_RemoveFile(raw_movie_filename);
+            raw_movie_filename[0] = 0;
+        }
+        else if (f)
+        {
+            /* second (SD card) writer thread: remove only its own empty chunk */
+            FIO_RemoveFile(chunk_filename[thread]);
+        }
     }
     
     if (thread == 0) /* Only do this part of cleanup on main thread */
@@ -5091,8 +5181,10 @@ static int raw_rec_should_preview(void)
     /* keep x10 mode unaltered, for focusing */
     if (lv_dispsize == 10) return 0;
 
-    /* EOS M Settings → INFO Button = framing: toggle ML framing vs real-time LV. */
-    if (cam_eos_m && INFO_button == 6)
+    /* EOS M Settings → INFO Button = Framing: toggle ML framing vs real-time LV.
+     * Framing is entry 5 in crop_rec's INFO list (OFF, Histogram, Waveform, Zebras,
+     * False Color, Framing, Quick Panel) - keep this number in step with crop_rec.c. */
+    if (cam_eos_m && INFO_button == 5)
         return slim_info_framing_active;
 
     /* framing is incorrect in modes with high resolutions
