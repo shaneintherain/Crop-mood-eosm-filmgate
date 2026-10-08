@@ -21,6 +21,15 @@
 #include "../dual_iso/dual_iso.h"
 #include "histogram.h"
 
+#ifdef CONFIG_EOSM
+/* Modules are built without the platform consts.h, so declare what the
+ * EOS M Live View guard needs. (EOS M firmware 2.0.2 only.) */
+int liveview_display_idle();
+#ifndef YUV422_LV_BUFFER_DISPLAY_ADDR
+#define YUV422_LV_BUFFER_DISPLAY_ADDR (*(uint32_t*)(0x3E650+0x118))
+#endif
+#endif
+
 #undef CROP_DEBUG
 
 #ifdef CROP_DEBUG

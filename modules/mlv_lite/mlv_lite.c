@@ -131,6 +131,11 @@ extern int WEAK_FUNC(fullresmode) crop_preset_1x3_res;
 /* camera-specific tricks */
 static int cam_eos_m = 0;
 
+#ifdef CONFIG_EOSM
+/* defined further down; also used by the record-stop cleanup */
+static int preview_dirty;
+#endif
+
 
 /**
  * resolution (in pixels) should be multiple of 16 horizontally (see http://www.magiclantern.fm/forum/index.php?topic=5839.0)

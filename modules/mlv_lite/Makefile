@@ -3,6 +3,9 @@
 MODULE_NAME=mlv_lite
 MODULE_OBJS=mlv_lite.o ../mlv_rec/mlv.o ../silent/lossless.o
 
+# EOS M only build: compile the EOS M code paths (see crop_rec/Makefile)
+MODULE_CFLAGS += -DCONFIG_EOSM=1
+
 # include modules environment
 include ../Makefile.modules
 
