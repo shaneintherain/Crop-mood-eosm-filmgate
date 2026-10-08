@@ -62,6 +62,18 @@ void draw_false_downsampled( void )
     uint8_t* fc = false_colour[falsecolor_palette];
 
     int off = get_y_skip_offset_for_overlays();
+
+    /* TEMPORARY DIAGNOSTIC (remove once HDMI false color is fixed): shows the
+     * geometry assumed for the HDMI output so it can be compared with the
+     * real image. */
+    if (EXT_MONITOR_CONNECTED)
+    {
+        extern int hdmi_code;
+        bmp_printf(FONT_SMALL, 10, 60, "H%d LV%dx%d fps%d res%d crop%d off%d y%d-%d",
+            hdmi_code, vram_lv.width, vram_lv.height, video_mode_fps,
+            video_mode_resolution, video_mode_crop, off, os.y0, os.y_max);
+    }
+
     for(int y = os.y0 + off; y < os.y_max - off; y += 2 )
     {
         uint32_t * const v_row = (uint32_t*)( lvram        + BM2LV_R(y)    );  // 2 pixels
