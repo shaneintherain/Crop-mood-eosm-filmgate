@@ -264,116 +264,20 @@ static struct menu_entry hdmi_out_menu[] =
 };
 
 static unsigned int hdmi_out_init()
-{    
-    if (is_camera("700D", "1.1.5"))
-    {
-        Set_HDMI_Code = 0xFF3303F8;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x648B0;
-    }
-    
-    else if (is_camera("650D", "1.0.4"))
-    {
-        Set_HDMI_Code = 0xFF32D9D4;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x63F7C;
-    }
-    
-    else if (is_camera("600D", "1.0.2"))
-    {
-        Set_HDMI_Code = 0xFF1ED008;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x2C4C0; 
-    }
-
-    else if (is_camera("550D", "1.0.9"))
-    {
-        Set_HDMI_Code = 0xFF1CD0D0;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x3BC60; 
-    }
-
-    else if (is_camera("500D", "1.1.1"))
-    {
-        Set_HDMI_Code = 0xFF19C840;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x32474; 
-    }
-
-    else if (is_camera("100D", "1.0.1"))
-    {
-        Set_HDMI_Code = 0xFF32374C;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0xA3C0C;
-    }
-
-    else if (is_camera("1200D", "1.0.2"))
-    {
-        Set_HDMI_Code = 0xFF2A7CB0;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x2E148;
-    }
-    
-    else if (is_camera("EOSM", "2.0.2"))
+{
+    if (is_camera("EOSM", "2.0.2"))
     {
         Set_HDMI_Code = 0xFF331838;
         EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x821CC;
     }
 
-    else if (is_camera("EOSM2", "1.0.4"))
-    {
-        Set_HDMI_Code = 0xFF3418F4;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0xD75C4;
-    }
-    
-    else if (is_camera("6D", "1.1.6"))
-    {
-        Set_HDMI_Code = 0xFF3223C0;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0xAECA4;
-    }
-    
-    else if (is_camera("5D2", "2.1.2"))
-    {
-        Set_HDMI_Code = 0xFF1B027C;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x34384;
-    }
-    
-    else if (is_camera("5D3", "1.1.3"))
-    {
-        Set_HDMI_Code = 0xFF2F7740;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x5198C; 
-    }
-
-    else if (is_camera("5D3", "1.2.3"))
-    {
-        Set_HDMI_Code = 0xFF2FBFC8;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x519E4; 
-    }
-
-    else if (is_camera("50D", "1.0.9"))
-    {
-        Set_HDMI_Code = 0xFF19C840;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x32474;
-    }
-
-    else if (is_camera("60D", "1.1.1"))
-    {
-        Set_HDMI_Code = 0xFF1D0B98;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0x49D08;
-    }
-
-    else if (is_camera("70D", "1.1.2"))
-    {
-        Set_HDMI_Code = 0xFF3369DC;
-        EDID_HDMI_INFO = (struct EDID_HDMI_INFO *) 0xD2264; 
-    }
-
-    /* hide 1080p24 for not supported models */
-    if (!is_camera("5D3", "1.2.3"))
-    {
-        hdmi_out_menu[0].children[0].max = 2;
-        if (output_resolution == 3) output_resolution = 0;
-    }
+    /* hide 1080p24 (only supported on the 5D3, which is no longer part of this build) */
+    hdmi_out_menu[0].children[0].max = 2;
+    if (output_resolution == 3) output_resolution = 0;
 
     if (Set_HDMI_Code)
     {
-        if (is_camera("EOSM", "2.0.2"))
-            menu_add("Settings", hdmi_out_menu_custom, COUNT(hdmi_out_menu_custom));
-        else
-            menu_add("Display", hdmi_out_menu, COUNT(hdmi_out_menu));
+        menu_add("Settings", hdmi_out_menu_custom, COUNT(hdmi_out_menu_custom));
     }
     else
     {
@@ -381,15 +285,8 @@ static unsigned int hdmi_out_init()
         return 1;
     }
 
-    if (is_camera("EOSM", "2.0.2"))
-    {
-        /* Cable owns ON/OFF; keep hook armed for the next plug. */
-        hdmi_slim_sync_connection();
-    }
-    else if (hdmi_patch_enabled && hdmi_output_patch_status == HDMI_NOT_PATCHED)
-    {
-        patch_HDMI_output();
-    }
+    /* Cable owns ON/OFF; keep hook armed for the next plug. */
+    hdmi_slim_sync_connection();
 
     return 0;
 }

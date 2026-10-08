@@ -82,58 +82,6 @@ static void decompress_init();
 
 int lossless_init()
 {
-    if (is_camera("5D3", "1.1.3"))
-    {
-        /* ProcessTwoInTwoOutLosslessPath, 5D3 1.1.3 */
-        TTL_SetArgs     = (void *) 0xFF32330C;  /* fills TTL_Args struct; PictureSize(Mem1ToRaw) */
-        TTL_Prepare     = (void *) 0xFF3D4680;  /* called right after ProcessTwoInTwoOutLosslessPath(R) Start; */
-                                                /* calls [TTL] GetPathResources and sets up the encoder for RAW/SRAW/MRAW */
-        TTL_RegisterCBR = (void *) 0xFF3D3774;  /* RegisterTwoInTwoOutLosslessPathCompleteCBR */
-        TTL_SetFlags    = (void *) 0xFF32B418;  /* called next, with PictureType as arguments */
-        TTL_Start       = (void *) 0xFF3D46F0;  /* called next; starts the EDmac transfers */
-        TTL_Stop        = (void *) 0xFF3D4728;  /* called right after sssStopMem1ToRawPath */
-        TTL_Finish      = (void *) 0xFF3D4760;  /* called next; calls UnlockEngineResources and returns output size from JpCoreCompleteCBR */
-    }
-
-    if (is_camera("5D3", "1.2.3"))
-    {
-        /* ProcessTwoInTwoOutLosslessPath, 5D3 1.2.3 */
-        TTL_SetArgs     = (void *) 0xFF327DE8;  /* fills TTL_Args struct; PictureSize(Mem1ToRaw) */
-        TTL_Prepare     = (void *) 0xFF3DD574;  /* called right after ProcessTwoInTwoOutLosslessPath(R) Start; */
-                                                /* calls [TTL] GetPathResources and sets up the encoder for RAW/SRAW/MRAW */
-        TTL_RegisterCBR = (void *) 0xFF3DC668;  /* RegisterTwoInTwoOutLosslessPathCompleteCBR */
-        TTL_SetFlags    = (void *) 0xFF32FF2C;  /* called next, with PictureType as arguments */
-        TTL_Start       = (void *) 0xFF3DD5E4;  /* called next; starts the EDmac transfers */
-        TTL_Stop        = (void *) 0xFF3DD61C;  /* called right after sssStopMem1ToRawPath */
-        TTL_Finish      = (void *) 0xFF3DD654;  /* called next; calls UnlockEngineResources and returns output size from JpCoreCompleteCBR */
-    }
-
-    if (is_camera("700D", "1.1.5"))
-    {
-        /* ProcessTwoInTwoOutJpegath, 700D 1.1.5 */
-        TTL_SetArgs     = (void *) 0xFF35F510;  /* fills TTJ_Args struct; PictureSize(Mem1ToRaw) */
-        TTL_Prepare     = (void *) 0xFF424BA4;  /* called right after ProcessTwoInTwoOutJpegath(R) Start(%d); */
-                                                /* calls [TTJ] GetPathResources and sets up the encoder for RAW */
-        TTL_RegisterCBR = (void *) 0xFF423B88;  /* RegisterTwoInTwoOutJpegPathCompleteCBR */
-        TTL_SetFlags    = (void *) 0xFF36B2D8;  /* alternate StartTwoInTwoOutJpegPath http://www.magiclantern.fm/forum/index.php?topic=18443.msg188721#msg188721 */
-        TTL_Start       = (void *) 0xFF424C4C;  /* called next; starts the EDmac transfers */
-        TTL_Stop        = (void *) 0xFF423DD4;  /* called right after sssStopMem1ToRawPath */
-        TTL_Finish      = (void *) 0xFF424CBC;  /* called next; calls UnlockEngineResources and returns output size from JpCoreCompleteCBR */
-    }
-
-    if (is_camera("650D", "1.0.4"))
-    {
-        /* ProcessTwoInTwoOutJpegath, 650D 1.0.4 */
-        TTL_SetArgs     = (void *) 0xFF35C9C0;  /* fills TTJ_Args struct; PictureSize(Mem1ToRaw) */
-        TTL_Prepare     = (void *) 0xFF4210BC;  /* called right after ProcessTwoInTwoOutJpegath(R) Start(%d); */
-                                                /* calls [TTJ] GetPathResources and sets up the encoder for RAW */
-        TTL_RegisterCBR = (void *) 0xFF4200A0;  /* RegisterTwoInTwoOutJpegPathCompleteCBR */
-        TTL_SetFlags    = (void *) 0xFF368788;  /* alternate StartTwoInTwoOutJpegPath http://www.magiclantern.fm/forum/index.php?topic=18443.msg188721#msg188721 */
-        TTL_Start       = (void *) 0xFF421164;  /* called next; starts the EDmac transfers */
-        TTL_Stop        = (void *) 0xFF4202EC;  /* called right after sssStopMem1ToRawPath */
-        TTL_Finish      = (void *) 0xFF4211D4;  /* called next; calls UnlockEngineResources and returns output size from JpCoreCompleteCBR */
-    }
-
     if (is_camera("EOSM", "2.0.2"))
     {
         /* ProcessTwoInTwoOutJpegath, EOSM 2.0.2 */
@@ -147,48 +95,9 @@ int lossless_init()
         TTL_Finish      = (void *) 0xFF429328;  /* called next; calls UnlockEngineResources and returns output size from JpCoreCompleteCBR */
     }
 
-    if (is_camera("100D", "1.0.1"))
-    {
-        /* ProcessTwoInTwoOutJpegath, 100D 1.0.1 */
-        TTL_SetArgs     = (void *) 0xFF3647D0;  /* fills TTJ_Args struct; PictureSize(Mem1ToRaw) */
-        TTL_Prepare     = (void *) 0xFF42Bf8C;  /* called right after ProcessTwoInTwoOutJpegath(R) Start(%d); */
-                                                /* calls [TTJ] GetPathResources and sets up the encoder for RAW */
-        TTL_RegisterCBR = (void *) 0xFF42AF70;  /* RegisterTwoInTwoOutJpegPathCompleteCBR */
-        TTL_SetFlags    = (void *) 0xFF363148;  /* called next, with PictureType as arguments */ 
-        TTL_Start       = (void *) 0xFF42c034;  /* called next; starts the EDmac transfers */
-        TTL_Stop        = (void *) 0xFF42B1BC;  /* called right after sssStopMem1ToRawPath */
-        TTL_Finish      = (void *) 0xFF42C0A4;  /* called next; calls UnlockEngineResources and returns output size from JpCoreCompleteCBR */
-    }
-
-    if (is_camera("6D", "1.1.6"))
-    {
-        /* ProcessTwoInTwoOutLosslessPath, 6D 1.1.6 */
-        TTL_SetArgs     = (void *) 0xFF3491C8;  /* fills TTL_Args struct; PictureSize(Mem1ToRaw) */
-        TTL_Prepare     = (void *) 0xFF4129BC;  /* called right after ProcessTwoInTwoOutLosslessPath(R) Start; */
-                                                /* calls [TTL] GetPathResources and sets up the encoder for RAW/SRAW/MRAW */
-        TTL_RegisterCBR = (void *) 0xFF411A44;  /* RegisterTwoInTwoOutLosslessPathCompleteCBR */
-        TTL_SetFlags    = (void *) 0xFF359C78;  /* called next, with PictureType as arguments */
-        TTL_Start       = (void *) 0xFF412A2C;  /* called next; starts the EDmac transfers */
-        TTL_Stop        = (void *) 0xFF412A64;  /* called right after sssStopMem1ToRawPath */
-        TTL_Finish      = (void *) 0xFF412A9C;  /* called next; calls UnlockEngineResources and returns output size from JpCoreCompleteCBR */
-    }
-
-    if (is_camera("70D", "1.1.2"))
-    {
-        /* ProcessTwoInTwoOutLosslessPath, 70D 1.1.2 */
-        TTL_SetArgs     = (void *) 0xFF362174;  /* fills TTL_Args struct; PictureSize(Mem1ToRaw) */
-        TTL_Prepare     = (void *) 0xFF438404;  /* called right after ProcessTwoInTwoOutLosslessPath(R) Start; */
-                                                /* calls [TTL] GetPathResources and sets up the encoder for RAW/SRAW/MRAW */
-        TTL_RegisterCBR = (void *) 0xFF43748C;  /* RegisterTwoInTwoOutLosslessPathCompleteCBR */
-        TTL_SetFlags    = (void *) 0xFF372AE8;  /* called next, with PictureType as arguments */
-        TTL_Start       = (void *) 0xFF438474;  /* called next; starts the EDmac transfers */
-        TTL_Stop        = (void *) 0xFF4384AC;  /* called right after sssStopMem1ToRawPath */
-        TTL_Finish      = (void *) 0xFF4384E4;  /* called next; calls UnlockEngineResources and returns output size from JpCoreCompleteCBR */
-    }
-
     lossless_sem = create_named_semaphore(0, 0);
     
-    if (is_camera("700D", "*") || is_camera("650D", "*") || is_camera("EOSM", "*") || is_camera("100D", "*"))
+    /* EOS M */
     {
         uint32_t resources[] = {
             0x00000 | edmac_channel_to_index(edmac_write_chan),
@@ -211,50 +120,7 @@ int lossless_init()
 
         TTL_ResLock = CreateResLockEntry(resources, COUNT(resources));
     }
-    else if (is_camera("5D3", "*") || is_camera("6D", "*"))
-    {
-        uint32_t resources[] = {
-            0x00000 | edmac_channel_to_index(edmac_write_chan),
-            0x10000 | edmac_channel_to_index(edmac_read_chan),
-            0x30001,    /* Read connection 1 (uncompressed input) */
-            0x2002d,    /* Write connection 45 (compressed output) */
-          //0x20016,    /* Write connection 22 (for WR2 - not used) */
-            0x50034,
-            0x5002d,
-            0x50010,
-            0x90001,
-            0x230000,
-            0x160000,
-            0x260000,
-            0x260001,
-            0x260002,
-            0x260003,
-        };
-        
-        TTL_ResLock = CreateResLockEntry(resources, COUNT(resources));
-    }
-    else if (is_camera("70D", "*"))
-    {
-        uint32_t resources[] = {
-            0x00000 | edmac_channel_to_index(edmac_write_chan),
-            0x10000 | edmac_channel_to_index(edmac_read_chan),
-            0x30001,    /* Read connection 1 (uncompressed input) */
-            0x2002d,    /* Write connection 45 (compressed output) */
-          //0x20016,    /* Write connection 22 (for WR2 - not used) */
-            0x50034,
-          //0x5002d,    /* ArcziPL: workaround, TTL_Prepare stucks otherwise if called in LV */
-          //0x50010,    /* ArcziPL: workaround, TTL_Prepare stucks otherwise if compiled with FEATURE_FPS_OVERRIDE defined */
-            0x90001,
-            0x230000,
-            0x160000,
-            0x260000,
-            0x260001,
-            0x260002,
-            0x260003,
-        };
-        
-        TTL_ResLock = CreateResLockEntry(resources, COUNT(resources));
-    }
+
     
     /* optionally initialize the decompression routines */
     decompress_init();
@@ -319,31 +185,7 @@ int lossless_compress_raw_rectangle(
     /* configure the processing modules */
     TTL_Prepare(TTL_ResLock, &TTL_Args);
 
-    if (is_camera("6D", "*") ||
-        is_camera("650D", "*"))
-    {
-        /* not sure what exactly these do, but they seem to be required to get correct image
-         * taken from register log diffs: http://www.magiclantern.fm/forum/index.php?topic=18443.msg197987#msg197987 */
-        EngDrvOut(0xC0F37610, 0);       /* 0x11 on 650D, 0 on all other D5 (not sure if needed) */
-        EngDrvOut(0xC0F37628, 0x71000); /* 72000 on 650D, 71000 on all other D5 */
-        EngDrvOut(0xC0F3762C, 0x71000); /* 72000 on 650D, 71000 on all other D5 */
-        EngDrvOut(0xC0F37630, 0x71000); /* 72000 on 650D, 71000 on all other D5 */
-        EngDrvOut(0xC0F37634, 0x71000); /* 72000 on 6D and 650D, 71000 on all other D5 */
-        EngDrvOut(0xC0F3763C, 0);       /* 0x1000000 on 6D and 650D, 0 on all other D5 */
-        EngDrvOut(0xC0F37640, 0);       /* 0x2000000 on 6D and 650D, 0 on all other D5 */
-        EngDrvOut(0xC0F37644, 0);       /* 0x4000000 on 6D and 650D, 0 on all other D5 */
-        EngDrvOut(0xC0F37648, 0);       /* 0x8000000 on 6D and 650D, 0 on all other D5 */
-    }
-
-    if (is_camera("70D", "*"))
-    {
-        /* 70D is different */
-        // EngDrvOut(0xC0F373F4, 0x00000000);  /* alternative fixing method; 0x7FFF7FFF on 70D */
-        EngDrvOut(0xC0F373B4, 0);  
-        EngDrvOut(0xC0F37300, PACK32(width    - 1,  height/2  - 1));  /* 0xE7B0ADF on 70D */
-        EngDrvOut(0xC0F373E8, PACK32(width    - 1,  height/2  - 1));  /* 0xE7B0ADF on 70D */
-    }
-    else if (is_camera("DIGIC", "5"))
+    if (is_camera("DIGIC", "5"))
     {
         /* all other D5 models use this register instead */
         /* the hardware encoder (and other image processing modules that might be used)
@@ -482,60 +324,12 @@ static struct semaphore *decompress_sem = NULL;
 static void decompress_init()
 {
     /* now check for the needed decompression functions */
-    if (is_camera("5D3", "1.1.3"))
-    {
-        Setup_DecodeLosslessRawPath = (void *) 0xFF3CB010;
-        Start_DecodeLosslessPath    = (void *) 0xFF3CB0D8;
-        Cleanup_DecodeLosslessPath  = (void *) 0xFF3CB23C;
-    }
-
-    if (is_camera("5D3", "1.2.3"))
-    {
-        Setup_DecodeLosslessRawPath = (void *) 0xff3d3f04;
-        Start_DecodeLosslessPath    = (void *) 0xff3d3fcc;
-        Cleanup_DecodeLosslessPath  = (void *) 0xff3d4130;
-    }
-    
-    if (is_camera("700D", "1.1.5"))
-    {
-        Setup_DecodeLosslessRawPath = (void *) 0xFF4294DC;
-        Start_DecodeLosslessPath    = (void *) 0xFF4295A4;
-        Cleanup_DecodeLosslessPath  = (void *) 0xFF429708;
-    }
-
-    if (is_camera("650D", "1.0.4"))
-    {
-        Setup_DecodeLosslessRawPath = (void *) 0xFF4259F4;
-        Start_DecodeLosslessPath    = (void *) 0xFF425ABC;
-        Cleanup_DecodeLosslessPath  = (void *) 0xFF425C20;
-    }
 
     if (is_camera("EOSM", "2.0.2"))
     {
         Setup_DecodeLosslessRawPath = (void *) 0xFF42DBD0;
         Start_DecodeLosslessPath    = (void *) 0xFF42DC98;
         Cleanup_DecodeLosslessPath  = (void *) 0xFF42DDFC;
-    }
-
-    if (is_camera("100D", "1.0.1"))
-    {
-        Setup_DecodeLosslessRawPath = (void *) 0xFF42F4C8;
-        Start_DecodeLosslessPath    = (void *) 0xFF42F590;
-        Cleanup_DecodeLosslessPath  = (void *) 0xFF42F6F4;
-    }
-
-    if (is_camera("6D", "1.1.6"))
-    {
-        Setup_DecodeLosslessRawPath = (void *) 0xFF409218;
-        Start_DecodeLosslessPath    = (void *) 0xFF4092E0;
-        Cleanup_DecodeLosslessPath  = (void *) 0xFF409444;
-    }
-
-    if (is_camera("70D", "1.1.2"))
-    {
-        Setup_DecodeLosslessRawPath = (void *) 0xFF4309A4;
-        Start_DecodeLosslessPath    = (void *) 0xFF430A6C;
-        Cleanup_DecodeLosslessPath  = (void *) 0xFF430BD0;
     }
 
     /* all functions known? having the semaphore is an indicator we can decompress */

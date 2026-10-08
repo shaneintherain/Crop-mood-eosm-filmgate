@@ -642,13 +642,6 @@ static struct menu_entry sd_uhs_menu_custom[] =
 
 static unsigned int sd_uhs_init()
 {
-    if (is_camera("5D3", "*"))
-    {
-        static const char * sd_choices_5d3[] = {"OFF", "160MHz", "192MHz (H)", "240MHz (H)"};
-        static const char sd_choices_help2_5d3[] = "\n"" \n""(H): Hyprid clock speed. Will use 192MHz for Write, 160MHz for Read.\n""(H): Hyprid clock speed. Will use 240MHz for Write, 160MHz for Read.\n";
-        sd_uhs_menu[0].choices = sd_choices_5d3;
-        sd_uhs_menu[0].help2   = sd_choices_help2_5d3;
-    }
     
     if (is_camera("EOSM", "*") || is_camera("EOSM2", "*") || is_camera("100D", "*"))
     {
@@ -663,124 +656,6 @@ static unsigned int sd_uhs_init()
     else
         menu_add("Movie", sd_uhs_menu, COUNT(sd_uhs_menu));
     
-    if (is_camera("5D3", "1.1.3"))
-    {
-        /* sd_setup_mode:
-         * sdSendCommand: CMD%d  Retry=... -> 
-         * sd_configure_device(1) (called after a function without args) ->
-         * sd_setup_mode(dev) if dev is 1 or 2 ->
-         * logging hooks are placed both at start of sd_setup_mode and before the case switch
-         */
-        CID_hook            = 0xff6aed04;
-        sd_setup_mode       = 0xFF47B4C0;   /* start of the function; not strictly needed on 5D3 */
-        sd_setup_mode_in    = 0xFF47B4EC;   /* after loading sd_mode in R0, before the switch */
-        sd_setup_mode_reg   = 0;            /* switch variable is in R0 */
-        sd_set_function     = 0xFF6ADE34;   /* sdSetFunction */
-        sd_enable_18V       = 0xFF47B4B8;   /* 5D3 only (Set 1.8V Signaling) */
-        sd_write_clock      = 0xff6b11f4;   /* NOTE: this is sdDMAWriteBlk, not sdWriteBlk. Patching sdWriteBlk causes CACHE_COLLISION */
-        sd_read_clock       = 0xff6b16ac;   /* sdReadBlk */
-        SD_ReConfiguration  = (void *) 0xFF6AFF1C;
-        
-        if (sd_overclock)
-        {
-            sd_overclock_task();
-            turned_on = 1;
-        }
-    }
-    
-    if (is_camera("5D3", "1.2.3"))
-    {
-        CID_hook            = 0xff6b9ea0;
-        sd_setup_mode       = 0xFF484474;
-        sd_setup_mode_in    = 0xFF4844A0;
-        sd_setup_mode_reg   = 0;
-        sd_set_function     = 0xFF6B8FD0;
-        sd_enable_18V       = 0xFF48446C;   /* 5D3 only (Set 1.8V Signaling) */
-        sd_write_clock      = 0xff6bc674;   /* sdWriteBlk */
-        sd_read_clock       = 0xff6bc848;   /* sdReadBlk */
-        SD_ReConfiguration  = (void *) 0xFF6BB0B8;
-        
-        if (sd_overclock)
-        {
-            sd_overclock_task();
-            turned_on = 1;
-        }
-    }
-    
-    if (is_camera("6D", "1.1.6"))
-    {
-        CID_hook            = 0xff7901e4;
-        sd_setup_mode       = 0xFF325A20;
-        sd_setup_mode_in    = 0xFF325AA8;
-        sd_setup_mode_reg   = 1;            /* switch variable is in R1 (likely all D5 other than 5D3) */
-        sd_set_function     = 0xFF78F308;
-        sd_write_clock      = 0xff7929d4;   /* sdWriteBlk */
-        sd_read_clock       = 0xff792cb8;   /* sdReadBlk */
-        SD_ReConfiguration  = (void *) 0xFF791408;
-        
-        if (sd_overclock)
-        {
-            sd_overclock_task();
-            turned_on = 1;
-        }
-    }
-
-    if (is_camera("700D", "1.1.5"))
-    {
-        CID_hook            = 0xff749e7c;
-        sd_setup_mode       = 0xFF3376E8;   /* start of the function */
-        sd_setup_mode_in    = 0xFF337770;   /* right before the switch */
-        sd_setup_mode_reg   = 1;            /* switch variable is in R1 (likely all D5 other than 5D3) */
-        sd_set_function     = 0xFF748F18;
-        sd_write_clock      = 0xff74c674;   /* sdWriteBlk */
-        sd_read_clock       = 0xff74c958;   /* sdReadBlk */
-        SD_ReConfiguration  = (void *) 0xFF74B35C;
-
-        if (sd_overclock)
-        {
-            sd_overclock_task();
-            turned_on = 1;
-        }
-    }
-    
-    if (is_camera("650D", "1.0.4"))
-    {
-        CID_hook            = 0xff740bfc;
-        sd_setup_mode       = 0xFF334C4C;
-        sd_setup_mode_in    = 0xFF334CD4;
-        sd_setup_mode_reg   = 1;
-        sd_set_function     = 0xFF73FD20;
-        sd_write_clock      = 0xff7433ec;   /* sdWriteBlk */
-        sd_read_clock       = 0xff7436d0;   /* sdReadBlk */
-        SD_ReConfiguration  = (void *) 0xFF7420D4;
-        
-        if (sd_overclock)        
-        {
-            sd_overclock_task();
-            turned_on = 1;
-        }
-    }
-    
-    if (is_camera("100D", "1.0.1"))
-    {
-        CID_hook            = 0xff653f80;
-        GPIO                = 0xff335a34;
-        GPIO_cmp            = 0xff335a3c;
-        sd_setup_mode       = 0xFF3355B0;
-        sd_setup_mode_in    = 0xFF335648;
-        sd_setup_mode_reg   = 1;
-        sd_set_function     = 0xFF6530A4;
-        sd_write_clock      = 0xff656770;   /* sdWriteBlk */
-        sd_read_clock       = 0xff656a54;   /* sdReadBlk */
-        SD_ReConfiguration  = (void *) 0xFF655458;
-        
-        if (sd_overclock)        
-        {
-            sd_overclock_task();
-            turned_on = 1;
-        }
-    }
-    
     if (is_camera("EOSM", "2.0.2"))
     {
         CID_hook            = 0xff63fe3c;
@@ -793,44 +668,6 @@ static unsigned int sd_uhs_init()
         sd_write_clock      = 0xff64262c;   /* sdWriteBlk */
         sd_read_clock       = 0xff642910;   /* sdReadBlk */
         SD_ReConfiguration  = (void *) 0xFF641314;
-        
-        if (sd_overclock)
-        {
-            sd_overclock_task();
-            turned_on = 1;
-        }
-    }
-    
-    if (is_camera("EOSM2", "1.0.3"))
-    {
-        CID_hook            = 0xff693c58;
-        GPIO                = 0xff349a10;
-        GPIO_cmp            = 0xff349a18;
-        sd_setup_mode       = 0xff349550;
-        sd_setup_mode_in    = 0xff349624;
-        sd_setup_mode_reg   = 1;
-        sd_set_function     = 0xff692d7c;
-        sd_write_clock      = 0xff696448;   /* sdWriteBlk */
-        sd_read_clock       = 0xff69672c;   /* sdReadBlk */
-        SD_ReConfiguration  = (void *) 0xff695130;
-        
-        if (sd_overclock)
-        {
-            sd_overclock_task();
-            turned_on = 1;
-        }
-    }
-    
-    if (is_camera("70D", "1.1.2"))
-    {
-        CID_hook            = 0xff7cf394;
-        sd_setup_mode       = 0xFF33E078;
-        sd_setup_mode_in    = 0xFF33E100;
-        sd_setup_mode_reg   = 1;
-        sd_set_function     = 0xFF7CE4B8;
-        sd_write_clock      = 0xff7d18a0;   /* NOTE: this is sdDMAWriteBlk, not sdWriteBlk. Patching sdWriteBlk causes CACHE_COLLISION */
-        sd_read_clock       = 0xff7d1e68;   /* sdReadBlk */
-        SD_ReConfiguration  = (void *) 0xFF7D086C;
         
         if (sd_overclock)
         {
