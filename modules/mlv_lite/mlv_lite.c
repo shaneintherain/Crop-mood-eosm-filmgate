@@ -3859,6 +3859,7 @@ void raw_video_rec_task(uint32_t thread)
     int named_clip = 0;      /* set once this run has picked a new movie file name */
     int last_block_size = 0; /* for detecting early stops */
     int liveview_hacked = 0;
+    int lv_paused_here = 0;  /* we called PauseLiveView; resume it in cleanup */
     int last_write_timestamp = 0;    /* last FIO_WriteFile call */        
     int last_processed_frame = 0;
     static int fps;
@@ -4289,6 +4290,7 @@ abort_and_check_early_stop:
 #ifndef CONFIG_EOSM
                 /* faster writing speed that way */
                 PauseLiveView();
+                lv_paused_here = 1;
 #endif
             }
 
@@ -4333,8 +4335,15 @@ abort_and_check_early_stop:
 #ifndef CONFIG_EOSM
     if (!RECORDING_H264 && thread == 0)
     {
-        /* faster writing speed that way */
-        PauseLiveView();
+        /* Pausing Live View makes the write-out a little faster, but turns the
+         * screen black until it is done.  Capture has already stopped at this
+         * point (the vsync handler only works while recording), so on the
+         * EOS M keep Live View running and only lock the buttons. */
+        if (!cam_eos_m)
+        {
+            PauseLiveView();
+            lv_paused_here = 1;
+        }
 
         /* PauseLiveView breaks UI locks - why? */
         gui_uilock(UILOCK_EVERYTHING);
@@ -4504,7 +4513,11 @@ cleanup:
         }
 
 #ifndef CONFIG_EOSM
-        ResumeLiveView();
+        if (lv_paused_here)
+        {
+            ResumeLiveView();
+            lv_paused_here = 0;
+        }
 #endif
 
         if (crop_rec_is_enabled())
