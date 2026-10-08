@@ -122,6 +122,7 @@ static int crop_preset_fps = 0;
 CONFIG_INT("crop.button_SET",       SET_button, 1);
 static CONFIG_INT("crop.button_H-Shutter", Half_Shutter, 2);
 CONFIG_INT("crop.button_INFO",      INFO_button, 6);  /* 6 = Quick Panel (EOS M default) */
+static CONFIG_INT("crop.shutter_rec", Shutter_rec, 0); /* EOS M slim: 0=OFF, 1=half-press starts/stops recording */
 CONFIG_INT("crop.shutter_zoom", Shutter_zoom, 0); /* EOS M slim: 0=OFF, 1=hold x10, 2=sticky x10 */
 CONFIG_INT("crop.arrows_U_D",       Arrows_U_D, 3); /* ISO */
 CONFIG_INT("crop.more_hacks",       more_hacks, 1);
@@ -3567,6 +3568,28 @@ static int patch_active = 0;
 #define EOSM_LV_GUARD_CONTENT_SAMPLES 3
 static volatile int eosm_lv_guard_pending = 1;
 static volatile int eosm_lv_guard_busy = 0;
+
+/* EOS M Settings -> Shutter record.  The camera does not report a full shutter press to ML (it
+ * just takes a photo), so the half-press is used.  Press starts recording, press again stops
+ * it; the release is swallowed so Canon does not see half of the pair. */
+static int slim_handle_shutter_record(unsigned int key)
+{
+    if (!Shutter_rec || !is_EOSM)
+        return 0;
+    if (key != MODULE_KEY_PRESS_HALFSHUTTER && key != MODULE_KEY_UNPRESS_HALFSHUTTER)
+        return 0;
+    if (!lv || gui_menu_shown() || !is_movie_mode())
+        return 0;
+
+    /* never start while the Live View transition controller owns the display */
+    if (eosm_lv_guard_busy && !RECORDING)
+        return 1;
+
+    if (key == MODULE_KEY_PRESS_HALFSHUTTER)
+        module_send_keypress(MODULE_KEY_REC);
+
+    return 1;
+}
 static int eosm_lv_guard_started;
 static int eosm_lv_guard_state;
 static int eosm_lv_guard_stable_frames;
@@ -3634,6 +3657,7 @@ int crop_rec_lv_transition_diag(char *buffer, int size)
     return 0;
 }
 static void eosm_lv_guard_request(void) {}
+static int slim_handle_shutter_record(unsigned int key) { (void) key; return 0; }
 #endif
 
 static void install_patches()
@@ -4277,6 +4301,16 @@ static struct menu_entry slim_info_button_menu[] = {
         .icon_type = IT_DICE,
         .help      = "Half-shutter x10 zoom (same as SET). ON: hold to zoom; Sticky: tap to toggle.",
         .help2     = "Only in movie LV with ML overlays. Not active while recording.",
+    },
+    {
+        .name      = "Shutter record",
+        .priv      = &Shutter_rec,
+        .max       = 1,
+        .choices   = CHOICES("OFF", "Half-press"),
+        .edit_mode = EM_INLINE_ADJUST,
+        .icon_type = IT_DICE,
+        .help      = "Half-press the shutter button to start/stop recording (movie mode).",
+        .help2     = "Press only halfway: a full press still takes a photo. Replaces Shutter zoom.",
     },
 };
 
@@ -6903,6 +6937,9 @@ static unsigned int crop_rec_keypress_cbr(unsigned int key)
             if (slim_handle_main_dial_shutter(key))
                 return 0;
 
+            if (slim_handle_shutter_record(key))
+                return 0;
+
             if (slim_handle_shutter_zoom(key))
                 return 0;
 
@@ -7676,6 +7713,7 @@ MODULE_CONFIGS_START()
     MODULE_CONFIG(SET_button)
     MODULE_CONFIG(INFO_button)
     MODULE_CONFIG(Shutter_zoom)
+    MODULE_CONFIG(Shutter_rec)
     MODULE_CONFIG(tapdisp)
     MODULE_CONFIG(Arrows_L_R)
     MODULE_CONFIG(Arrows_U_D)
