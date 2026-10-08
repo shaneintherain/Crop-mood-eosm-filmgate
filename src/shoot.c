@@ -5927,6 +5927,14 @@ shoot_task( void* unused )
         module_exec_cbr(CBR_SHOOT_TASK);
 #endif
 
+        /* TEST BUILD ONLY: show the last shutter-area button codes (see src/gui.c) */
+        {
+            extern int dbg_btn_ring[4];
+            if (lv && !gui_menu_shown() && dbg_btn_ring[3])
+                bmp_printf(FONT_MED, 40, 40, "BTN %x %x %x %x  ",
+                    dbg_btn_ring[0], dbg_btn_ring[1], dbg_btn_ring[2], dbg_btn_ring[3]);
+        }
+
         #ifdef FEATURE_MLU_HANDHELD_DEBUG
         if (mlu_handled_debug) big_bmp_printf(FONT_MED, 50, 100, "%s", mlu_msg);
         #endif

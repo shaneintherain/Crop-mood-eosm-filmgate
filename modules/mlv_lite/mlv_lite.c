@@ -831,6 +831,52 @@ static void refresh_cropmarks_if_changed(void)
     }
 }
 
+/* After boot the Film Format bars are not on screen until the ML menu has been opened and closed.
+ * Closing the menu does a full screen redraw (redraw(): wipes the overlay layer, then re-draws the
+ * cropmarks).  Do the same once, after Live View has been stable for a moment, so the bars show
+ * up without opening a menu first.  Opening any menu counts as done (its close redraws). */
+static void film_frame_settle_redraw(void)
+{
+    static int done = 0;
+    static int t_start = 0;
+
+    if (gui_menu_shown())
+    {
+        done = 1;
+        t_start = 0;
+        return;
+    }
+
+    if (!lv || !film_frame_possible())
+    {
+        done = 0;
+        t_start = 0;
+        return;
+    }
+
+    if (done)
+        return;
+
+    if (!RAW_IS_IDLE || !liveview_display_idle())
+    {
+        t_start = 0;
+        return;
+    }
+
+    int now = get_ms_clock();
+    if (!t_start)
+    {
+        t_start = now;
+        return;
+    }
+
+    if (now - t_start > 1500)
+    {
+        done = 1;
+        redraw();
+    }
+}
+
 /* fixme: called from many tasks */
 static REQUIRES(LiveViewTask)
 void update_cropping_offsets()
@@ -2454,6 +2500,7 @@ unsigned int raw_rec_polling_cbr(unsigned int unused)
         refresh_raw_settings(0);
         refresh_cropmarks_if_changed();
     }
+    film_frame_settle_redraw();
     
     /* update status messages */
     show_recording_status();

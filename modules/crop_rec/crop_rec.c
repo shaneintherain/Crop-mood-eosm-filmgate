@@ -7298,6 +7298,15 @@ static LVINFO_UPDATE_FUNC(frame_info)
         int n = strlen(buffer);
         if (n > 5 && streq(buffer + n - 5, " Crop"))
             buffer[n - 5] = 0;
+
+        /* anamorphic frames ("2x 1.18:1", "1.33x 4:3"): add room on both sides so the text
+         * does not crowd the film name on its left or the bit depth on its right */
+        if (strstr(buffer, "x ") != NULL)
+        {
+            char tmp[16];
+            snprintf(tmp, sizeof(tmp), "%s", buffer);
+            snprintf(buffer, sizeof(buffer), "  %s  ", tmp);
+        }
     }
 }
 
