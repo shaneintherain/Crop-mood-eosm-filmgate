@@ -1597,53 +1597,47 @@ static unsigned RAW_V = 0;            // RAW vertical resolution          0xC0F0
  * below use one fixed value, so several of them ran 0.01% - 0.05% too fast (e.g. A=528 B=2527
  * gives 23.983 fps, about 1 second too many per hour).
  *
- * After a preset has chosen its timers, look for the closest A * B product to the NTSC target.
- * Only done for 24p presets (within 1% of 23.976), so 25p / 30p / high-FPS presets are untouched.
- * To stay safe on the sensor readout:
- *   - Timer A may only grow (slower line readout, never faster), by at most 8 steps;
- *   - Timer B may shrink only while at least 75% of the original blanking (B - RAW_V) remains. */
+ * After a preset has chosen its timers, move Timer B (only B) to the value that gets A * B closest
+ * to the NTSC target.  Timer A is never touched: it sets the line time and its parity must stay as
+ * Canon has it (the core FPS engine keeps it for the same reason); an earlier attempt that also moved
+ * A produced vertical line artifacts and a low-res preview.
+ * Only done for 24p presets (within 1% of 23.976), so 25p / 30p / high-FPS presets are untouched,
+ * and Timer B may shrink only while at least 75% of the original vertical blanking (B - RAW_V) remains. */
 #define NTSC24_PRODUCT 1334667   /* 32000000 * 1001 / 24000, rounded */
 static void ntsc24_snap_timers(void)
 {
     if (!Framerate_24 || !is_EOSM) return;
 
-    int a0 = TimerA + 1;
+    int a = TimerA + 1;
     int b0 = TimerB + 1;
-    if (a0 < 2 || b0 < 2) return;
+    if (a < 2 || b0 < 2) return;
 
-    int p0 = a0 * b0;
+    int p0 = a * b0;
     if (p0 < NTSC24_PRODUCT - NTSC24_PRODUCT / 100 || p0 > NTSC24_PRODUCT + NTSC24_PRODUCT / 100) return;
 
     int err0 = ABS(p0 - NTSC24_PRODUCT);
     int blank0 = b0 - (int)RAW_V;      /* original vertical blanking, in lines */
-    int best_a = a0, best_b = b0, best_err = err0;
+    int best_b = b0, best_err = err0;
+    int b_floor = NTSC24_PRODUCT / a;
 
-    for (int da = 0; da <= 8; da++)
+    for (int k = 0; k < 2; k++)
     {
-        int a = a0 + da;
-        int b_floor = NTSC24_PRODUCT / a;
+        int b = b_floor + k;
+        if (b < 2) continue;
 
-        for (int k = 0; k < 2; k++)
+        /* keep most of the original blanking when Timer B gets smaller */
+        if (b < b0 && (blank0 <= 0 || (b - (int)RAW_V) * 4 < blank0 * 3)) continue;
+
+        int err = ABS(a * b - NTSC24_PRODUCT);
+        if (err < best_err)
         {
-            int b = b_floor + k;
-            if (b < 2) continue;
-
-            /* keep most of the original blanking when Timer B gets smaller */
-            if (b < b0 && blank0 > 0 && (b - (int)RAW_V) * 4 < blank0 * 3) continue;
-            if (b < b0 && blank0 <= 0) continue;
-
-            int err = ABS(a * b - NTSC24_PRODUCT);
-            if (err < best_err)
-            {
-                best_err = err; best_a = a; best_b = b;
-            }
+            best_err = err; best_b = b;
         }
     }
 
-    /* only change something when it is clearly better (original error > ~10 ppm of 1.33M ticks) */
+    /* only change something when it is clearly better */
     if (best_err < err0 && err0 > 13)
     {
-        TimerA = best_a - 1;
         TimerB = best_b - 1;
     }
 }
