@@ -592,8 +592,10 @@ static int quick_screen_adjust(int index, int delta)
         return 0;
 
     quick_screen_feedback = index * 2 + (delta < 0);
+    /* Film Format (cell 1): Up goes towards A35, Down steps to the next smaller film
+     * (A35 > A35-ANA > S16 > 16mm > S8 > 8mm).  The other cells keep Up = increase. */
     menu_adjust_value_by_name(
-        item->adjust_menu, item->adjust_entry, delta);
+        item->adjust_menu, item->adjust_entry, index == 1 ? -delta : delta);
     menu_redraw();
     delayed_call(220, quick_screen_feedback_clear, 0);
     delayed_call(500, quick_screen_refresh, 0);
