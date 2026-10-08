@@ -51,13 +51,10 @@ static int zoom = 0;
 static int submenu = 0;
 
 static int is_DIGIC_5 = 0;
-static int is_6D = 0;
-static int is_70D = 0;
 static int is_700D = 0;
 static int is_650D = 0;
 static int is_100D = 0;
 static int is_EOSM = 0;
-static int is_basic = 0;
 
 static CONFIG_INT("crop.fps_over", fps_over, 0);
 static CONFIG_INT("crop.tapdisp", tapdisp, 1);
@@ -138,19 +135,8 @@ static CONFIG_INT("crop.button_map_v",     crop_settings_ver, 0);
 
 enum crop_preset {
     CROP_PRESET_OFF = 0,
-    CROP_PRESET_3X,
-    CROP_PRESET_3X_TALL,
-    CROP_PRESET_3K,
-    CROP_PRESET_4K_HFPS,
-    CROP_PRESET_UHD,
-    CROP_PRESET_FULLRES_LV,
-    CROP_PRESET_3x3_1X,
-    CROP_PRESET_3x3_1X_48p,
-    CROP_PRESET_1x3,
-    CROP_PRESET_3x1,
-    CROP_PRESET_40_FPS,
-    CROP_PRESET_CENTER_Z,
-    
+    CROP_PRESET_3K,     /* only used to pick a row of max_resolutions[] (see crop_preset_yres_lookup) */
+
     /* these are for 650D / 700D / EOSM/M2 / 100D */
     CROP_PRESET_1X1,
     CROP_PRESET_1X3,
@@ -168,33 +154,6 @@ static enum crop_preset * crop_presets = 0;
 
 /* current menu selection (*/
 #define CROP_PRESET_MENU crop_presets[crop_preset_index]
-
-/* menu choices for 70D */
-static enum crop_preset crop_presets_70d[] = {
-    CROP_PRESET_OFF,
-    CROP_PRESET_CENTER_Z,
-    CROP_PRESET_UHD,
-    CROP_PRESET_1x3,
-    CROP_PRESET_3x3_1X,
-};
-
-static const char * crop_choices_70d[] = {
-    "OFF",
-    "1:1 3.5K centered x5",
-    "1:1 UHD",
-    "1x3 5.5K",
-    "3x3 720p",
-};
-
-static const char crop_choices_help_70d[] =
-    "Change 1080p and 720p movie modes into crop modes (one choice)";
-
-static const char crop_choices_help2_70d[] =
-    "\n"
-    "1:1 readout in x5 zoom mode (centered raw, high res, cropped preview)\n"
-    "1:1 4K UHD crop (3840x2160 @ 24p, square raw pixels, preview broken)\n"
-    "1x3 5.5K 1832x1816 ~3:1 AR @ 23.976 FPS\n"
-    "3x3 binning in 720p (square pixels in RAW, vertical crop)";
 
 /* menu choices for entry level DIGIC 5 models, 650D / 700D / EOS M/M2 / 100D */
 static enum crop_preset crop_presets_DIGIC_5[] = {
@@ -218,24 +177,6 @@ static const char crop_choices_help_DIGIC_5[] =
     "1080p mode and experimental High Framerate options.\n";
     
     
-/* menu choices for cameras that only have the basic 3x3 crop_rec option */
-static enum crop_preset crop_presets_basic[] = {
-    CROP_PRESET_OFF,
-    CROP_PRESET_3x3_1X,
-};
-
-static const char * crop_choices_basic[] = {
-    "OFF",
-    "3x3 720p",
-};
-
-static const char crop_choices_help_basic[] =
-    "Change 1080p and 720p movie modes into crop modes (one choice)";
-
-static const char crop_choices_help2_basic[] =
-    "3x3 binning in 720p (square pixels in RAW, vertical crop)";
-
-
 /* camera-specific parameters */
 static uint32_t CMOS_WRITE               = 0;
 static uint32_t MEM_CMOS_WRITE           = 0;
@@ -865,27 +806,6 @@ static int is_720p()
     return is_movie_mode() && PathDriveMode->resolution_idx == 1;
 }
 
-static int is_x5_zoom()
-{
-    if (PathDriveMode->zoom != 5)
-    {
-        return 0;
-    }
-
-    if (PathDriveMode->S != 8)
-    {
-        return 0;
-    }
-
-    if (PathDriveMode->SM != 0)
-    {
-        return 0;
-    }
-
-    /* this snippet seems OK with properties */
-    return is_movie_mode() && PathDriveMode->zoom == 5;
-}
-
 static int is_supported_mode()
 {
     if (!lv) return 0;
@@ -907,28 +827,12 @@ static int is_supported_mode()
             return 0;
         }
 
-        if (is_70D)
-        {
-            if (crop_preset == CROP_PRESET_CENTER_Z)
-            {
-                return 0;
-            }
-        }
     }
 
     if (PathDriveMode->zoom == 10)
     {
         /* leave the x10 zoom unaltered, for focusing */
         return 0; 
-    }
-
-    if (PathDriveMode->zoom == 5)
-    {
-        
-        if (is_basic)
-        {
-            return 0;
-        }
     }
 
     return 1;
@@ -1050,33 +954,6 @@ static inline void FAST calc_skip_offsets(int * p_skip_left, int * p_skip_right,
                 skip_bottom     = 0;
             }
             break;
-                                    
-        case CROP_PRESET_FULLRES_LV:
-            /* photo mode values */
-            skip_left       = 138;
-            skip_right      = 2;
-            skip_top        = 60;   /* fixme: this is different, why? */
-            break;
-
-        case CROP_PRESET_3K:
-        case CROP_PRESET_UHD:
-        case CROP_PRESET_4K_HFPS:
-            skip_right      = 0;    /* required for 3840 - tight fit */
-            /* fall-through */
-        
-        case CROP_PRESET_3X_TALL:
-            skip_top        = 30;
-            break;
-
-        case CROP_PRESET_3X:
-        case CROP_PRESET_1x3:
-            skip_top        = 60;
-            break;
-
-        case CROP_PRESET_3x3_1X:
-        case CROP_PRESET_3x3_1X_48p:
-            if (is_720p()) skip_top = 0;
-            break;
     }
 
     if (p_skip_left)   *p_skip_left    = skip_left;
@@ -1085,82 +962,13 @@ static inline void FAST calc_skip_offsets(int * p_skip_left, int * p_skip_right,
     if (p_skip_bottom) *p_skip_bottom  = skip_bottom;
 }
 
-/* to be in sync with 0xC0F06800 */
-static int get_top_bar_adjustment()
-{
-    switch (crop_preset)
-    {
-        case CROP_PRESET_FULLRES_LV:
-            return 0;                   /* 0x10018: photo mode value, unchanged */
-        case CROP_PRESET_3x3_1X:
-        case CROP_PRESET_3x3_1X_48p:
-            if (is_720p()) return 28;   /* 0x1D0017 from 0x10017 */
-            /* fall through */
-        default:
-            return 30;                  /* 0x1F0017 from 0x10017 */
-    }
-}
-
-/* Vertical resolution from current unmodified video mode */
-/* (active area only, as seen by mlv_lite) */
-static inline int get_default_yres()
-{
-    return 
-        (video_mode_fps <= 30) ? 1290 : 672;
-}
-
-/* EOS M 1:1 sub-presets (2.5K/3K/…) use CROP_PRESET_1X1 hooks but need 3K yres table row. */
-static inline enum crop_preset crop_preset_yres_lookup(void)
-{
-    if (crop_preset == CROP_PRESET_1X1 && CROP_3K)
-        return CROP_PRESET_3K;
-    return crop_preset;
-}
-
-/* skip_top from unmodified video mode (raw.c, LiveView skip offsets) */
-static inline int get_default_skip_top()
-{
-    return 
-        (video_mode_fps <= 30) ? 28 : 20;
-}
-
 /* max resolution for each video mode (trial and error) */
 /* it's usually possible to push the numbers a few pixels further,
  * at the risk of corrupted frames */
 static int max_resolutions[NUM_CROP_PRESETS][6] = {
                                 /*   24p   25p   30p   50p   60p   x5 */
-    [CROP_PRESET_3X_TALL]       = { 1920, 1728, 1536,  960,  800, 1320 },
-    [CROP_PRESET_3x3_1X]        = { 1290, 1290, 1290,  960,  800, 1320 },
-    [CROP_PRESET_3x3_1X_48p]    = { 1290, 1290, 1290, 1080, 1040, 1320 }, /* 1080p45/48 */
     [CROP_PRESET_3K]            = { 1920, 1728, 1504,  760,  680, 1320 },
-    [CROP_PRESET_UHD]           = { 1536, 1472, 1120,  640,  540, 1320 },
-    [CROP_PRESET_4K_HFPS]       = { 3072, 3072, 2500, 1440, 1200, 1320 },
-    [CROP_PRESET_FULLRES_LV]    = { 3870, 3870, 3870, 3870, 3870, 1320 },
 };
-
-/* 5D3 vertical resolution increments over default configuration */
-/* note that first scanline may be moved down by 30 px (see reg_override_top_bar) */
-static inline int FAST calc_yres_delta()
-{
-    int desired_yres = (target_yres) ? target_yres
-        : max_resolutions[crop_preset_yres_lookup()][get_video_mode_index()];
-
-    if (desired_yres)
-    {
-        /* user override */
-        int skip_top;
-        calc_skip_offsets(0, 0, &skip_top, 0);
-        int default_yres = get_default_yres();
-        int default_skip_top = get_default_skip_top();
-        int top_adj = get_top_bar_adjustment();
-        return desired_yres - default_yres + skip_top - default_skip_top + top_adj;
-    }
-
-    ASSERT(0);
-    return 0;
-}
-
-#define YRES_DELTA calc_yres_delta()
 
 int CMOS_5_Debug = 0;
 int CMOS_7_Debug = 0;
@@ -1188,50 +996,7 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
     int cmos_new[15] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     
 
-    if (is_basic)
-    {
-        switch (crop_preset)
-        {
-            case CROP_PRESET_3x3_1X:
-            if (is_720p())
-            {
-                /* start/stop scanning line, very large increments */
-                cmos_new[7] = (is_6D) ? PACK12(37,10) : PACK12(6,29);
-            }
-            break; 
-        }
-    }
 
-    if (is_70D)
-    {
-        switch (crop_preset)
-        {
-            case CROP_PRESET_1x3:
-            if (is_1080p())
-            {
-                cmos_new[0xB] = 0x34A; // vertical offset
-            }
-            break;
-            case CROP_PRESET_3x3_1X:
-            if (is_720p())
-            {
-                /* FIXME: ghosty artifacts when pointing the camera to bright objects then pointing it to darker objects 
-                 * https://www.magiclantern.fm/forum/index.php?topic=14309.msg205843#msg205843 */
-                cmos_new[0xA] = 0x1F1; // vertical offset/line skipping related, value taken from 1080p mode
-                cmos_new[0xB] = 0x307; // vertical offset
-            }
-            break; 
-            case CROP_PRESET_CENTER_Z:
-                cmos_new[7]   = 0xC80;          /* horizontal offset */
-                cmos_new[0xb] = 0x289;          /* vertical offset */ 
-            break; 
-            case CROP_PRESET_UHD:
-            if (is_x5_zoom()) {
-                cmos_new[7]   = 0xC70;          /* horizontal offset */
-                cmos_new[0xb] = 0x326;          /* vertical offset */  }
-            break; 
-        }
-    }
 
     // 650D / 700D / EOSM/M2 / 100D presets
     // cmos_new[5] used for vertical offset, cmos_new[7] for horizontal offset
@@ -1446,19 +1211,6 @@ static uint32_t nrzi_decode( uint32_t in_val )
     return val;
 }
 
-static int FAST adtg_lookup(uint32_t* data_buf, int reg_needle)
-{
-    while(*data_buf != 0xFFFFFFFF)
-    {
-        int reg = (*data_buf) >> 16;
-        if (reg == reg_needle)
-        {
-            return *(uint16_t*)data_buf;
-        }
-    }
-    return -1;
-}
-
 /* adapted from fps_override_shutter_blanking in fps-engio.c */
 static int adjust_shutter_blanking(int old)
 {
@@ -1544,15 +1296,6 @@ static void FAST adtg_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
         return;
     }
 
-    if (!is_720p())
-    {
-        if (crop_preset == CROP_PRESET_3x3_1X ||
-            crop_preset == CROP_PRESET_3x3_1X_48p)
-        {
-            /* these presets only have effect in 720p mode */
-            return;
-        }
-    }
 
     /* This hook is called from the DebugMsg's in adtg_write,
      * so if we change the register list address, it won't be able to override them.
@@ -1613,8 +1356,7 @@ static void FAST adtg_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
     if (shutter_blanking)
     {
         /* FIXME: remove this kind of hardcoded conditions */
-        if ((crop_preset == CROP_PRESET_CENTER_Z && lv_dispsize != 1) ||
-            (crop_preset != CROP_PRESET_CENTER_Z && lv_dispsize == 1) || is_DIGIC_5 || is_70D)
+        if (is_DIGIC_5)
         {
             shutter_blanking = adjust_shutter_blanking(shutter_blanking);
         }
@@ -1645,46 +1387,6 @@ static void FAST adtg_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
     /* hopefully generic; to be tested later */
     if (1)
     {
-        switch (crop_preset)
-        {
-            /* all 1:1 modes (3x, 3K, 4K...) */
-            case CROP_PRESET_3X:
-            case CROP_PRESET_3X_TALL:
-            case CROP_PRESET_3K:
-            case CROP_PRESET_UHD:
-            case CROP_PRESET_4K_HFPS:
-            case CROP_PRESET_FULLRES_LV:
-                /* ADTG2/4[0x8000] = 5 (set in one call) */
-                /* ADTG2[0x8806] = 0x6088 on 5D3 (artifacts without it) */
-                if (!is_70D) adtg_new[2] = (struct adtg_new) {6, 0x8000, 5};
-                break;
-
-            /* 3x3 binning in 720p (in 1080p it's already 3x3) */
-            case CROP_PRESET_3x3_1X:
-            case CROP_PRESET_3x3_1X_48p:
-                /* ADTG2/4[0x800C] = 2: vertical binning factor = 3 */
-                adtg_new[2] = (struct adtg_new) {6, 0x800C, 2};
-                break;
-
-            /* 1x3 binning (read every line, bin every 3 columns) */
-            case CROP_PRESET_1x3:
-                /* ADTG2/4[0x800C] = 0: read every line */
-                if (is_70D && is_1080p()) adtg_new[2] = (struct adtg_new) {6, 0x800C, 0};
-                break;
-
-            /* 3x1 binning (bin every 3 lines, read every column) */
-            case CROP_PRESET_3x1:
-                /* ADTG2/4[0x800C] = 2: vertical binning factor = 3 */
-                /* ADTG2[0x8806] = 0x6088 on 5D3 (artifacts worse without it) */
-                /* ADTG2[0x8183]/[0x8184] used for horizontal binning, artifacts without it */
-                /* FIXME: ADTG2[0x8183]/[0x8184] won't be overridden until we go outside LV 
-                          then get back, maybe because Canon only update them once?        */
-                adtg_new[2] = (struct adtg_new) {6, 0x800C, 2};
-                adtg_new[3] = (struct adtg_new) {2, 0x8183, 0};
-                adtg_new[4] = (struct adtg_new) {2, 0x8184, 0};
-                break;
-        }
-        
         // 650D / 700D / EOSM/M2 / 100D presets
         // ADTG2[0x8183] and ADTG2[0x8184] enable horizontal pixel binning instead of skipping
         // in 1080p ADTG2[0x8183] = 0x21, ADTG2[0x8183] = 0x7B, in x5 both are = 0x0 
@@ -1732,15 +1434,6 @@ static void FAST adtg_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
         /* these need changing in all modes with higher vertical resolution */
         switch (crop_preset)
         {
-            case CROP_PRESET_3X_TALL:
-            case CROP_PRESET_3x3_1X:
-            case CROP_PRESET_3x3_1X_48p:
-            case CROP_PRESET_1x3:
-            case CROP_PRESET_3K:
-            case CROP_PRESET_UHD:
-            case CROP_PRESET_4K_HFPS:
-            case CROP_PRESET_FULLRES_LV:
-            case CROP_PRESET_40_FPS:
             case CROP_PRESET_1X1:
             case CROP_PRESET_1X3:
             case CROP_PRESET_3X3:
@@ -1875,428 +1568,16 @@ int crop_rec_is_enabled()
     return 0;
 }
 
-/* this is used to cover the black bar at the top of the image in 1:1 modes */
-/* (used in most other presets) */
-static inline uint32_t reg_override_top_bar(uint32_t reg, uint32_t old_val)
-{
-    switch (reg)
-    {
-        /* raw start line/column */
-        /* move start line down by 30 pixels */
-        /* not sure where this offset comes from */
-        case 0xC0F06800:
-            return 0x1F0017;
-    }
 
-    return 0;
-}
 
-/* these are required for increasing vertical resolution */
-/* (used in most other presets) */
-static inline uint32_t reg_override_HEAD34(uint32_t reg, uint32_t old_val)
-{
-    switch (reg)
-    {
-        /* HEAD3 timer */
-        case 0xC0F0713C:
-            return old_val + YRES_DELTA + delta_head3;
 
-        /* HEAD4 timer */
-        case 0xC0F07150:
-            return old_val + YRES_DELTA + delta_head4;
-    }
 
-    return 0;
-}
 
-static inline uint32_t reg_override_common(uint32_t reg, uint32_t old_val)
-{
-    uint32_t a = reg_override_top_bar(reg, old_val);
-    if (a) return a;
 
-    uint32_t b = reg_override_HEAD34(reg, old_val);
-    if (b) return b;
-
-    return 0;
-}
-
-static inline uint32_t reg_override_fps(uint32_t reg, uint32_t timerA, uint32_t timerB, uint32_t old_val)
-{
-    /* hardware register requires timer-1 */
-    timerA--;
-    timerB--;
-
-    /* only override FPS registers if the old value is what we expect
-     * otherwise we may be in some different video mode for a short time
-     * this race condition is enough to lock up LiveView in some cases
-     * e.g. 5D3 3x3 50/60p when going from photo mode to video mode
-     */
-
-    switch (reg)
-    {
-        case 0xC0F06824:
-        case 0xC0F06828:
-        case 0xC0F0682C:
-        case 0xC0F06830:
-        case 0xC0F06010:
-        {
-            uint32_t expected = default_timerA[get_video_mode_index()] - 1;
-
-            if (old_val == expected || old_val == expected + 1)
-            {
-                return timerA;
-            }
-
-            break;
-        }
-        
-        case 0xC0F06008:
-        case 0xC0F0600C:
-        {
-            uint32_t expected = default_timerA[get_video_mode_index()] - 1;
-            expected |= (expected << 16);
-
-            if (old_val == expected || old_val == expected + 0x00010001)
-            {
-                return timerA | (timerA << 16);
-            }
-
-            break;
-        }
-
-        case 0xC0F06014:
-        {
-            uint32_t expected = default_timerB[get_video_mode_index()] - 1;
-
-            if (old_val == expected || old_val == expected + 1)
-            {
-                return timerB;
-            }
-
-            break;
-        }
-    }
-
-    return 0;
-}
-
-static inline uint32_t reg_override_3X_tall(uint32_t reg, uint32_t old_val)
-{
-    /* change FPS timers to increase vertical resolution */
-    if (video_mode_fps >= 50)
-    {
-        int timerA = 400;
-
-        int timerB =
-            (video_mode_fps == 50) ? 1200 :
-            (video_mode_fps == 60) ? 1001 :
-                                       -1 ;
-
-        int a = reg_override_fps(reg, timerA, timerB, old_val);
-        if (a) return a;
-    }
-
-    /* fine-tuning head timers appears to help
-     * pushing the resolution a tiny bit further */
-    int head_adj =
-        (video_mode_fps == 50) ? -30 :
-        (video_mode_fps == 60) ? -20 :
-                                   0 ;
-
-    switch (reg)
-    {
-        /* raw resolution (end line/column) */
-        case 0xC0F06804:
-            return old_val + (YRES_DELTA << 16);
-
-        /* HEAD3 timer */
-        case 0xC0F0713C:
-            return old_val + YRES_DELTA + delta_head3 + head_adj;
-
-        /* HEAD4 timer */
-        case 0xC0F07150:
-            return old_val + YRES_DELTA + delta_head4 + head_adj;
-    }
-
-    return reg_override_common(reg, old_val);
-}
-
-static inline uint32_t reg_override_3x3_tall(uint32_t reg, uint32_t old_val)
-{
-    /* only the 5D3 patched this mode; nothing to do on other models */
-    return 0;
-}
-
-static inline uint32_t reg_override_3x3_48p(uint32_t reg, uint32_t old_val)
-{
-    if (!is_720p())
-    {
-        /* 1080p not patched in 3x3 */
-        return 0;
-    }
-
-    /* change FPS timers to increase vertical resolution */
-    if (video_mode_fps >= 50)
-    {
-        int timerA =
-            (video_mode_fps == 50) ? 401 :
-            (video_mode_fps == 60) ? 400 :
-                                      -1 ;
-        int timerB =
-            (video_mode_fps == 50) ? 1330 : /* 45p */
-            (video_mode_fps == 60) ? 1250 : /* 48p */
-                                       -1 ;
-
-        int a = reg_override_fps(reg, timerA, timerB, old_val);
-        if (a) return a;
-    }
-
-    switch (reg)
-    {
-        /* for some reason, top bar disappears with the common overrides */
-        /* very tight fit - every pixel counts here */
-        case 0xC0F06800:
-            return 0x1D0017;
-
-        /* raw resolution (end line/column) */
-        case 0xC0F06804:
-            return old_val + (YRES_DELTA << 16);
-
-        /* HEAD3 timer */
-        /* 2E6 in 50p, 2B4 in 60p */
-        case 0xC0F0713C:
-            return 0x2B4 + YRES_DELTA + delta_head3;
-
-        /* HEAD4 timer */
-        /* 2B4 in 50p, 26D in 60p */
-        case 0xC0F07150:
-            return 0x26D + YRES_DELTA + delta_head4;
-    }
-
-    return reg_override_common(reg, old_val);
-}
-
-static inline uint32_t reg_override_3K(uint32_t reg, uint32_t old_val)
-{
-    /* FPS timer A, for increasing horizontal resolution */
-    /* 25p uses 480 (OK), 24p uses 440 (too small); */
-    /* only override in 24p, 30p and 60p modes */
-    if (video_mode_fps != 25 && video_mode_fps !=  50)
-    {
-        int timerA = 455;
-        int timerB =
-            (video_mode_fps == 24) ? 2200 :
-            (video_mode_fps == 30) ? 1760 :
-            (video_mode_fps == 60) ?  880 :
-                                       -1 ;
-
-        int a = reg_override_fps(reg, timerA, timerB, old_val);
-        if (a) return a;
-    }
-
-    switch (reg)
-    {
-        /* raw resolution (end line/column) */
-        /* X: (3072+140)/8 + 0x17, adjusted for 3072 in raw_rec */
-        case 0xC0F06804:
-            return (old_val & 0xFFFF0000) + 0x1AA + (YRES_DELTA << 16);
-
-    }
-
-    return reg_override_common(reg, old_val);
-}
-
-static inline uint32_t reg_override_4K_hfps(uint32_t reg, uint32_t old_val)
-{
-    /* FPS timer A, for increasing horizontal resolution */
-    /* trial and error to allow 4096; 572 is too low, 576 looks fine */
-    /* pick some values with small roundoff error */
-    int timerA =
-        (video_mode_fps < 30)  ?  585 : /* for 23.976/2 and 25/2 fps */
-                                  579 ; /* for all others */
-
-    /* FPS timer B, tuned to get half of the frame rate from Canon menu */
-    int timerB =
-        (video_mode_fps == 24) ? 3422 :
-        (video_mode_fps == 25) ? 3282 :
-        (video_mode_fps == 30) ? 2766 :
-        (video_mode_fps == 50) ? 1658 :
-        (video_mode_fps == 60) ? 1383 :
-                                   -1 ;
-
-    int a = reg_override_fps(reg, timerA, timerB, old_val);
-    if (a) return a;
-
-    switch (reg)
-    {
-        /* raw resolution (end line/column) */
-        /* X: (4096+140)/8 + 0x18, adjusted for 4096 in raw_rec */
-        case 0xC0F06804:
-            return (old_val & 0xFFFF0000) + 0x22A + (YRES_DELTA << 16);
-    }
-
-    return reg_override_common(reg, old_val);
-}
-
-static inline uint32_t reg_override_UHD(uint32_t reg, uint32_t old_val)
-{
-
-    if (is_70D)
-    {
-       if (!is_x5_zoom())
-        {
-            /* don't patch other modes */
-            return 0;
-        }
-
-        int RAW_V = 0x896;
-        int RAW_H = 0x201;
-        int TimerA = 0x224;
-        int TimerB = 0x97E;
-
-        switch (reg)
-        {
-            case 0xC0F06804: return (RAW_V << 16) + RAW_H;
-
-            case 0xC0F06824:
-            case 0xC0F06828:
-            case 0xC0F0682C:
-            case 0xC0F06830:
-            {
-                return TimerA - 1;
-            }
-
-            case 0xC0F0713C: return RAW_V + 0x1;
-            case 0xC0F07150: return RAW_V - 0x3A;
-            case 0xC0F07064: return RAW_V + 0xB2;
-
-            case 0xC0F06014: return TimerB;
-            case 0xC0F06024: return TimerB;
-            case 0xC0F06010: return TimerA;
-            case 0xC0F06008: return TimerA + (TimerA << 16);
-            case 0xC0F0600C: return TimerA + (TimerA << 16);
-        }
-    }
-
-    return 0;
-}
-
-static inline uint32_t reg_override_fullres_lv(uint32_t reg, uint32_t old_val)
-{
-    switch (reg)
-    {
-        case 0xC0F06800:
-            return 0x10018;         /* raw start line/column, from photo mode */
-        
-        case 0xC0F06804:            /* 1080p 0x528011B, photo 0xF6E02FE */
-            return (old_val & 0xFFFF0000) + 0x2FE + (YRES_DELTA << 16);
-        
-        case 0xC0F06824:
-        case 0xC0F06828:
-        case 0xC0F0682C:
-        case 0xC0F06830:
-            return 0x312;           /* from photo mode */
-        
-        case 0xC0F06010:            /* FPS timer A, for increasing horizontal resolution */
-            return 0x317;           /* from photo mode; lower values give black border on the right */
-        
-        case 0xC0F06008:
-        case 0xC0F0600C:
-            return 0x3170317;
-
-        case 0xC0F06014:
-            return (video_mode_fps > 30 ? 856 : 1482) + YRES_DELTA;   /* up to 7.4 fps */
-    }
-
-    /* no need to adjust the black bar */
-    return reg_override_HEAD34(reg, old_val);
-}
 
 /* just for testing */
 /* (might be useful for FPS override on e.g. 70D) */
-static inline uint32_t reg_override_40_fps(uint32_t reg, uint32_t old_val)
-{
-    switch (reg)
-    {
-        case 0xC0F06824:
-        case 0xC0F06828:
-        case 0xC0F0682C:
-        case 0xC0F06830:
-        case 0xC0F06010:
-            return 0x18F;
-        
-        case 0xC0F06008:
-        case 0xC0F0600C:
-            return 0x18F018F;
 
-        case 0xC0F06014:
-            return 0x5DB;
-    }
-
-    return 0;
-}
-
-static inline uint32_t reg_override_fps_nocheck(uint32_t reg, uint32_t timerA, uint32_t timerB, uint32_t old_val)
-{
-    /* hardware register requires timer-1 */
-    timerA--;
-    timerB--;
-
-    switch (reg)
-    {
-        case 0xC0F06824:
-        case 0xC0F06828:
-        case 0xC0F0682C:
-        case 0xC0F06830:
-        case 0xC0F06010:
-        {
-            return timerA;
-        }
-        
-        case 0xC0F06008:
-        case 0xC0F0600C:
-        {
-            return timerA | (timerA << 16);
-        }
-
-        case 0xC0F06014:
-        {
-            return timerB;
-        }
-    }
-
-    return 0;
-}
-
-static inline uint32_t reg_override_zoom_fps(uint32_t reg, uint32_t old_val)
-{
-    int timerA = -1;
-    int timerB = -1;
-
-    /* attempt to reconfigure the x5 zoom at the FPS selected in Canon menu */
-    if (video_mode_fps == 24)
-    {
-        if (is_70D) { timerA = 503; timerB = 2653; }
-    }
-    if (video_mode_fps == 25)
-    {
-        if (is_70D) { timerA = 503; timerB = 2544; }
-    }
-    if (video_mode_fps == 30)
-    {
-        if (is_70D) { timerA = 503; timerB = 2122; }
-    }
-    if (video_mode_fps == 50)
-    {
-        if (is_70D) { timerA = 503; timerB = 1588; } /* cannot get 50, use 40 */
-    }
-    if (video_mode_fps == 60)
-    {
-        if (is_70D) { timerA = 503; timerB = 1588; } /* cannot get 60, use 40 */
-    }
-
-    return reg_override_fps_nocheck(reg, timerA, timerB, old_val);
-}
 
 /* adjust Timer B to make scanning Dual-ISO lines static  */
 /* Timer B value should be in 4 increment  */
@@ -3650,72 +2931,9 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
     return 0;
 }
 
-/* 70D ENGIO overrides */
-static inline uint32_t reg_override_1x3(uint32_t reg, uint32_t old_val)
-{
-    if (!is_70D)
-    {
-        /* don't patch engio overrides on other models (5D3 in this case) */
-        return 0;
-    }
-
-    if (is_70D)
-    {
-        if (!is_1080p())
-        {
-            /* don't patch other modes */
-            return 0;
-        }
-
-        RAW_V = 0x736; // The image freeze when going above 0x736, because of HeadTimer 3 0xC0F0713C = 0x738, why?! 
-        RAW_H = 0x107;
-        TimerA = 0x27E; // This is the lowest value we can use in 1080p mode, going lower than that will break the image
-        TimerB = 0x827;
-
-        switch (reg)
-        {
-            case 0xC0F06804: return (RAW_V << 16) + RAW_H;
-
-            /* I need to double check these, do they always take their value based on TimerA? */
-            case 0xC0F06824:
-            case 0xC0F06828:
-            case 0xC0F0682C:
-            case 0xC0F06830:
-            {
-                return TimerA;
-            }
-
-            case 0xC0F0713C: return RAW_V + 0x1;
-            case 0xC0F07150: return RAW_V - 0x3A;
-
-            case 0xC0F06014: return TimerB;
-            case 0xC0F06024: return TimerB;
-            case 0xC0F06010: return TimerA;
-            case 0xC0F06008: return TimerA + (TimerA << 16);
-            case 0xC0F0600C: return TimerA + (TimerA << 16);
-        }
-    }
-
-    return 0;
-}
-
-static int engio_vidmode_ok = 0;
-
 static void * get_engio_reg_override_func()
 {
     uint32_t (*reg_override_func)(uint32_t, uint32_t) = 
-      //(crop_preset == CROP_PRESET_3X)         ? reg_override_top_bar     : /* fixme: corrupted image */
-        (crop_preset == CROP_PRESET_3X_TALL)    ? reg_override_3X_tall    :
-        (crop_preset == CROP_PRESET_3x3_1X)     ? reg_override_3x3_tall   :
-        (crop_preset == CROP_PRESET_3x3_1X_48p) ? reg_override_3x3_48p    :
-        (crop_preset == CROP_PRESET_1x3)        ? reg_override_1x3        :
-        (crop_preset == CROP_PRESET_3K)         ? reg_override_3K         :
-        (crop_preset == CROP_PRESET_4K_HFPS)    ? reg_override_4K_hfps    :
-        (crop_preset == CROP_PRESET_UHD)        ? reg_override_UHD        :
-        (crop_preset == CROP_PRESET_40_FPS)     ? reg_override_40_fps     :
-        (crop_preset == CROP_PRESET_FULLRES_LV) ? reg_override_fullres_lv :
-        (crop_preset == CROP_PRESET_CENTER_Z)   ? reg_override_zoom_fps   :
-        
         /* 650D / 700D / EOSM/M2 / 100D reg_override_func presets */
         (crop_preset == CROP_PRESET_1X1)        ? reg_override_1X1        :
         (crop_preset == CROP_PRESET_1X3)        ? reg_override_1X3        :
@@ -3736,39 +2954,11 @@ static void FAST engio_write_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
 
     // is engio_vidmode_ok still needed? PathDriveMode might be enough to detect video modes
     
-    if (is_basic)
-    {
-        /* cmos_vidmode_ok doesn't help;
-        * we can identify the current video mode from 0xC0F06804 */
-        for (uint32_t * buf = (uint32_t *) regs[0]; *buf != 0xFFFFFFFF; buf += 2)
-        {
-            uint32_t reg = *buf;
-            if (reg == 0xC0F06804)
-            {
-                if ((PathDriveMode->zoom > 1) && is_basic) // don't brighten up LiveView in x5/x10 modes for now for is_basic
-                {
-                    engio_vidmode_ok = 0;
-                }
-                else
-                {
-                    engio_vidmode_ok = 1;
-                }
-            }
-        }
-    }
 
     if (!is_supported_mode())
     {
         /* don't patch other video modes */
         return;
-        
-        if (is_basic)
-        {
-            if (!engio_vidmode_ok)
-            {
-                return;
-            }
-        }
     }
 
     for (uint32_t * buf = (uint32_t *) regs[0]; *buf != 0xFFFFFFFF; buf += 2)
@@ -4963,43 +4153,9 @@ static MENU_UPDATE_FUNC(crop_update)
 
     if (CROP_PRESET_MENU && lv)
     {
-        if (CROP_PRESET_MENU == CROP_PRESET_CENTER_Z || (is_70D && CROP_PRESET_MENU == CROP_PRESET_UHD) || is_DIGIC_5)
+        if (lv_dispsize == 1)
         {
-            if (lv_dispsize == 1)
-            {
-                MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "To use this mode, exit ML menu & press the zoom button (set to x5).");
-            }
-        }
-        else /* non-zoom modes */
-        {
-            if (is_basic || is_70D)
-            {
-                if (!is_supported_mode())
-                {
-                    MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "This preset only works in 1080p and 720p video modes.");
-                }
-                else if (lv_dispsize != 1)
-                {
-                    MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "To use this mode, exit ML menu and press the zoom button (set to x1).");
-                }
-                else if (!is_1080p())
-                {
-                    if (is_70D)
-                    {
-                        if (CROP_PRESET_MENU == CROP_PRESET_1x3) MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "This preset only works in the 1080p mode from Canon menu.");
-                    }
-                }
-                else if (!is_720p())
-                {
-                    if (CROP_PRESET_MENU == CROP_PRESET_3x3_1X ||
-                        CROP_PRESET_MENU == CROP_PRESET_3x3_1X_48p)
-                    {
-                        /* these presets only have effect in 720p mode */
-                        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "This preset only works in the 720p 50/60 fps modes from Canon menu.");
-                        return;
-                    }
-                }
-            }
+            MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "To use this mode, exit ML menu & press the zoom button (set to x5).");
         }
     }
 }
@@ -7154,72 +6310,6 @@ static int crop_rec_needs_lv_refresh()
     return 0;
 }
 
-static void center_canon_preview()
-{
-    /* center the preview window on the raw buffer */
-    /* overriding these registers once will do the trick...
-     * ... until the focus box is moved by the user */
-    int old = cli();
-
-    uint32_t pos1 = shamem_read(0xc0f383d4);
-    uint32_t pos2 = shamem_read(0xc0f383dc);
-
-    if ((pos1 & 0x80008000) == 0x80008000 &&
-        (pos2 & 0x80008000) == 0x80008000)
-    {
-        /* already centered */
-        sei(old);
-        return;
-    }
-
-    int x1 = pos1 & 0xFFFF;
-    int x2 = pos2 & 0xFFFF;
-    int y1 = pos1 >> 16;
-    int y2 = pos2 >> 16;
-
-    if (x2 - x1 != 299 && y2 - y1 != 792)
-    {
-        /* not x5/x10 (values hardcoded for 5D3) */
-        sei(old);
-        return;
-    }
-
-    int raw_xc = (146 + 3744) / 2 / 4;  /* hardcoded for 5D3 */
-    int raw_yc = ( 60 + 1380) / 2;      /* values from old raw.c */
-
-    if (1)
-    {
-        /* use the focus box position for moving the preview window around */
-        /* don't do that while recording! */
-        dbg_printf("[crop_rec] %d,%d ", raw_xc, raw_yc);
-        raw_xc -= 146 / 2 / 4;  raw_yc -= 60 / 2;
-        /* this won't change the position if the focus box is centered */
-        get_afframe_pos(raw_xc * 2, raw_yc * 2, &raw_xc, &raw_yc);
-        raw_xc += 146 / 2 / 4;  raw_yc += 60 / 2;
-        raw_xc &= ~1;   /* just for consistency */
-        raw_yc &= ~1;   /* this must be even, otherwise the image turns pink */
-        raw_xc = COERCE(raw_xc, 176, 770);  /* trial and error; image pitch changes if we push to the right */
-        raw_yc = COERCE(raw_yc, 444, 950);  /* trial and error; broken image at the edges, outside these limits */
-        dbg_printf("-> %d,%d using focus box position\n", raw_xc, raw_yc);
-    }
-    int current_xc = (x1 + x2) / 2;
-    int current_yc = (y1 + y2) / 2;
-    int dx = raw_xc - current_xc;
-    int dy = raw_yc - current_yc;
-    
-    if (dx || dy)
-    {
-        /* note: bits 0x80008000 appear to have no effect,
-         * so we'll use them to flag the centered zoom mode,
-         * e.g. for focus_box_get_raw_crop_offset */
-        dbg_printf("[crop_rec] centering zoom preview: dx=%d, dy=%d\n", dx, dy);
-        EngDrvOutLV(0xc0f383d4, PACK32(x1 + dx, y1 + dy) | 0x80008000);
-        EngDrvOutLV(0xc0f383dc, PACK32(x2 + dx, y2 + dy) | 0x80008000);
-    }
-
-    sei(old);
-}
-
 
 /* variables for 650D / 700D / EOSM/M2 / 100D help to detect if settings changed */
 static int old_ar_preset;
@@ -7754,19 +6844,6 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
     }
 
 
-    /* center canon preview on raw buffer for CROP_PRESET_CENTER_Z preset.
-     * FIXME: use Preview_Control_Basic or port center_canon_preview() to 70D */
-    if (is_70D)
-    {
-        if (crop_preset == CROP_PRESET_CENTER_Z && lv_dispsize == 5 && !RECORDING)
-        {
-            if ((shamem_read(0xC0F383D4) != 0x1560141) || shamem_read(0xC0F383DC) != 0x44e0260)
-            {
-                EngDrvOutLV(0xC0F383D4,0x1560141);
-                EngDrvOutLV(0xC0F383DC,0x44e0260);
-            }
-        }
-    }
 
     /* 650D / 700D / EOSM/M2 / 100D preferences */
     if (is_DIGIC_5 && lv)
@@ -8343,9 +7420,6 @@ static LVINFO_UPDATE_FUNC(crop_info)
         {
             switch (crop_preset)
             {
-                case CROP_PRESET_CENTER_Z:
-                    snprintf(buffer, sizeof(buffer), "3.5K");
-                    break;
                 case CROP_PRESET_1X1:
                     if (CROP_2_5K)     snprintf(buffer, sizeof(buffer), "2.5K");
                     if (CROP_2_8K)     snprintf(buffer, sizeof(buffer), "2.8K");
@@ -8396,49 +7470,6 @@ static LVINFO_UPDATE_FUNC(crop_info)
                     break;
             }
         }
-        else
-        {
-            switch (crop_preset)
-            {
-                case CROP_PRESET_3X:
-                    /* In movie mode, we are interested in recording sensor pixels
-                     * without any binning (that is, with 1:1 mapping);
-                     * the actual crop factor varies with raw video resolution.
-                     * So, printing 3x is not very accurate, but 1:1 is.
-                     * 
-                     * In photo mode (mild zoom), what changes is the magnification
-                     * of the preview screen; the raw image is not affected.
-                     * We aren't actually previewing at 1:1 at pixel level,
-                     * so printing 1:1 is a little incorrect.
-                     */
-                    if (!is_movie_mode())
-                    {
-                        snprintf(buffer, sizeof(buffer), "3x");
-                        goto warn;
-                    }
-                    break;
-
-                case CROP_PRESET_3X_TALL:
-                    snprintf(buffer, sizeof(buffer), "T");
-                    break;
-
-                case CROP_PRESET_3K:
-                    snprintf(buffer, sizeof(buffer), "3K");
-                    break;
-
-                case CROP_PRESET_4K_HFPS:
-                    snprintf(buffer, sizeof(buffer), "4K");
-                    break;
-
-                case CROP_PRESET_UHD:
-                    snprintf(buffer, sizeof(buffer), "UHD");
-                    break;
-
-                case CROP_PRESET_FULLRES_LV:
-                    snprintf(buffer, sizeof(buffer), "FLV");
-                    break;
-            }
-        }
     }
 
     /* append info about current binning mode */
@@ -8472,7 +7503,6 @@ static LVINFO_UPDATE_FUNC(crop_info)
         }
     }
 
-warn:
     if (crop_rec_needs_lv_refresh())
     {
         if (!streq(buffer, SYM_WARNING))
@@ -8572,21 +7602,11 @@ static unsigned int raw_info_update_cbr(unsigned int unused)
         /* update horizontal pixel binning parameters */
         switch (crop_preset)
         {
-            case CROP_PRESET_3X:
-            case CROP_PRESET_3X_TALL:
-            case CROP_PRESET_3K:
-            case CROP_PRESET_4K_HFPS:
-            case CROP_PRESET_UHD:
-            case CROP_PRESET_FULLRES_LV:
-            case CROP_PRESET_3x1:
             case CROP_PRESET_1X1:
                 raw_capture_info.binning_x    = raw_capture_info.binning_y  = 1;
                 raw_capture_info.skipping_x   = raw_capture_info.skipping_y = 0;
                 break;
 
-            case CROP_PRESET_3x3_1X:
-            case CROP_PRESET_3x3_1X_48p:
-            case CROP_PRESET_1x3:
             case CROP_PRESET_1X3:
             case CROP_PRESET_3X3:
                 raw_capture_info.binning_x = 3; raw_capture_info.skipping_x = 0;
@@ -8596,21 +7616,11 @@ static unsigned int raw_info_update_cbr(unsigned int unused)
         /* update vertical pixel binning / line skipping parameters */
         switch (crop_preset)
         {
-            case CROP_PRESET_3X:
-            case CROP_PRESET_3X_TALL:
-            case CROP_PRESET_3K:
-            case CROP_PRESET_4K_HFPS:
-            case CROP_PRESET_UHD:
-            case CROP_PRESET_FULLRES_LV:
-            case CROP_PRESET_1x3:
             case CROP_PRESET_1X3:
             case CROP_PRESET_1X1:
                 raw_capture_info.binning_y = 1; raw_capture_info.skipping_y = 0;
                 break;
 
-            case CROP_PRESET_3x3_1X:
-            case CROP_PRESET_3x3_1X_48p:
-            case CROP_PRESET_3x1:
             case CROP_PRESET_3X3:
             {
                 int b = 1;
@@ -8855,61 +7865,6 @@ static unsigned int crop_rec_init()
         memcpy(default_timerB, (int[]) { 2566, 2000, 2053, 1000, 1011, 1460, 2224, 2222, 1779 }, 36);
                                    /* or 2567        2054        1012        2225  2223  1780 */
     }       
-    else if (is_camera("6D", "1.1.6"))
-    {
-        CMOS_WRITE = 0x2420C;
-        MEM_CMOS_WRITE = 0xE92D41F0;        
-        
-        ADTG_WRITE = 0x24108;
-        MEM_ADTG_WRITE = 0xE92D41F0;
-        
-        ENG_DRV_OUT = 0xFF2ADE1C;
-        
-        PathDriveMode = (void *) 0xB5D1C;   /* argument of PATH_SelectPathDriveMode */
-        
-        is_6D = 1;
-        is_basic = 1;
-        crop_presets                = crop_presets_basic;
-        crop_rec_menu[0].choices    = crop_choices_basic;
-        crop_rec_menu[0].max        = COUNT(crop_choices_basic) - 1;
-        crop_rec_menu[0].help       = crop_choices_help_basic;
-        crop_rec_menu[0].help2      = crop_choices_help2_basic;
-        
-        fps_main_clock = 25600000;
-                                       /* 24p,  25p,  30p,  50p,  60p,   x5 */
-        memcpy(default_timerA, (int[]) {  546,  640,  546,  640,  520,  730 }, 24);
-        memcpy(default_timerB, (int[]) { 1955, 1600, 1564,  800,  821, 1172 }, 24);
-                                   /* or 1956        1565         822        2445        1956 */
-    }
-    else if (is_camera("70D", "1.1.2"))
-    {
-        CMOS_WRITE = 0x26B54;
-        MEM_CMOS_WRITE = 0xE92D41F0;        
-
-        ADTG_WRITE = 0x2684C;
-        MEM_ADTG_WRITE = 0xE92D47F0;
-        
-        ENGIO_WRITE = 0xFF2BC6C4;
-        MEM_ENGIO_WRITE = 0xE51FC15C;
-        
-        ENG_DRV_OUT = 0xFF2BC3AC;
-
-        PathDriveMode = (void *) 0xD945C;   /* argument of PATH_SelectPathDriveMode */
-
-        is_70D = 1;
-        crop_presets                = crop_presets_70d;
-        crop_rec_menu[0].choices    = crop_choices_70d;
-        crop_rec_menu[0].max        = COUNT(crop_choices_70d) - 1;
-        crop_rec_menu[0].help       = crop_choices_help_70d;
-        crop_rec_menu[0].help2      = crop_choices_help2_70d;
-        
-        fps_main_clock = 32000000;
-                                       /* 24p,  25p,  30p,  50p,  60p,   x5   c24p, c25p, c30p */
-        memcpy(default_timerA, (int[]) {  700,  800,  700,  800,  672,  672,  462,  500,  462 }, 36);
-        memcpy(default_timerB, (int[]) { 1906, 1600, 1525,  800,  794, 1588, 2888, 2560, 2311 }, 36);
-                                   /* or 1907        1526         795        2889        2312  */
-    }
-    
     /* default FPS timers are the same on all these models */
     if (is_EOSM || is_700D || is_650D)
     {

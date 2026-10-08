@@ -130,25 +130,11 @@ extern int WEAK_FUNC(fullresmode) crop_preset_1x3_res;
 
 /* camera-specific tricks */
 static int cam_eos_m = 0;
-static int cam_5d2 = 0;
-static int cam_50d = 0;
-static int cam_500d = 0;
-static int cam_550d = 0;
-static int cam_6d = 0;
-static int cam_600d = 0;
 static int cam_650d = 0;
-static int cam_7d = 0;
 static int cam_700d = 0;
-static int cam_60d = 0;
-static int cam_70d = 0;
 static int cam_100d = 0;
-static int cam_1100d = 0;
 
-static int cam_5d3 = 0;
-static int cam_5d3_113 = 0;
-static int cam_5d3_123 = 0;
 
-static int cam_dualcard = 0; /* For cameras with spanning capability */
 /**
  * resolution (in pixels) should be multiple of 16 horizontally (see http://www.magiclantern.fm/forum/index.php?topic=5839.0)
  * furthermore, resolution (in bytes) should be multiple of 8 in order to use the fastest EDMAC flags ( http://magiclantern.wikia.com/wiki/Register_Map#EDMAC ),
@@ -2458,41 +2444,6 @@ static void unhack_liveview_vsync(int unused);
 static REQUIRES(LiveViewTask)
 void FAST hack_liveview_vsync()
 {
-    if (cam_5d2 || cam_50d)
-    {
-        /* try to fix pink preview in zoom mode (5D2/50D) */
-        if (lv_dispsize > 1 && !get_halfshutter_pressed())
-        {
-            if (RAW_IS_IDLE)
-            {
-                /**
-                 * This register seems to be raw type on digic 4; digic 5 has it at c0f37014
-                 * - default is 5 on 5D2 with lv_save_raw, 0xB without, 4 is lv_af_raw
-                 * - don't record this: you will have lots of bad pixels (no big deal if you can remove them)
-                 * - don't record lv_af_raw: you will have random colored dots that contain focus info; their position is not fixed, so you can't remove them
-                 * - use half-shutter heuristic for clean silent pics
-                 * 
-                 * Reason for overriding here:
-                 * - if you use lv_af_raw, you can no longer restore it when you start recording.
-                 * - if you override here, image quality is restored as soon as you stop overriding
-                 * - but pink preview is also restored, you can't have both
-                 */
-                
-                *(volatile uint32_t*)0xc0f08114 = 0;
-            }
-            else
-            {
-                /**
-                 * While recording, we will have pink image
-                 * Make it grayscale and bring the shadows down a bit
-                 * (these registers will only touch the preview, not the recorded image)
-                 */
-                *(volatile uint32_t*)0xc0f0f070 = 0x01000100;
-                //~ *(volatile uint32_t*)0xc0f0e094 = 0;
-                *(volatile uint32_t*)0xc0f0f1c4 = 0xFFFFFFFF;
-            }
-        }
-    }
     
     if (!PREVIEW_HACKED) return;
     
@@ -2612,22 +2563,10 @@ void hack_liveview(int unhack)
         
         /* change dialog refresh timer from 50ms to 8192ms */
         uint32_t dialog_refresh_timer_addr = /* in StartDialogRefreshTimer */
-            cam_50d ? 0xffa84e00 :
-            cam_5d2 ? 0xffaac640 :
-            cam_5d3_113 ? 0xff4acda4 :
-            cam_5d3_123 ? 0xFF4B7648 :
-            cam_550d ? 0xFF2FE5E4 :
-            cam_600d ? 0xFF37AA18 :
             cam_650d ? 0xFF527E38 :
-            cam_6d   ? 0xFF52C684 :
             cam_eos_m ? 0xFF539C1C :
             cam_700d ? 0xFF52BB60 :
-            cam_7d  ? 0xFF345788 :
-            cam_60d ? 0xff36fa3c :
-            cam_70d ? 0xFF558FF0 :
             cam_100d ? 0xFF542580 :
-            cam_500d ? 0xFF2ABEF8 :
-            cam_1100d ? 0xFF373384 :
             /* ... */
             0;
         uint32_t dialog_refresh_timer_orig_instr = 0xe3a00032; /* mov r0, #50 */
@@ -4905,9 +4844,6 @@ unsigned int raw_rec_keypress_cbr(unsigned int key)
     /* start/stop recording with the LiveView key */
     int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC);
     
-    /* ... or SET on 5D2/50D */
-    if (cam_50d || cam_5d2) rec_key_pressed = (key == MODULE_KEY_PRESS_SET);
-    
     if (rec_key_pressed)
     {
         printf("REC key pressed.\n");
@@ -5402,36 +5338,14 @@ static unsigned int raw_rec_init()
     }
     
     cam_eos_m = is_camera("EOSM", "2.0.2");
-    cam_5d2   = is_camera("5D2",  "2.1.2");
-    cam_50d   = is_camera("50D",  "1.0.9");
-    cam_550d  = is_camera("550D", "1.0.9");
-    cam_6d    = is_camera("6D",   "1.1.6");
-    cam_600d  = is_camera("600D", "1.0.2");
     cam_650d  = is_camera("650D", "1.0.4");
-    cam_7d    = is_camera("7D",   "2.0.3");
     cam_700d  = is_camera("700D", "1.1.5");
-    cam_60d   = is_camera("60D",  "1.1.1");
-    cam_70d   = is_camera("70D",  "1.1.2");
     cam_100d  = is_camera("100D", "1.0.1");
-    cam_500d  = is_camera("500D", "1.1.1");
-    cam_1100d = is_camera("1100D", "1.0.5");
 
-    cam_5d3_113 = is_camera("5D3",  "1.1.3");
-    cam_5d3_123 = is_camera("5D3",  "1.2.3");
-    cam_5d3 = (cam_5d3_113 || cam_5d3_123);
-    
-    /* Both SD and CF cards should be presented in camera */
-    if (is_dir("A:/") && is_dir("B:/")) cam_dualcard = cam_5d3; /* Add any new models later */
-    
-    if (cam_5d2 || cam_50d)
-    {
-       raw_video_menu[0].help = "Record RAW video. Press SET to start.";
-    }
-    
-    /* Hide card spanning on models other than 5D3 */
+    /* Hide card spanning (only the 5D3 had two card slots) */
     for (struct menu_entry * e = raw_video_menu[0].children; !MENU_IS_EOL(e); e++)
     {
-        if (!cam_dualcard && streq(e->name, "Card Spanning") )
+        if (streq(e->name, "Card Spanning") )
         {
             e->shidden = 1;
             card_spanning = 0; /* Just to make sure */
@@ -5514,18 +5428,8 @@ static unsigned int raw_rec_init()
     lossless_init();
 
     settings_sem = create_named_semaphore(0, 1);
-    if (cam_dualcard) queue_sem = create_named_semaphore("queue_sem", 1);
 
-    if (cam_70d)
-    {
-        /* setting priority to 0x0F gives repeated/corrtuped frames at high resolution/fps modes on 70D */
-        /* 720p60 still gives repeated frames even with 0x11 priority, increasing it doesn't improve it */
-        ASSERT(((uint32_t)task_create("compress_task", 0x11, 0x1000, compress_task, (void*)0) & 1) == 0);
-    }
-    else
-    {
-        ASSERT(((uint32_t)task_create("compress_task", 0x0F, 0x1000, compress_task, (void*)0) & 1) == 0);
-    }
+    ASSERT(((uint32_t)task_create("compress_task", 0x0F, 0x1000, compress_task, (void*)0) & 1) == 0);
 
     return 0;
 }
