@@ -5138,12 +5138,6 @@ static int preview_dirty = 0;
 /* EOS M slim: INFO Button → framing (low-res correct framing, like Preview → Framing). */
 static int slim_info_framing_active = 0;
 
-int mlv_lite_toggle_kill_gd(void)
-{
-    kill_gd = !kill_gd;
-    return kill_gd;
-}
-
 void mlv_lite_info_framing_toggle(void)
 {
     slim_info_framing_active = !slim_info_framing_active;

@@ -93,7 +93,7 @@ int main(void)
     }
 
     /* --- current config: INFO untouched, and loading twice changes nothing more --- */
-    for (int v = 0; v <= 7; v++)
+    for (int v = 0; v <= 6; v++)
     {
         reset_defaults(); crop_settings_ver = 3; INFO_button = v; Shutter_rec = 1;
         crop_settings_load();

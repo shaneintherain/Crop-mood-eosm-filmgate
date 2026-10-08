@@ -6,6 +6,5 @@ extern WEAK_FUNC(ret_0) int mlv_raw_rec_busy();
 /* EOS M slim: Settings → INFO Button = framing toggles ML framing preview (see crop_rec.c). */
 extern WEAK_FUNC(ret_0) void mlv_lite_info_framing_toggle(void);
 /* INFO button "Kill Global Draw": toggles the setting, returns the new state (0/1). */
-extern WEAK_FUNC(ret_0) int mlv_lite_toggle_kill_gd(void);
 extern WEAK_FUNC(ret_0) void mlv_lite_info_framing_reset(void);
 extern WEAK_FUNC(ret_0) void mlv_lite_set_small_hacks_more(void);

@@ -2796,11 +2796,13 @@ static LVINFO_UPDATE_FUNC(av_update)
         snprintf(buffer, sizeof(buffer), lens_format_aperture(lens_info.raw_aperture));
     }
     
+#ifndef CONFIG_SLIM_MENUS  /* slim builds run with Expo Override on by default: no marker */
     if (CONTROL_BV)
     {
         /* mark the "exposure override" mode */
         item->color_bg = 18;
     }
+#endif
 }
 
 static LVINFO_UPDATE_FUNC(tv_update)
@@ -2820,11 +2822,13 @@ static LVINFO_UPDATE_FUNC(tv_update)
         snprintf(buffer, sizeof(buffer), "%s", lens_format_shutter(lens_info.raw_shutter));
     }
 
+#ifndef CONFIG_SLIM_MENUS  /* slim builds run with Expo Override on by default: no marker */
     if (CONTROL_BV)
     {
         /* mark the "exposure override" mode */
         item->color_bg = 18;
     }
+#endif
 }
 
 static int (*dual_iso_is_active)() = MODULE_FUNCTION(dual_iso_is_active);
@@ -2925,11 +2929,16 @@ static LVINFO_UPDATE_FUNC(iso_update)
     }
     else
     #endif
+#ifndef CONFIG_SLIM_MENUS  /* slim builds run with Expo Override on by default: no marker */
     if (CONTROL_BV)
     {
         /* mark the "exposure override" mode */
         item->color_bg = 18;
     }
+#else
+    {
+    }
+#endif
 }
 
 static LVINFO_UPDATE_FUNC(wb_update)
