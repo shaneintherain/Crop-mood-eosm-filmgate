@@ -4338,13 +4338,16 @@ static struct menu_entry expo_menus[] = {
         .update    = iso_display,
         .select     = iso_toggle,
         .help  = "Adjust and fine-tune ISO. Also displays APEX Sv value.",
+#ifndef CONFIG_SLIM_MENUS
         .help2 = "Advanced: digital ISO tweaks, HTP, ISO 50, ISO 800.000...",
+#endif
 #ifdef CONFIG_SLIM_MENUS
         .edit_mode = EM_INLINE_ADJUST,
 #else
         .edit_mode = EM_SHOW_LIVEVIEW,
 #endif
         
+#ifndef CONFIG_SLIM_MENUS  /* slim builds: ISO is a plain inline value, no advanced submenu */
         .submenu_width = 650,
 
         .children =  (struct menu_entry[]) {
@@ -4430,6 +4433,7 @@ static struct menu_entry expo_menus[] = {
             #endif
             MENU_EOL
         },
+#endif
     },
     #endif
     #ifdef FEATURE_EXPO_SHUTTER

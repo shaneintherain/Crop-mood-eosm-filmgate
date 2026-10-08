@@ -339,29 +339,26 @@ static CONFIG_INT( "focus.peaking.slim.filter.edges", focus_peaking_filter_edges
 static CONFIG_INT( "focus.peaking.slim.thr", focus_peaking_pthr, 5);
 static CONFIG_INT( "focus.peaking.slim.color", focus_peaking_color, 0);
 extern int preview_peaking;
-static CONFIG_INT("focus.assist.mode", focus_assist_mode, 0);
+static CONFIG_INT("focus.assist.mode2", focus_assist_mode, 0);  /* new key: old numbering had Focus Peaking at 1 */
 
 enum slim_focus_assist_mode
 {
     FOCUS_ASSIST_OFF = 0,
-    FOCUS_ASSIST_PEAKING,
     FOCUS_ASSIST_SHARPER_IMAGE,
     FOCUS_ASSIST_EDGE_DETECT,
 };
 
 /* Keep the menu's plain-language order independent from the original DIGIC
- * register values. Focus Peaking is the regular ML dot overlay; only Sharper
- * Image and Edge Detect use the DIGIC display filter. */
+ * register values. The dot-overlay Focus Peaking was removed (not useful);
+ * Sharper Image and Edge Detect use the DIGIC display filter. */
 static void slim_focus_assist_apply_mode(void)
 {
     if (focus_assist_mode < FOCUS_ASSIST_OFF ||
         focus_assist_mode > FOCUS_ASSIST_EDGE_DETECT)
         focus_assist_mode = FOCUS_ASSIST_OFF;
 
-    /* Focus Assist owns both implementations. Always set both states so a
-     * previously selected DIGIC filter cannot leak into Focus Peaking, and a
-     * previous dot overlay cannot remain in the other modes. */
-    focus_peaking = focus_assist_mode == FOCUS_ASSIST_PEAKING;
+    /* The dot overlay is never enabled in slim builds. */
+    focus_peaking = 0;
     preview_peaking =
         focus_assist_mode == FOCUS_ASSIST_SHARPER_IMAGE ? 1 :
         focus_assist_mode == FOCUS_ASSIST_EDGE_DETECT ? 2 : 0;
@@ -3350,10 +3347,10 @@ struct menu_entry zebra_menus[] = {
         .min            = 0,
         .max            = FOCUS_ASSIST_EDGE_DETECT,
         .icon_type = IT_DICE,
-        .choices = CHOICES("OFF", "Focus Peaking", "Sharper Image", "Edge Detect"),
+        .choices = CHOICES("OFF", "Sharper Image", "Edge Detect"),
         .edit_mode = EM_INLINE_ADJUST,
         .help = "DIGIC preview assistance; does not affect the recording.",
-        .help2 = "Focus Peaking uses colored edges. Sharper Image is subtle; Edge Detect is monochrome.",
+        .help2 = "Sharper Image is subtle; Edge Detect is monochrome.",
         .depends_on = DEP_LIVEVIEW,
     },
     {

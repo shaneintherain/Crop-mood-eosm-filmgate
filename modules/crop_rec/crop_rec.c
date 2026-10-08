@@ -7486,7 +7486,8 @@ static const struct setting_range crop_settings[] = {
     SETTING(brighten_lv_method,         0,       1,      0),
     SETTING(fps_over,             -100000,  100000,      0),
     SETTING(SET_button,                 1,       2,      1),  /* slim: x10 zoom / last settings */
-    SETTING(INFO_button,                0,       6,      0),
+    SETTING(INFO_button,                0,       7,      0),
+    SETTING(Shutter_rec,                0,       1,      0),
     SETTING(Arrows_U_D,                 0,       3,      3),
     SETTING(Shutter_zoom,               0,       2,      0),
     SETTING(tapdisp,                    0,       5,      1),

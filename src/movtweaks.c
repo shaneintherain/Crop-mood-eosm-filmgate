@@ -647,7 +647,13 @@ void rec_notify_trigger(int rec)
 
 static struct semaphore * bv_sem = 0;
 
+#ifdef CONFIG_SLIM_MENUS
+/* Slim/film builds: manual exposure (1/50, ISO 100 defaults) from first boot,
+ * instead of Canon's auto movie exposure (e.g. 1/130, "A100"). */
+CONFIG_INT("bv.auto", bv_auto, 1);
+#else
 CONFIG_INT("bv.auto", bv_auto, 0);
+#endif
 
 static MENU_UPDATE_FUNC(bv_display)
 {
