@@ -2804,6 +2804,15 @@ static void mlv_play_leave_playback()
         free(buffer);
     }
     
+    /* Powering off from the playback screen: Canon is already shutting down (sensor
+     * cleaning).  Asking it to go back to Live View now (SetGUIRequestMode(0)) starts a
+     * Live View session in the middle of the shutdown, and the camera hangs in sensor
+     * cleaning until the battery door is opened.  Leave the mode alone in that case. */
+    if (ml_shutdown_requested)
+    {
+        return;
+    }
+
     vram_clear_lv();
     exit_play_qr_mode();
 }
