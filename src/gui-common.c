@@ -872,9 +872,7 @@ int handle_common_events_startup(struct event * event)
         if (handle_select_config_file_by_key_at_startup(event) == 0) return 0;
 
         
-#if !defined(CONFIG_650D) && !defined(CONFIG_700D) && !defined(CONFIG_100D)
         if (event->param == BGMT_LV) return 0; // discard REC button if it's pressed too early
-        #endif
         
                 
         return 1; // don't alter any other buttons/events until ML is fully initialized

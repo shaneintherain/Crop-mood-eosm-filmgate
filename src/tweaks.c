@@ -446,22 +446,14 @@ int handle_set_wheel_play(struct event * event)
     {
       // combined q/set button immediately pops up canon menu
       // (protect, rotate, rate etc..) so we better use Av button instead
-      #ifdef CONFIG_100D
-        if (event->param == BGMT_PRESS_AV)
-#else
         if (event->param == BGMT_PRESS_SET)
-      #endif
         {
             // for cameras where SET does not send an unpress event, pressing SET again should do the trick
             set_maindial_action_enabled = !set_maindial_action_enabled;
             ASSERT(set_maindial_action_enabled); // most cameras are expected to send Unpress SET event (if they don't, one needs to fix the quick erase feature)
             print_set_maindial_hint(set_maindial_action_enabled);
         }
-      #ifdef CONFIG_100D
-        else if (event->param == BGMT_UNPRESS_AV)
-#else
         else if (event->param == BGMT_UNPRESS_SET)
-      #endif        
         {
             /* only clear the display if something was printed */
             if (set_maindial_action_enabled)
@@ -4501,16 +4493,6 @@ static struct menu_entry play_menus[] = {
                         .help = "Chose the action type to perform when triggered.",
                         .icon_type = IT_PERCENT_OFF,
                     },
-                    #ifdef CONFIG_100D
-                    {
-                        .name = "Trigger key(s)",
-                        .priv = &play_set_wheel_trigger,
-                        .max = 0,
-                        .choices = (const char *[]) {"Av+MainDial"},
-                        .help = "Use Av+MainDial together to perform selected action.",
-                        .icon_type = IT_DICE,
-                    },
-#else
                     {
                         .name = "Trigger key(s)",
                         .priv = &play_set_wheel_trigger,
@@ -4519,7 +4501,6 @@ static struct menu_entry play_menus[] = {
                         .help = "Either use a key combination and/or just an easier single keystroke.",
                         .icon_type = IT_DICE,
                     },
-                    #endif
                     MENU_EOL
                 }
             },
