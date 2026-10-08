@@ -625,8 +625,11 @@ void _load_fonts()
      * Either way it takes slot 2, so the other font IDs never move. */
     font_by_name(rbf_font_file_exists("jost-small") ? "jost-small" : "argnor23", COLOR_BLACK, COLOR_WHITE);
     #endif
-    font_by_name("argnor28", COLOR_BLACK, COLOR_WHITE);
-    font_by_name("argnor32", COLOR_BLACK, COLOR_WHITE);
+    /* FONT_MED_LARGE (slot 3) and FONT_LARGE (slot 4): Jost with the same cell sizes as the stock
+     * fonts (and the ML symbols copied over), so alerts, meters and warnings match the menus.
+     * Without the files the stock fonts are used; the slots never move either way. */
+    font_by_name(rbf_font_file_exists("jost-medlarge") ? "jost-medlarge" : "argnor28", COLOR_BLACK, COLOR_WHITE);
+    font_by_name(rbf_font_file_exists("jost-large") ? "jost-large" : "argnor32", COLOR_BLACK, COLOR_WHITE);
     /* Jost Medium for the FilmGate menus.  It occupies a spare dynamic slot and
      * is loaded with the ordinary ML fonts, never from a Live View drawing callback. */
     font_by_name("jost-medium", COLOR_BLACK, COLOR_WHITE);
