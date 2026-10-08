@@ -127,15 +127,7 @@ static int (*dual_iso_get_dr_improvement)() = MODULE_FUNCTION(dual_iso_get_dr_im
 
 
 
-#ifdef CONFIG_650D
-#define DEFAULT_RAW_BUFFER MEM(0x25B00 + 0x3C)
-#define DEFAULT_RAW_BUFFER_SIZE (0x47F00000 - 0x46798080)
-#endif
 
-#ifdef CONFIG_700D
-#define DEFAULT_RAW_BUFFER MEM(0x25B0C + 0x3C)
-#define DEFAULT_RAW_BUFFER_SIZE (0x47F00000 - 0x46798080)
-#endif
 
 #ifdef CONFIG_EOSM
 #define DEFAULT_RAW_BUFFER MEM(0x404E4 + 0x44)
@@ -144,10 +136,6 @@ static int (*dual_iso_get_dr_improvement)() = MODULE_FUNCTION(dual_iso_get_dr_im
 
 
 
-#ifdef CONFIG_100D
-#define DEFAULT_RAW_BUFFER MEM(0x6733C + 0x40)
-#define DEFAULT_RAW_BUFFER_SIZE (0x46CC0000 - 0x46798100)
-#endif
 
 
 #ifndef DEFAULT_RAW_BUFFER_SIZE
@@ -196,7 +184,7 @@ static int (*dual_iso_get_dr_improvement)() = MODULE_FUNCTION(dual_iso_get_dr_im
  */
 
 
-#if defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_650D) || defined(CONFIG_100D)
+#if defined(CONFIG_EOSM)
 #define RAW_PHOTO_EDMAC 0xc0f04008
 #endif
 
@@ -256,11 +244,6 @@ static int get_default_white_level()
     {
         int default_white = WHITE_LEVEL;
 
-        #if defined(CONFIG_100D) || defined(CONFIG_700D) /* other models? */
-        /* http://www.magiclantern.fm/forum/index.php?topic=16040.msg191131#msg191131 */
-        /* 100 units below measured value = about 0.01 EV */
-        default_white = (lens_info.raw_iso == ISO_100) ? 13400 : 15200;
-        #endif
 
         /* fixme: hardcoded black level */
         return (default_white - 2048) * lv_raw_gain / 4096 + 2048;
@@ -291,7 +274,7 @@ static int get_default_white_level()
 
 
 	
-#if defined(CONFIG_650D) || defined(CONFIG_EOSM) || defined(CONFIG_700D) || defined(CONFIG_100D) // Same sensor
+#if defined(CONFIG_EOSM)
     //~ { "Canon EOS 650D", 0, 0x354d,
     //~ { "Canon EOS M", 0, 0,
     //~ { 6602,-841,-939,-4472,12458,2247,-975,2039,6148 } },
@@ -350,17 +333,8 @@ PROP_HANDLER(PROP_LV_AFFRAME)
 
 
 
-#ifdef CONFIG_650D
-static int dynamic_ranges[] = {1062, 1047, 1021, 963,  888, 804, 695, 623, 548};
-#endif
 
-#ifdef CONFIG_700D
-static int dynamic_ranges[] = {1058, 1053, 1032, 967,  893, 807, 704, 618, 510};
-#endif
 
-#ifdef CONFIG_100D
-static int dynamic_ranges[] = {1067, 1061, 1038, 972, 894, 802, 707, 625, 510};
-#endif
 
 
 
@@ -437,7 +411,7 @@ static int raw_lv_get_resolution(int* width, int* height)
      *      (650D 720p: top=28 active=696 y2=724 above=726 adjusted=725)
      * see also https://a1ex.magiclantern.fm/bleeding-edge/raw/raw_res.txt */
 
-#if defined(CONFIG_700D) || defined(CONFIG_650D) || defined(CONFIG_EOSM)
+#if defined(CONFIG_EOSM)
     /* required to squeeze 1080p in x5 zoom */
     (*height)++;
 #elif defined(CONFIG_DIGIC_V)
@@ -672,21 +646,15 @@ int raw_update_params_work()
 
 
 
-        #if defined(CONFIG_EOSM) || defined(CONFIG_700D) || defined(CONFIG_650D) || defined(CONFIG_100D)
+#if defined(CONFIG_EOSM)
         skip_top    = 28;
         skip_left   = 72;
         skip_right  = 0;
-        #ifdef CONFIG_100D
-        /* 720p: H=727-1, last valid line at y=723, 2 white lines at bottom */
-        /* VRAM dumps, please: http://www.magiclantern.fm/forum/index.php?topic=12375.0 */
-        skip_bottom = zoom ? 0 : mv1080crop ? 0 : mv720 ? 2 : 0;
-#else
         /* 720p: H=726+1, last valid line at y=723, 3 white lines at bottom */
         /* 1080p: H=1189+1, 2 white lines at bottom */
         /* x5 zoom: H=1107+1, no bad lines at bottom; 1108-28=1080 */
         /* 1080 crop: H=1059+1, no bad lines at bottom */
         skip_bottom = zoom ? 0 : mv1080crop ? 0 : mv720 ? 3 : 2;
-        #endif
         #endif
 
 
@@ -745,7 +713,7 @@ int raw_update_params_work()
 
       
 
-        #if defined(CONFIG_650D) || defined(CONFIG_EOSM) || defined(CONFIG_700D) || defined(CONFIG_100D)
+#if defined(CONFIG_EOSM)
         skip_left = 72;
         skip_top = 52;
         #endif

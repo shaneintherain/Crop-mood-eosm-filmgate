@@ -198,22 +198,6 @@ static void fps_read_current_timer_values();
     #define FPS_TIMER_B_MIN ( \
     RECORDING_H264 ? (MV1080CROP ? 1750 : MV720 ? 990 : 1970) \
                    : (ZOOM || MV1080CROP ? 1336 : 1970))
-#elif defined(CONFIG_650D)
-    #define TG_FREQ_BASE 32000000
-    #define FPS_TIMER_A_MIN (fps_timer_a_orig)
-#elif defined(CONFIG_700D)
-    #define TG_FREQ_BASE 32000000 //copy from 650D
-    #define FPS_TIMER_A_MIN (fps_timer_a_orig)
-#elif defined(CONFIG_100D)
-    #define TG_FREQ_BASE 32000000
-    #define FPS_TIMER_A_MIN (ZOOM ? 724 : MV1080CROP ? 540 : 520)
-    #undef FPS_TIMER_B_MIN
-    // no need to cause confusions as recording speed cannot handle such high fps in crop mode
-    // (ZOOM || MV1080CROP ? 1288 : 1970)) <-- these are ok while not recording.
-    // Hybrid CMOS AF II uses 60fps by default in LV/MV for the camera display
-    // to achieve a "snappy" autofocus by doubling the fps
-    // MV720 is not LV so we need to extend the definition for the LCD.
-    #define FPS_TIMER_B_MIN (ZOOM ? 1450 : MV1080CROP ? 1750 : MV720 || (lv && lv_dispsize==1 && !is_movie_mode()) ? 990 : 1970)
 #endif
 
 // these can change timer B with another method, more suitable for high FPS

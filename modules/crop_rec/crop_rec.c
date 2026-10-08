@@ -51,9 +51,6 @@ static int zoom = 0;
 static int submenu = 0;
 
 static int is_DIGIC_5 = 0;
-static int is_700D = 0;
-static int is_650D = 0;
-static int is_100D = 0;
 static int is_EOSM = 0;
 
 static CONFIG_INT("crop.fps_over", fps_over, 0);
@@ -822,7 +819,7 @@ static int is_supported_mode()
     /* 650D / 700D / EOSM/M2 / 100D prests will only work in x5 mode, don't patch x1 */
     if (PathDriveMode->zoom == 1)
     {
-        if (is_650D || is_700D || is_EOSM || is_100D) 
+        if (is_EOSM) 
         {
             return 0;
         }
@@ -1396,30 +1393,18 @@ static void FAST adtg_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
             switch (crop_preset)
             {
                 case CROP_PRESET_1X3:
-                if (is_650D || is_700D || is_100D || is_EOSM)
+                if (is_EOSM)
                 {
                     adtg_new[2] = (struct adtg_new) {2, 0x800C, 0};
                     adtg_new[3] = (struct adtg_new) {2, 0x8000, 0x6};
                     adtg_new[4] = (struct adtg_new) {2, 0x8183, 0x21};
                     adtg_new[5] = (struct adtg_new) {2, 0x8184, 0x7B};
                     
-                    if (is_100D)
-                    {
-                    /*  Artifacts without these on certain 100D bodies:
-                        https://www.magiclantern.fm/forum/index.php?topic=26511.msg239495#msg239495
-                        https://www.magiclantern.fm/forum/index.php?topic=26511.msg239557#msg239557  */
-
-                        adtg_new[6]  = (struct adtg_new) {2, 0xc00d, 0x5000};
-                        adtg_new[7]  = (struct adtg_new) {2, 0xc00e, 0x53};
-                        adtg_new[8]  = (struct adtg_new) {2, 0xc00f, 0x52};
-                        adtg_new[9]  = (struct adtg_new) {2, 0xc010, 0x52};
-                        adtg_new[10] = (struct adtg_new) {2, 0xc011, 0x52};
-                    }
                 }
                 break;
                 
                 case CROP_PRESET_3X3:
-                if (is_650D || is_700D || is_100D || is_EOSM)
+                if (is_EOSM)
                 {
                     adtg_new[2] = (struct adtg_new) {2, 0x800C, 0x2};
                     adtg_new[3] = (struct adtg_new) {2, 0x8000, 0x6};
@@ -1678,7 +1663,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
 {
     if (CROP_2_5K)
     {
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             RAW_H         = 0x298 + reg_width;
             RAW_V         = 0x455 + reg_height;
@@ -1688,15 +1673,6 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             if (Framerate_30) TimerB = 0x5D3;
         }
 
-        if (is_100D)
-        {
-            RAW_H         = 0x2a1;
-            RAW_V         = 0x459;
-            TimerA        = 0x2DB;
-            if (Framerate_24) TimerB = 0x71E;
-            if (Framerate_25) TimerB = 0x6D3;
-            if (Framerate_30) TimerB = 0x5B3;
-        }
 
         // Preview_H should be = active RAW width - 4? , 2520 - 4 = 2516 (active RAW width is 2520)
         // otherwise a black bar will appear in the left part of both YUV (HD) and (LV) dumps 
@@ -1728,7 +1704,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
     
     if (CROP_2_8K)
     {
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             RAW_H         = 0x2F2 + reg_width;
             RAW_V         = 0x4d3 + reg_height;
@@ -1738,16 +1714,6 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             if (Framerate_30) TimerB = 0x633;  // 30 Doesn't work, make it 25
         }
 
-        if (is_100D)
-        {
-            RAW_H         = 0x2FB;
-            RAW_V         = 0x4EB;
-            TimerB        = 0x666;
-            TimerA        = 0x32D;
-            if (Framerate_24) TimerB = 0x666;
-            if (Framerate_25) TimerB = 0x623;
-            if (Framerate_30) TimerB = 0x623;  // 30 Doesn't work, make it 25
-        }
 
         Preview_H         = 2868;  // black bar above 2868
         Preview_V         = 1226 + YUV_HD_S_H_height;
@@ -1771,7 +1737,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         /* Active RAW 3072x1308 (2.35:1). Old RAW_V 0x521 gave ~1284 lines (2.39:1). */
         enum { CROP_3K_RAW_V_EXTRA = 0x18 }; /* +24 lines → 1308 active height */
 
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             RAW_H    = 0x322 + reg_width;
             RAW_V    = 0x521 + reg_height + CROP_3K_RAW_V_EXTRA;
@@ -1779,13 +1745,6 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             TimerA   = 0x35B;
         }
 
-        if (is_100D)
-        {
-            RAW_H    = 0x32B;
-            RAW_V    = 0x53D + CROP_3K_RAW_V_EXTRA;
-            TimerB   = 0x60B;
-            TimerA   = 0x35D;
-        }
 
         Preview_H         = 2868;  // black bar above 2868
         Preview_V         = 1308;
@@ -1807,7 +1766,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         
     if (CROP_1440p)
     {
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             RAW_H    = 0x2A2 + reg_width;
             RAW_V    = 0x5BD + reg_height;
@@ -1817,15 +1776,6 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             if (Framerate_30) TimerB = 0x6D3;  // 30 Doesn't work, make it 25
         }
 
-        if (is_100D)
-        {
-            RAW_H    = 0x2AB;
-            RAW_V    = 0x5C1;
-            TimerA   = 0x2DD;
-            if (Framerate_24) TimerB = 0x719;
-            if (Framerate_25) TimerB = 0x6CE;
-            if (Framerate_30) TimerB = 0x6CE;  // 30 Doesn't work, make it 25
-        }
 
         Preview_H     = 2552;  // 2556 causes preview artifacts
         Preview_V     = 1440;
@@ -1844,7 +1794,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
     
     if (CROP_1620p)
     {
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             RAW_H    = 0x23E + reg_width;
             RAW_V    = 0x671 + reg_height;
@@ -1875,7 +1825,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
 
     if (CROP_1280p)
     {
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             RAW_H    = 0x202 + reg_width;
             RAW_V    = 0x51D + reg_height;
@@ -1886,16 +1836,6 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             if (Framerate_18) TimerB = 0xC44;   /* 18.000 fps: 32 MHz / (0x236 * 0xC45) */
         }
 
-        if (is_100D)
-        {
-            RAW_H    = 0x20B;
-            RAW_V    = 0x521;
-            TimerA   = 0x23D;
-            if (Framerate_24) TimerB = 0x914;
-            if (Framerate_25) TimerB = 0x8B5;
-            if (Framerate_30) TimerB = 0x743;
-            if (Framerate_18) TimerB = 0xC18;   /* 18.000 fps: 32 MHz / (0x23E * 0xC19) */
-        }
 
         Preview_H     = 1916;
         Preview_V     = 1280;
@@ -1913,7 +1853,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
     
     if (CROP_1080p)
     {
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             RAW_H    = 0x202 + reg_width;
             RAW_V    = 0x455 + reg_height;
@@ -1923,15 +1863,6 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             if (Framerate_30) TimerB = 0x75D;
         }
 
-        if (is_100D)
-        {
-            RAW_H    = 0x20B;
-            RAW_V    = 0x521;
-            TimerA   = 0x23D;
-            if (Framerate_24) TimerB = 0x914;
-            if (Framerate_25) TimerB = 0x8B5;
-            if (Framerate_30) TimerB = 0x743;
-        }
 
         Preview_H     = 1916 + reg_Preview_H;
         Preview_V     = 1080 + reg_Preview_V;
@@ -1949,7 +1880,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
 
     if (CROP_Full_Res) /* 5208x3478 — EOS M slim LV @ 3 FPS; other Digic5 @ 2 FPS */
     {
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             RAW_H    = 0x538 + reg_width;
             RAW_V    = 0xDB3 + reg_height;
@@ -1958,13 +1889,6 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             TimerA   = 0x56B;
         }
 
-        if (is_100D)
-        {
-            RAW_H    = 0x541;
-            RAW_V    = 0xDB7;
-            TimerB   = 0x1DD6;
-            TimerA   = 0x573;
-        }
 
         Preview_x1 = 0x217;
         Preview_x2 = 0x31F;
@@ -2078,13 +2002,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
         {
             if (Anam_Highest) /* 1504x2538 */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x19A;  /*  @ 23.976 FPS */
-                    RAW_V         = 0xA06;
-                    TimerB        = 0xB47;
-                    TimerA        = 0x1CD;
-                }
                 
                 if (is_EOSM)
                 {
@@ -2094,13 +2011,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     TimerA        = 0x1FF;  // Danne confirmed that EOS M has 0x1FF limit. it seems same as 100D
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x1A3; /*  @ 22.250 FPS */
-                    RAW_V         = 0xA0B;
-                    TimerB        = 0xB07;  // we might be able to lower TimerB a little more
-                    TimerA        = 0x1FF;  // lowering TimerA under 0x1FF --> black image (RAW data), anyway to exceed minimal Timer A limit?
-                }
                 
                 Preview_H     = 1500;
                 Preview_V     = 2538;
@@ -2111,21 +2021,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
             
             if (Anam_Higher)
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x17E;  /* 1392x2350 @ 23.976 and 25 FPS */
-                    RAW_V         = 0x94A;
-                    TimerA        = 0x1B9;
-                    if (Framerate_24) TimerB = 0xBCA;
-                    if (Framerate_25) TimerB = 0xB4E;
-                    if (Framerate_30) TimerB = 0xB4E; // 30 Doesn't work, make it 25
-                    
-                    Preview_H     = 1388;
-                    Preview_V     = 2350;
-                    Preview_R     = 0x1D000D;
-                    YUV_HD_S_H    = 0x105015F;
-                    YUV_HD_S_V    = 0x1050377;
-                }
                 
                 if (is_EOSM)
                 {
@@ -2141,32 +2036,10 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     YUV_HD_S_V    = 0x105036D + YUV_HD_S_V_width + (YUV_HD_S_V_height << 16);
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x183;  /* 1376x2322 to achieve 23.976 FPS */
-                    RAW_V         = 0x933;
-                    TimerB        = 0xA2E;
-                    TimerA        = 0x1FF;
-                    
-                    Preview_H     = 1372;
-                    Preview_V     = 2322;
-                    Preview_R     = 0x1D000D;
-                    YUV_HD_S_H    = 0x105015B;
-                    YUV_HD_S_V    = 0x105036E;
-                }
             }
             
             if (Anam_Medium) /* 1280x2160 @ 23.976 and 25 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x162;
-                    RAW_V         = 0x88C;
-                    TimerA        = 0x1B9;
-                    if (Framerate_24) TimerB = 0xBCA;
-                    if (Framerate_25) TimerB = 0xB4E;
-                    if (Framerate_30) TimerB = 0xB4E; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2178,15 +2051,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x16B;
-                    RAW_V         = 0x891;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2E;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1276;
                 Preview_V     = 2160;
@@ -2200,13 +2064,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
         {
             if (Anam_Highest) /* 1600x2400 */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x1B2;  /* @ 23.976 FPS */
-                    RAW_V         = 0x97D;
-                    TimerB        = 0xAB9;
-                    TimerA        = 0x1E5;
-                }
                 
                 if (is_EOSM)
                 {
@@ -2216,13 +2073,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     TimerA        = 0x1FF;
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x1BB; /* @ 23.300 FPS */
-                    RAW_V         = 0x981;
-                    TimerB        = 0xA79;
-                    TimerA        = 0x1FF;
-                }
                 
                 Preview_H     = 1596;
                 Preview_V     = 2400;
@@ -2233,15 +2083,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
             
             if (Anam_Higher) /* 1472x2208 @ 23.976 and 25 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x192;
-                    RAW_V         = 0x8BD;
-                    TimerA        = 0x1C5;
-                    if (Framerate_24) TimerB = 0xB7A;
-                    if (Framerate_25) TimerB = 0xB02;
-                    if (Framerate_30) TimerB = 0xB02; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2253,15 +2094,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x19B;
-                    RAW_V         = 0x8C1;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2D;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1468;
                 Preview_V     = 2208;
@@ -2272,15 +2104,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
             
             if (Anam_Medium) /* 1360x2040 @ 23.976 and 25 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x176;
-                    RAW_V         = 0x813;
-                    TimerA        = 0x1B9;
-                    if (Framerate_24) TimerB = 0xBCA;
-                    if (Framerate_25) TimerB = 0xB4E;
-                    if (Framerate_30) TimerB = 0xB4E; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2292,15 +2115,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x17F;
-                    RAW_V         = 0x819;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2D;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1356;
                 Preview_V     = 2040;
@@ -2314,19 +2128,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
         {
             if (Anam_Highest)
             {
-                if (is_650D || is_700D) /* 1680x2290 @ 23.976 FPS */
-                {
-                    RAW_H         = 0x1C6;
-                    RAW_V         = 0x90E;
-                    TimerB        = 0xA4C;
-                    TimerA        = 0x1F9;
-                    
-                    Preview_H     = 1676;
-                    Preview_V     = 2290;
-                    Preview_R     = 0x1D000D;
-                    YUV_HD_S_H    = 0x10501A8;
-                    YUV_HD_S_V    = 0x1050362;
-                }
                 
                 if (is_EOSM) /* 1664x2268 @ 23.976 FPS */
                 {
@@ -2342,32 +2143,10 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     YUV_HD_S_V    = 0x1050359;
                 }
                 
-                if (is_100D) /* 1664x2268 @ 23.976 FPS */
-                {
-                    RAW_H         = 0x1CB;
-                    RAW_V         = 0x8FD;
-                    TimerB        = 0xA2D;
-                    TimerA        = 0x1FF;
-                    
-                    Preview_H     = 1660;
-                    Preview_V     = 2268;
-                    Preview_R     = 0x1D000D;
-                    YUV_HD_S_H    = 0x10501A3;
-                    YUV_HD_S_V    = 0x1050359;
-                }
             }
             
             if (Anam_Higher) /* 1552x2218 @ 23.976 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x1A6;
-                    RAW_V         = 0x860;
-                    TimerA        = 0x1D9;
-                    if (Framerate_24) TimerB = 0xAFE;
-                    if (Framerate_25) TimerB = 0xA8B;
-                    if (Framerate_30) TimerB = 0xA8B; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2379,15 +2158,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x1AF;
-                    RAW_V         = 0x865;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2E;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1548;
                 Preview_V     = 2216;
@@ -2398,15 +2168,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
             
             if (Anam_Medium) /* 1424x1942 @ 23.976 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x186;
-                    RAW_V         = 0x7B2;
-                    TimerA        = 0x1B9;
-                    if (Framerate_24) TimerB = 0xBCA;
-                    if (Framerate_25) TimerB = 0xB4E;
-                    if (Framerate_30) TimerB = 0xB4E; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2418,15 +2179,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x18F;
-                    RAW_V         = 0x7B7;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2E;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1420;
                 Preview_V     = 1942;
@@ -2440,7 +2192,7 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
         {
             if (Anam_Highest) /* 1736x2216 @ 23.976 FPS */
             {
-                if (is_650D || is_700D || is_EOSM)
+                if (is_EOSM)
                 {
                     RAW_H         = 0x1D4 + reg_width;  // from mv1080 mode
                     RAW_V         = 0x8C3 + reg_height;
@@ -2448,13 +2200,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     TimerA        = 0x207;
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x1DD;
-                    RAW_V         = 0x8C7;
-                    TimerB        = 0x9DF;
-                    TimerA        = 0x20F;
-                }
                 
                 Preview_H     = 1728;      // from mv1080 mode
                 Preview_V     = 2214;
@@ -2465,15 +2210,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
             
             if (Anam_Higher) /* 1600x2040 @ 23.976 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x1B2;
-                    RAW_V         = 0x814;
-                    TimerA        = 0x1E5;
-                    if (Framerate_24) TimerB = 0xAB9;
-                    if (Framerate_25) TimerB = 0xA48;
-                    if (Framerate_30) TimerB = 0xA48; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2485,15 +2221,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x1BB;
-                    RAW_V         = 0x819;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2D;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1596;
                 Preview_V     = 2040;
@@ -2504,15 +2231,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
             
             if (Anam_Medium) /* 1472x1878 @ 23.976 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x192;
-                    RAW_V         = 0x772;
-                    TimerA        = 0x1C5;
-                    if (Framerate_24) TimerB = 0xB7A;
-                    if (Framerate_25) TimerB = 0xB02;
-                    if (Framerate_30) TimerB = 0xB02; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2524,15 +2242,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x19B;
-                    RAW_V         = 0x777;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2D;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1468;
                 Preview_V     = 1878;
@@ -2546,7 +2255,7 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
         {
             if (Anam_Highest) /* 1736x2178 @ 23.976 FPS */
             {
-                if (is_650D || is_700D || is_EOSM)
+                if (is_EOSM)
                 {
                     RAW_H         = 0x1D4 + reg_width;  // from mv1080 mode
                     RAW_V         = 0x89f + reg_height;
@@ -2554,13 +2263,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     TimerA        = 0x207;
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x1DD;
-                    RAW_V         = 0x8A3;
-                    TimerB        = 0x9CB;
-                    TimerA        = 0x213;  // can be lowered even more? need to be fine tuned
-                }
                 
                 Preview_H     = 1728;      // from mv1080 mode
                 Preview_V     = 2178;
@@ -2571,15 +2273,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
             
             if (Anam_Higher) /* 1600x2008 @ 23.976 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x1B2;
-                    RAW_V         = 0x7F4;
-                    TimerA        = 0x1E5;
-                    if (Framerate_24) TimerB = 0xAB9;
-                    if (Framerate_25) TimerB = 0xA48;
-                    if (Framerate_30) TimerB = 0xA48; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2591,15 +2284,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x1BB;
-                    RAW_V         = 0x7F9;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2D;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1596;
                 Preview_V     = 2008;
@@ -2610,15 +2294,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
             
             if (Anam_Medium) /* 1472x1846 @ 23.976 FPS */
             {
-                if (is_650D || is_700D)
-                {
-                    RAW_H         = 0x192;
-                    RAW_V         = 0x752;
-                    TimerA        = 0x1C5;
-                    if (Framerate_24) TimerB = 0xB7A;
-                    if (Framerate_25) TimerB = 0xB02;
-                    if (Framerate_30) TimerB = 0xB02; // 30 Doesn't work, make it 25
-                }
                 
                 if (is_EOSM)
                 {
@@ -2630,15 +2305,6 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
                     if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
                 }
                 
-                if (is_100D)
-                {
-                    RAW_H         = 0x19B;
-                    RAW_V         = 0x757;
-                    TimerA        = 0x1FF;
-                    if (Framerate_24) TimerB = 0xA2D;
-                    if (Framerate_25) TimerB = 0x9C3;
-                    if (Framerate_30) TimerB = 0x9C3; // 30 Doesn't work, make it 25
-                }
                 
                 Preview_H     = 1468;
                 Preview_V     = 1846;
@@ -2720,7 +2386,7 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
     {
         if (AR_16_9)
         {
-            if (is_650D || is_700D || is_EOSM) // 1736x976 @ 46.800 FPS
+            if (is_EOSM) // 1736x976 @ 46.800 FPS
             {
                 RAW_H         = 0x1D4 + reg_width;
                 RAW_V         = 0x3ED + reg_height;
@@ -2728,13 +2394,6 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
                 TimerA        = 0x20F;  // can go lower down to 0x207
             }
             
-            if (is_100D) // 1736x976 @ 46.300 FPS
-            {
-                RAW_H         = 0x1DD;
-                RAW_V         = 0x3F1;
-                TimerB        = 0x51C;
-                TimerA        = 0x20F;
-            }
             
             Preview_H     = 1728;      // from mv1080 mode
             Preview_V     = 976;
@@ -2744,7 +2403,7 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
         
         if (AR_2_1)
         {
-            if (is_650D || is_700D || is_EOSM) // 1736x868 @ 50 FPS
+            if (is_EOSM) // 1736x868 @ 50 FPS
             {
                 RAW_H         = 0x1D4 + reg_width;
                 RAW_V         = 0x381 + reg_height;
@@ -2752,13 +2411,6 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
                 TimerA        = 0x207;
             }
             
-            if (is_100D)
-            {
-                RAW_H         = 0x1DD;
-                RAW_V         = 0x385;
-                TimerB        = 0x4BB;
-                TimerA        = 0x20F;
-            }
             
             Preview_H     = 1728;
             Preview_V     = 868;
@@ -2768,7 +2420,7 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
         
         if (AR_2_20_1)
         {
-            if (is_650D || is_700D || is_EOSM) // 1736x790 @ 54 FPS
+            if (is_EOSM) // 1736x790 @ 54 FPS
             {
                 RAW_H         = 0x1D4 + reg_width;
                 RAW_V         = 0x333 + reg_height;
@@ -2776,13 +2428,6 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
                 TimerA        = 0x207;
             }
             
-            if (is_100D)
-            {
-                RAW_H         = 0x1DD;
-                RAW_V         = 0x337;
-                TimerB        = 0x461;
-                TimerA        = 0x20F;
-            }
             
             Preview_H     = 1728;
             Preview_V     = 790;
@@ -2792,7 +2437,7 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
         
         if (AR_2_35_1)
         {
-            if (is_650D || is_700D || is_EOSM) // 1736x738 @ 57 FPS
+            if (is_EOSM) // 1736x738 @ 57 FPS
             {
                 RAW_H         = 0x1D4 + reg_width;
                 RAW_V         = 0x2FF + reg_height;
@@ -2800,13 +2445,6 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
                 TimerA        = 0x207;
             }
             
-            if (is_100D) // 1736x738 @ 55.6 FPS
-            {
-                RAW_H         = 0x1DD;
-                RAW_V         = 0x303;
-                TimerB        = 0x441;
-                TimerA        = 0x20F;
-            }
             
             Preview_H     = 1728;
             Preview_V     = 738;
@@ -2830,7 +2468,7 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
         
         if (AR_2_39_1 && crop_preset_fps_reduce == 0)  // 2.39:1 doesn't make sense, very similair to 2.35:1, let's make it 2.50:1
         {
-            if (is_650D || is_700D || is_EOSM) // 1736x694 @ 60 FPS
+            if (is_EOSM) // 1736x694 @ 60 FPS
             {
                 RAW_H         = 0x1D4 + reg_width;
                 RAW_V         = 0x2D2 + reg_height;
@@ -2838,13 +2476,6 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
                 TimerA        = 0x207;
             }
             
-            if (is_100D) // 1736x694 @ 58 FPS
-            {
-                RAW_H         = 0x1DD;
-                RAW_V         = 0x2D7;
-                TimerB        = 0x413;
-                TimerA        = 0x20F;
-            }
             
             Preview_H     = 1728;
             Preview_V     = 694;
@@ -3083,7 +2714,7 @@ static void FAST EngDrvOut_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
     if (data == 0xC0F0819C)
     {
         // 100D doesn't need this
-        if (is_650D || is_700D || is_EOSM)
+        if (is_EOSM)
         {
             if (lens_info.iso_analog_raw == ISO_400)
             {
@@ -3149,15 +2780,11 @@ static void FAST EngDrvOut_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
     
             if (reg == 0x6808 && change_buffer_now == 1) // 0xC0F26808
             {
-                if (is_650D || is_700D || is_EOSM)
+                if (is_EOSM)
                 {
                     regs[1] = 0x1595b00; // Size 0xC0F26810  = 0x3237e  is being set in EngDrvOuts_hook
                 }
             
-                if (is_100D)
-                {
-                    regs[1] = 0x2000000; // Size 0xC0F26810  = 0x1f32da is being set in EngDrvOuts_hook
-                }
             
                 change_buffer_now = 0;
             }
@@ -3180,9 +2807,9 @@ static void FAST EngDrvOut_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                 case 0x80A0: regs[1] = ((Preview_H / 4) + 7) << 16;                         break;
                 case 0x80A4: regs[1] = ((Preview_H / 4) + 7) << 16;                         break;
                 case 0x8024: 
-                if (is_700D || is_EOSM || is_650D)
+                if (is_EOSM)
                              regs[1] = ((RAW_V - 1) << 16)  + RAW_H - 0x11;                 
-                if (is_100D) regs[1] = ((RAW_V - 5) << 16)  + RAW_H - 0x1A;                 break;
+                 break;
                 case 0x83D4: regs[1] =   Preview_R;                                         break;
                 case 0x83DC: regs[1] = ((Preview_V + 0x1c) << 16)  + Preview_H / 4 + 0x48
                                                                    + REG_C0F383DC_Tuning;   break;
@@ -3212,9 +2839,9 @@ static void FAST EngDrvOut_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
             switch (reg)
             {
                 case 0x8024: 
-                if (is_700D || is_EOSM || is_650D)
+                if (is_EOSM)
                              regs[1] = ((RAW_V - 1) << 16)  + RAW_H - 0x11;                 
-                if (is_100D) regs[1] = ((RAW_V - 5) << 16)  + RAW_H - 0x1A;                 break;
+                 break;
                 
                 /* used here to center Canon cropped preview on RAW buffer */
                 case 0x83D4: regs[1] =  (Preview_y1 << 16) + Preview_x1;                    break;
@@ -3276,15 +2903,11 @@ static void FAST EngDrvOuts_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
             // it's always being set after "the other things" finish and before setting 0xC0F26810 final size
             if (shamem_read(0xC0F35084) == 0xA1F)
             {
-                if (is_650D || is_700D || is_EOSM)
+                if (is_EOSM)
                 {
                     *(uint32_t*) (regs[1] + 4) = 0x3237e;
                 }
 
-                if (is_100D)
-                {
-                    *(uint32_t*) (regs[1] + 4) = 0x1f32da;
-                }
             }
         }  
     }
@@ -3308,8 +2931,7 @@ void CheckPreviewRegsValuesAndForce()
     return;
 #endif
 
-    if (is_100D)                       REG_C0F38024_Val = ((RAW_V - 5) << 16)  + RAW_H - 0x1A;
-    if (is_650D || is_700D || is_EOSM) REG_C0F38024_Val = ((RAW_V - 1) << 16)  + RAW_H - 0x11;
+    if (is_EOSM) REG_C0F38024_Val = ((RAW_V - 1) << 16)  + RAW_H - 0x11;
 
     if (shamem_read(0xC0F38070) != ((Preview_V + 0x9) << 16) + Preview_H / 4 + 5      ||
         shamem_read(0xC0F38078) != (((Preview_H / 4) + 6) << 16) + 1                  ||
@@ -4199,15 +3821,13 @@ static MENU_UPDATE_FUNC(crop_preset_1x3_res_update)
         if (crop_preset_1x3_res_menu == 0) // Anam_Highest
         {
             MENU_SET_VALUE("4.5K");
-            if (is_650D || is_700D)MENU_SET_HELP("1504x2538 @ 23.976 FPS");
-            if (is_EOSM || is_100D)MENU_SET_HELP("1504x2538 @ 22.250 FPS");
+            if (is_EOSM)MENU_SET_HELP("1504x2538 @ 22.250 FPS");
         }
 
         if (crop_preset_1x3_res_menu == 1) // Anam_Higher
         {
             MENU_SET_VALUE("4.2K");
-            if (is_650D || is_700D)MENU_SET_HELP("1392x2350 @ 23.976 and 25 FPS");
-            if (is_EOSM || is_100D)MENU_SET_HELP("1376x2322 @ 23.976 FPS");
+            if (is_EOSM)MENU_SET_HELP("1376x2322 @ 23.976 FPS");
         }
 
         if (crop_preset_1x3_res_menu == 2) // Anam_Medium
@@ -4227,8 +3847,7 @@ static MENU_UPDATE_FUNC(crop_preset_1x3_res_update)
         if (crop_preset_1x3_res_menu == 0) // Anam_Highest
         {
             MENU_SET_VALUE("4.8K");
-            if (is_650D || is_700D)MENU_SET_HELP("1600x2400 @ 23.976 FPS");
-            if (is_EOSM || is_100D)MENU_SET_HELP("1600x2400 @ 23.300 FPS");
+            if (is_EOSM)MENU_SET_HELP("1600x2400 @ 23.300 FPS");
         }
 
         if (crop_preset_1x3_res_menu == 1) // Anam_Higher
@@ -4249,8 +3868,7 @@ static MENU_UPDATE_FUNC(crop_preset_1x3_res_update)
         if (crop_preset_1x3_res_menu == 0) // Anam_Highest
         {
             MENU_SET_VALUE("5K");
-            if (is_650D || is_700D)MENU_SET_HELP("1680x2290 @ 23.976 FPS");
-            if (is_EOSM || is_100D)MENU_SET_HELP("1664x2268 @ 23.976 FPS");
+            if (is_EOSM)MENU_SET_HELP("1664x2268 @ 23.976 FPS");
         }
 
         if (crop_preset_1x3_res_menu == 1) // Anam_Higher
@@ -4367,8 +3985,7 @@ static MENU_UPDATE_FUNC(crop_preset_fps_update)
         {
             if (crop_preset_1x3_res_menu == 0) // Anam_Highest
             {
-                if (is_650D || is_700D) MENU_SET_VALUE("23.976 FPS");
-                if (is_EOSM || is_100D) MENU_SET_VALUE("22.250 FPS");
+                if (is_EOSM) MENU_SET_VALUE("22.250 FPS");
                 if (crop_preset_fps_menu != 0)
                 {
                     MENU_SET_WARNING(MENU_WARN_ADVICE, "25 and 30 FPS don't work in current preset.");
@@ -4377,16 +3994,8 @@ static MENU_UPDATE_FUNC(crop_preset_fps_update)
 
             if (crop_preset_1x3_res_menu == 1) // Anam_Higher
             {
-                if (is_650D || is_700D)
-                {
-                    if (crop_preset_fps_menu == 2)
-                    {
-                        MENU_SET_VALUE("25 FPS");
-                        MENU_SET_WARNING(MENU_WARN_ADVICE, "30 FPS doesn't work in current preset.");
-                    }
-                }
 
-                if (is_100D || is_EOSM)
+                if (is_EOSM)
                 {
                     if (crop_preset_fps_menu > 0)
                     {
@@ -4410,8 +4019,7 @@ static MENU_UPDATE_FUNC(crop_preset_fps_update)
         {
             if (crop_preset_1x3_res_menu == 0) // Anam_Highest
             {
-                if (is_650D || is_700D) MENU_SET_VALUE("23.976 FPS");
-                if (is_EOSM || is_100D) MENU_SET_VALUE("23.300 FPS");
+                if (is_EOSM) MENU_SET_VALUE("23.300 FPS");
                 if (crop_preset_fps_menu != 0)
                 {
                     MENU_SET_WARNING(MENU_WARN_ADVICE, "25 and 30 FPS don't work in current preset.");
@@ -4488,7 +4096,7 @@ static MENU_UPDATE_FUNC(crop_preset_fps_update)
                     
         if (crop_preset_3x3_res_menu == 0) // High FPS
         {
-            if (is_650D || is_700D || is_EOSM)
+            if (is_EOSM)
             {
                 if (crop_preset_ar_menu == 0) MENU_SET_VALUE("%d.%03d",current_fps/1000, current_fps%1000); // AR_16_9
                 if (crop_preset_ar_menu == 1) MENU_SET_VALUE("%d.%03d",current_fps/1000, current_fps%1000);     // AR_2_1
@@ -4497,14 +4105,6 @@ static MENU_UPDATE_FUNC(crop_preset_fps_update)
                 if (crop_preset_ar_menu == 4) MENU_SET_VALUE("%d.%03d",current_fps/1000, current_fps%1000);     // AR_2_39_1  // actually 2.50:1 aspect ratio
             }
 
-            if (is_100D)
-            {
-                if (crop_preset_ar_menu == 0) MENU_SET_VALUE("46.300 FPS"); // AR_16_9
-                if (crop_preset_ar_menu == 1) MENU_SET_VALUE("50 FPS");     // AR_2_1
-                if (crop_preset_ar_menu == 2) MENU_SET_VALUE("54 FPS");     // AR_2_20_1
-                if (crop_preset_ar_menu == 3) MENU_SET_VALUE("55.6 FPS");   // AR_2_35_1
-                if (crop_preset_ar_menu == 4) MENU_SET_VALUE("58 FPS");     // AR_2_39_1  // actually 2.50:1 aspect ratio
-            }
 
             MENU_SET_WARNING(MENU_WARN_ADVICE, "This option doesn't work in (HFR) preset.");
         }
@@ -5391,10 +4991,7 @@ static MENU_UPDATE_FUNC(slim_crop_fps_update)
     }
 
     /* EOS M 1x3 Highest 2:1 (1600x2400) runs at 23.300, not 23.976. */
-    if (CROP_PRESET_MENU == CROP_PRESET_1X3
-        && COERCE(crop_preset_1x3_res_menu, 0, 2) == 0
-        && crop_preset_ar_menu == 1
-        && (is_EOSM || is_100D))
+    if (CROP_PRESET_MENU == CROP_PRESET_1X3 && COERCE(crop_preset_1x3_res_menu, 0, 2) == 0 && crop_preset_ar_menu == 1 && is_EOSM)
     {
         MENU_SET_VALUE("23.300");
         MENU_SET_ENABLED(0);
@@ -7774,99 +7371,9 @@ static unsigned int crop_rec_init()
         crop_rec_menu[0].max        = COUNT(crop_choices_DIGIC_5) - 1;
         crop_rec_menu[0].help       = crop_choices_help_DIGIC_5;
     }
-    else if (is_camera("700D", "1.1.5") || is_camera("650D", "1.0.4"))
-    {
-        CMOS_WRITE = 0x17A1C;
-        MEM_CMOS_WRITE = 0xE92D41F0;
-        
-        ADTG_WRITE = 0x178FC;
-        MEM_ADTG_WRITE = 0xE92D43F8;
-        
-        ENGIO_WRITE = is_camera("700D", "1.1.5") ? 0xFF2C2D00 : 0xFF2C0778;
-        MEM_ENGIO_WRITE = 0xE51FC15C;
-        
-        ENG_DRV_OUT = is_camera("700D", "1.1.5") ? 0xFF2C29E8 : 0xFF2C0460;
-        ENG_DRV_OUTS = is_camera("700D", "1.1.5") ? 0xFF2C2B0C : 0xFF2C0584;
-        
-        PathDriveMode = (void *) (is_camera("700D", "1.1.5") ? 0x6B7F4 : 0x6AEC0);   /* argument of PATH_SelectPathDriveMode */
-        PATH_SelectPathDriveMode = is_camera("700D", "1.1.5") ? 0xFF19CDD4 : 0xFF19B230;
-        
-        EDMAC_9_Vertical_1 = is_camera("700D", "1.1.5") ? 0x3E200 : 0x3E120;
-        EDMAC_9_Vertical_2 = is_camera("700D", "1.1.5") ? 0x3E230 : 0x3E150;
-        HIV_Vertical_Photo_Address = 0x4205E098;
-        HIV_Vertical_Address_hook = is_camera("700D", "1.1.5") ? 0xFF4F2A04 : 0xFF4EF224;
-        
-        EDID_HDMI_INFO = (void *) (is_camera("700D", "1.1.5") ? 0x648B0 : 0x63F7C);
-        
-        /* I know these look ugly, but we want something works for now, right? , it's not that bad */
-        Shift_x5_LCD = is_camera("700D", "1.1.5") ? 0xFF962A74 : 0xFF955894;
-        Shift_x5_HDMI_480p = is_camera("700D", "1.1.5") ? 0xFF963434 : 0xFF956254;
-        Shift_x5_HDMI_1080i_Full = is_camera("700D", "1.1.5") ? 0xFF963F8C : 0xFF956DAC;
-        Shift_x5_HDMI_1080i_Info = is_camera("700D", "1.1.5") ? 0xFF964590 : 0xFF9573B0;
 
-        Clear_Vram_x5_LCD = is_camera("700D", "1.1.5") ? 0xFF962A98 : 0xFF9558B8;
-        Clear_Vram_x5_HDMI_480p = is_camera("700D", "1.1.5") ? 0xFF963458 : 0xFF956278;
-        Clear_Vram_x5_HDMI_1080i_Full = is_camera("700D", "1.1.5") ? 0xFF963FC8 : 0xFF956DE8;
-        Clear_Vram_x5_HDMI_1080i_Info = is_camera("700D", "1.1.5") ? 0xFF9645CC : 0xFF9573EC;
-        
-        is_650D = 1;
-        is_700D = 1;
-        is_DIGIC_5 = 1;
-        crop_presets                = crop_presets_DIGIC_5;
-        crop_rec_menu[0].choices    = crop_choices_DIGIC_5;
-        crop_rec_menu[0].max        = COUNT(crop_choices_DIGIC_5) - 1;
-        crop_rec_menu[0].help       = crop_choices_help_DIGIC_5;
-    }
-    else if (is_camera("100D", "1.0.1"))
-    {
-        CMOS_WRITE = 0x475B8;
-        MEM_CMOS_WRITE = 0xE92D41F0;
-        
-        ADTG_WRITE = 0x47144;
-        MEM_ADTG_WRITE = 0xE92D43F8;
-        
-        ENGIO_WRITE = 0xFF2B2460;
-        MEM_ENGIO_WRITE = 0xE51FC15C;
-        
-        ENG_DRV_OUT = 0xFF2B2148;
-        ENG_DRV_OUTS = 0xFF2B226C;
-        
-        PathDriveMode = (void *) 0xAAEA4;   /* argument of PATH_SelectPathDriveMode */
-        PATH_SelectPathDriveMode = 0x19E30; // it's being called from RAM
-        
-        EDMAC_9_Vertical_1 = 0x77170;
-        EDMAC_9_Vertical_2 = 0x771A0;
-        HIV_Vertical_Photo_Address = 0x4144F9E4;
-        HIV_Vertical_Address_hook = 0xFF50CCD4;
-        
-        EDID_HDMI_INFO = (void *) 0xA3C0C;
-        
-        Shift_x5_LCD = 0xFF98F5EC;
-        Shift_x5_HDMI_480p = 0xFF98FFAC;
-        Shift_x5_HDMI_1080i_Full = 0xFF990B04;
-        Shift_x5_HDMI_1080i_Info = 0xFF991108;
-
-        Clear_Vram_x5_LCD = 0xFF98F610;
-        Clear_Vram_x5_HDMI_480p = 0xFF98FFD0;
-        Clear_Vram_x5_HDMI_1080i_Full = 0xFF990B40;
-        Clear_Vram_x5_HDMI_1080i_Info = 0xFF991144;
-        
-        is_100D = 1;
-        is_DIGIC_5 = 1;
-        crop_presets                = crop_presets_DIGIC_5;
-        crop_rec_menu[0].choices    = crop_choices_DIGIC_5;
-        crop_rec_menu[0].max        = COUNT(crop_choices_DIGIC_5) - 1;
-        crop_rec_menu[0].help       = crop_choices_help_DIGIC_5;
-        
-        fps_main_clock = 32000000;
-        
-                                       /* 24p,  25p,  30p,  50p,  60p,   x5, c24p, c25p, c30p */
-        memcpy(default_timerA, (int[]) {  520,  640,  520,  640,  528,  732,  600,  576,  600 }, 36);
-        memcpy(default_timerB, (int[]) { 2566, 2000, 2053, 1000, 1011, 1460, 2224, 2222, 1779 }, 36);
-                                   /* or 2567        2054        1012        2225  2223  1780 */
-    }       
     /* default FPS timers are the same on all these models */
-    if (is_EOSM || is_700D || is_650D)
+    if (is_EOSM)
     {
         fps_main_clock = 32000000;
                                        /* 24p,  25p,  30p,  50p,  60p,   x5, c24p, c25p, c30p */

@@ -130,9 +130,6 @@ extern int WEAK_FUNC(fullresmode) crop_preset_1x3_res;
 
 /* camera-specific tricks */
 static int cam_eos_m = 0;
-static int cam_650d = 0;
-static int cam_700d = 0;
-static int cam_100d = 0;
 
 
 /**
@@ -654,7 +651,7 @@ int crop_rec_cropmarks()
 {
     if (crop_rec_is_enabled() && lv_dispsize == 5)
     {
-        if (cam_650d || cam_700d || cam_eos_m || cam_100d)
+        if (cam_eos_m)
         {
             /* only for 1080p 3x3 preset for now */
             if (raw_info.width - 72 == 1736 && raw_info.height - 28 == 1160) 
@@ -1820,7 +1817,7 @@ int Full_Res_LV()
 {
     /* picture quality must be set to RAW for entry-level cams from Canon menu to gain an extra SRM memory chunk */
     /* https://www.magiclantern.fm/forum/index.php?topic=26521.msg239231#msg239231 */
-    if (cam_650d || cam_700d || cam_100d || cam_eos_m)
+    if (cam_eos_m)
     {
         if (raw_info.width > 5208 && raw_info.height > 3478)
         {
@@ -2563,10 +2560,7 @@ void hack_liveview(int unhack)
         
         /* change dialog refresh timer from 50ms to 8192ms */
         uint32_t dialog_refresh_timer_addr = /* in StartDialogRefreshTimer */
-            cam_650d ? 0xFF527E38 :
             cam_eos_m ? 0xFF539C1C :
-            cam_700d ? 0xFF52BB60 :
-            cam_100d ? 0xFF542580 :
             /* ... */
             0;
         uint32_t dialog_refresh_timer_orig_instr = 0xe3a00032; /* mov r0, #50 */
@@ -3906,7 +3900,7 @@ void raw_video_rec_task(uint32_t thread)
             if (crop_rec_is_enabled())
             {
                 /* our crop_rec for entry-level models work only in x5 mode */
-                if (cam_100d || cam_650d || cam_700d || cam_eos_m)
+                if (cam_eos_m)
                 {
                     set_lv_zoom(5);
                 }
@@ -4515,7 +4509,7 @@ cleanup:
         if (crop_rec_is_enabled())
         {
 #ifndef CONFIG_EOSM
-            if (cam_650d || cam_700d || cam_eos_m || cam_100d) // what about other models?
+            if (cam_eos_m) // what about other models?
             {
                 if (lv_dispsize == 5)
                 {
@@ -5218,95 +5212,6 @@ static unsigned int raw_rec_init()
 {
     raw_settings_load();
 
-    if (is_camera("5D3", "1.1.3"))
-    {
-        lvfaceEnd  = (void *) 0xFF16D77C;
-        aewbSuspend = (void *) 0xFF23BC60;
-        CartridgeCancel = (void *) 0xFF17FD68;
-        more_hacks_are_supported = 1;
-        CartridgeCancel_works = 1;
-        
-        default_width_1080p = 2080;
-        default_height_1080p = 2080;
-        default_width_x5 = 3744;
-        default_height_x5 = 1380;
-        default_height_720p = 728;
-    }
-    
-    if (is_camera("5D3", "1.2.3"))
-    {
-        lvfaceEnd  = (void *) 0xFF16E318;
-        aewbSuspend = (void *) 0xFF23FF10;
-        CartridgeCancel = (void *) 0xFF181340;
-        more_hacks_are_supported = 1;
-        CartridgeCancel_works = 1;
-        
-        default_width_1080p = 2080;
-        default_height_1080p = 2080;
-        default_width_x5 = 3744;
-        default_height_x5 = 1380;
-        default_height_720p = 728;
-    }
-    
-    if (is_camera("6D", "1.1.6"))
-    {
-        lvfaceEnd  = (void *) 0xFF170D08;
-        aewbSuspend = (void *) 0xFF24C5E4;
-        CartridgeCancel = (void *) 0xFFCEFFDC;
-        more_hacks_are_supported = 1;
-        
-        /* fixme: these are dummy values from 5D3 */
-        default_width_1080p = 2080;
-        default_height_1080p = 2080;
-        default_width_x5 = 3744;
-        default_height_x5 = 1380;
-        default_height_720p = 728;
-    }
-
-    if (is_camera("700D", "1.1.5"))
-    {
-        lvfaceEnd  = (void *) 0xFF17D63C;
-        aewbSuspend = (void *) 0xFF261F34;
-        CartridgeCancel = (void *) 0xFF19D558;
-        more_hacks_are_supported = 1;
-        CartridgeCancel_works = 1;
-        
-        default_width_1080p = 1808;
-        default_height_1080p = 1190;
-        default_width_x5 = 2592;
-        default_height_x5 = 1108;
-        default_height_720p = 727;
-    }
-    
-    if (is_camera("650D", "1.0.4"))
-    {
-        lvfaceEnd  = (void *) 0xFF17C564;
-        aewbSuspend = (void *) 0xFF25FB90;
-        CartridgeCancel = (void *) 0xFF19B9B4;
-        more_hacks_are_supported = 1;
-        CartridgeCancel_works = 1;
-        
-        default_width_1080p = 1808;
-        default_height_1080p = 1190;
-        default_width_x5 = 2592;
-        default_height_x5 = 1108;
-        default_height_720p = 727;
-    }
-    
-    if (is_camera("100D", "1.0.1"))
-    {
-        lvfaceEnd  = (void *) 0xFF16F49C;
-        aewbSuspend = (void *) 0xFF253F98;
-        CartridgeCancel = (void *) 0xFFAB6BCC;
-        more_hacks_are_supported = 1;
-        
-        default_width_1080p = 1808;
-        default_height_1080p = 1189;
-        default_width_x5 = 2592;
-        default_height_x5 = 1107;
-        default_height_720p = 726;
-    }
-    
     if (is_camera("EOSM", "2.0.2"))
     {
         lvfaceEnd  = (void *) 0xFF177FF8;
@@ -5322,25 +5227,8 @@ static unsigned int raw_rec_init()
         default_height_720p = 726;
     }
     
-    if (is_camera("70D", "1.1.2"))
-    {
-        lvfaceEnd  = (void *) 0xFF1702D8;
-        aewbSuspend = (void *) 0xFF258818;
-        CartridgeCancel = (void *) 0xFFD6B71C;
-        more_hacks_are_supported = 1;
-        
-        /* fixme: these are dummy values from 5D3 */
-        default_width_1080p = 2080;
-        default_height_1080p = 2080;
-        default_width_x5 = 3744;
-        default_height_x5 = 1380;
-        default_height_720p = 728;
-    }
     
     cam_eos_m = is_camera("EOSM", "2.0.2");
-    cam_650d  = is_camera("650D", "1.0.4");
-    cam_700d  = is_camera("700D", "1.1.5");
-    cam_100d  = is_camera("100D", "1.0.1");
 
     /* Hide card spanning (only the 5D3 had two card slots) */
     for (struct menu_entry * e = raw_video_menu[0].children; !MENU_IS_EOL(e); e++)

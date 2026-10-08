@@ -11,7 +11,7 @@ static struct semaphore * edmac_memcpy_sem = 0; /* to allow only one memcpy runn
 static struct semaphore * edmac_read_done_sem = 0; /* to know when memcpy is finished */
 
 /* pick some free (check using debug menu) EDMAC channels write: 0x00-0x06, 0x10-0x16, 0x20-0x21. read: 0x08-0x0D, 0x18-0x1D,0x28-0x2B */
-#if defined(CONFIG_650D) || defined(CONFIG_EOSM) || defined(CONFIG_700D) || defined(CONFIG_100D)
+#if defined(CONFIG_EOSM)
 uint32_t edmac_read_chan = 0x19;
 uint32_t edmac_write_chan = 0x13;
 //~ r 2 3 5 7 8 9 10 11-13
@@ -326,7 +326,7 @@ static void edmac_slurp_complete_cbr (void* ctx)
 void edmac_raw_slurp(void* dst, int w, int h)
 {
     /* see wiki, register map, EDMAC what the flags mean. they are for setting up copy block size */
-#if defined(CONFIG_650D) || defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_100D)
+#if defined(CONFIG_EOSM)
     uint32_t dmaFlags = EDMAC_2_BYTES_PER_TRANSFER;
 #else
     uint32_t dmaFlags = EDMAC_8_BYTES_PER_TRANSFER;

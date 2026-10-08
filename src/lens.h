@@ -95,39 +95,7 @@ extern struct lens_info lens_info;
 
 #define DOF_DIFFRACTION_LIMIT_REACHED 1
 
-#if defined(CONFIG_100D)
-struct prop_lv_lens
-{  
-        uint32_t                lens_rotation; // Identical Doesn't Change
-        uint32_t                lens_step; // Value Matches initial but doesn't move.
-        uint32_t                off_0x08;
-        uint32_t                off_0x0c;
-        uint32_t                off_0x10;
-        uint32_t                off_0x14;
-        uint32_t                off_0x18;
-        uint32_t                off_0x1c;
-        uint16_t                off_0x20;
-        uint8_t                 off_0x22;
-        uint16_t                focus_pos; // off_0x23
-        uint8_t                 off_0x25;
-        uint16_t                off_0x26;
-        uint32_t                off_0x28;
-        uint16_t                off_0x2c;        
-        uint8_t                 off_0x2e;
-        uint16_t                focal_len;  // off_0x2f
-        uint16_t                off_0x31;
-        uint16_t                focus_dist; // off_0x33
-        uint32_t                off_0x35;
-        uint32_t                off_0x39;
-        uint8_t                 off_0x3d;
-        uint8_t                 off_0x3e;
-        uint8_t                 off_0x3f;
-
-} __attribute__((packed));
-
-SIZE_CHECK_STRUCT( prop_lv_lens, 64 );
-
-#elif defined(CONFIG_EOSM)
+#if defined(CONFIG_EOSM)
 struct prop_lv_lens
 {
         uint32_t                lens_rotation;
@@ -371,9 +339,7 @@ void kelvin_toggle( void* priv, int sign );
 #define MAX_ISO 128 // may be better to fine-tune this for each camera
 
 // max iso with expo override
-#if defined(CONFIG_100D)
-#define MAX_ISO_BV 120 // 128 will freeze if iso expansion not set
-#elif defined(CONFIG_DIGIC_V) //All DigicV except 6D apparently
+#if defined(CONFIG_DIGIC_V) //All DigicV except 6D apparently
 #define MAX_ISO_BV 199
 #else
 #define MAX_ISO_BV 120
