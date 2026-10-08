@@ -3115,6 +3115,8 @@ int raw_rec_start_ready(void)
 static int (*crop_rec_lv_transition_diag)(char *, int) =
     MODULE_FUNCTION(crop_rec_lv_transition_diag);
 
+static void stopseq_log(void);
+
 static void lvrecov_log_state(void)
 {
     static int last_lv = -1;
@@ -3132,6 +3134,9 @@ static void lvrecov_log_state(void)
     /* Never touch the card from this diagnostic path while a clip is active. */
     if (RAW_IS_RECORDING || RAW_IS_PREPARING)
         return;
+
+    /* timing of the last stop sequence, if there is one waiting */
+    stopseq_log();
 
     int fps = fps_get_current_x1000();
     int zoom = lv_dispsize;
@@ -3712,6 +3717,56 @@ static GUARDED_BY(RawRecTask) int mlv_chunk = 0;               /* MLV chunk inde
 
 /* update the frame count and close the chunk */
 static REQUIRES(RawRecTask)
+/* Timing of the stop sequence, written to LVRECOV.LOG after the camera is idle
+ * again (never while a clip is active or Live View is paused). */
+enum
+{
+    STOPSEQ_BEGIN = 0,   /* stop requested, state = FINISHING */
+    STOPSEQ_WRITTEN,     /* all queued frames written */
+    STOPSEQ_CLOSED,      /* last chunk finished and closed */
+    STOPSEQ_PAUSED,      /* PauseLiveView returned */
+    STOPSEQ_RELEASED,    /* buffers freed, bit depth restored */
+    STOPSEQ_UNHACKED,    /* Live View hacks removed */
+    STOPSEQ_RESUMED,     /* ResumeLiveView returned */
+    STOPSEQ_IDLE,        /* state back to idle */
+    STOPSEQ_COUNT
+};
+static int stopseq_t[STOPSEQ_COUNT];
+static int stopseq_valid = 0;
+
+#define STOPSEQ_MARK(i) (stopseq_t[i] = get_ms_clock())
+
+static void stopseq_log(void)
+{
+    char line[200];
+    int i;
+
+    /* only once the whole stop sequence has finished */
+    if (!stopseq_valid || !RAW_IS_IDLE || stopseq_t[STOPSEQ_IDLE] == 0)
+        return;
+    stopseq_valid = 0;
+
+    /* milliseconds spent in each step */
+    int len = snprintf(line, sizeof(line),
+        "%08d STOPSEQ write=%d close=%d pause=%d release=%d unhack=%d resume=%d idle=%d total=%d\n",
+        get_ms_clock(),
+        stopseq_t[STOPSEQ_WRITTEN]  - stopseq_t[STOPSEQ_BEGIN],
+        stopseq_t[STOPSEQ_CLOSED]   - stopseq_t[STOPSEQ_WRITTEN],
+        stopseq_t[STOPSEQ_PAUSED]   - stopseq_t[STOPSEQ_CLOSED],
+        stopseq_t[STOPSEQ_RELEASED] - stopseq_t[STOPSEQ_PAUSED],
+        stopseq_t[STOPSEQ_UNHACKED] - stopseq_t[STOPSEQ_RELEASED],
+        stopseq_t[STOPSEQ_RESUMED]  - stopseq_t[STOPSEQ_UNHACKED],
+        stopseq_t[STOPSEQ_IDLE]     - stopseq_t[STOPSEQ_RESUMED],
+        stopseq_t[STOPSEQ_IDLE]     - stopseq_t[STOPSEQ_BEGIN]);
+    (void)i;
+
+    FILE *lf = FIO_CreateFileOrAppend(LVRECOV_LOG_FILE);
+    if (!lf)
+        return;
+    FIO_WriteFile(lf, line, len);
+    FIO_CloseFile(lf);
+}
+
 void finish_chunk(FILE* f, int thread)
 {
     file_hdr[thread].videoFrameCount = chunk_frame_count[thread];
@@ -3861,6 +3916,7 @@ void raw_video_rec_task(uint32_t thread)
     int liveview_hacked = 0;
     int lv_paused_early = 0;   /* Live View was already paused by the early-abort path */
     int lv_pause_deferred = 0; /* normal stop: Live View is paused right before cleanup */
+    int chunk_closed = 0;      /* last chunk was already finished before the pause */
     int last_write_timestamp = 0;    /* last FIO_WriteFile call */        
     int last_processed_frame = 0;
     static int fps;
@@ -4319,6 +4375,7 @@ abort_and_check_early_stop:
     
     /* done, this will stop the vsync CBR and the copying task */
     raw_recording_state = RAW_FINISHING;
+    if (thread == 0) { STOPSEQ_MARK(STOPSEQ_BEGIN); stopseq_valid = 0; stopseq_t[STOPSEQ_IDLE] = 0; }
     mlv_rec_call_cbr(MLV_REC_EVENT_STOPPING, NULL);
 
     /* wait until the other tasks calm down */
@@ -4449,13 +4506,26 @@ cleanup:
 #ifndef CONFIG_EOSM
     if (lv_pause_deferred)
     {
+        STOPSEQ_MARK(STOPSEQ_WRITTEN);
+
+        /* Closing the file does not need Live View to be paused, and can take
+         * a while on a big file, so do it first while the picture is still live. */
+        if (f)
+        {
+            finish_chunk(f, thread);
+            chunk_closed = 1;
+        }
+        STOPSEQ_MARK(STOPSEQ_CLOSED);
+
         /* everything is written: do the pause that normally comes first */
         lv_pause_deferred = 0;
         PauseLiveView();
         gui_uilock(UILOCK_EVERYTHING);
+        STOPSEQ_MARK(STOPSEQ_PAUSED);
+        stopseq_valid = 1;
     }
 #endif
-    if (f) finish_chunk(f, thread);
+    if (f && !chunk_closed) finish_chunk(f, thread);
     if (!written_total[thread])
     {
         /* Only touch the movie file name if this run actually chose one.  An early
@@ -4504,6 +4574,7 @@ cleanup:
         restore_bit_depth();
 #endif
         give_semaphore(settings_sem);
+        if (stopseq_valid) STOPSEQ_MARK(STOPSEQ_RELEASED);
 
         /* everything saved, we can unlock the buttons */
         gui_uilock(UILOCK_NONE);
@@ -4527,9 +4598,11 @@ cleanup:
             printf("H.264 stopped.\n");
         }
 
+        if (stopseq_valid) STOPSEQ_MARK(STOPSEQ_UNHACKED);
 #ifndef CONFIG_EOSM
         ResumeLiveView();
 #endif
+        if (stopseq_valid) STOPSEQ_MARK(STOPSEQ_RESUMED);
 
         if (crop_rec_is_enabled())
         {
@@ -4547,6 +4620,7 @@ cleanup:
         }
 
         raw_recording_state = RAW_IDLE;
+        if (stopseq_valid) STOPSEQ_MARK(STOPSEQ_IDLE);
 
 #ifndef CONFIG_EOSM
         redraw();
