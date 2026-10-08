@@ -16,3 +16,5 @@ extern WEAK_FUNC(ret_0) int crop_rec_custom_adjust(int control, int delta);
 /* Film Format chosen in the Movie menu Preset row (1x1 mode): 0 = none,
  * otherwise 1..8 matching the film_formats[] table in mlv_lite. */
 extern WEAK_FUNC(ret_0) int crop_rec_film_format();
+/* Settings -> Shutter record: 1 = a half-press of the shutter button starts/stops recording. */
+extern WEAK_FUNC(ret_0) int crop_rec_shutter_record();

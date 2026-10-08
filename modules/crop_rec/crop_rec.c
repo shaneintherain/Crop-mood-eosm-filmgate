@@ -309,6 +309,7 @@ static void slim_zoom_from_x10(void)
 static int slim_handle_shutter_zoom(unsigned int key)
 {
     if (!Shutter_zoom || !is_EOSM) return 0;
+    if (Shutter_rec) return 0;   /* Shutter record owns the half-press */
     if (!lv || gui_menu_shown() || RECORDING) return 0;
     if (lv_disp_mode != 0) return 0;
 
@@ -402,7 +403,7 @@ static void crop_rec_adjust_iso(int sign)
 
 /* EOS M Settings → INFO Button:
  * 0=OFF, 1=Histogram, 2=Waveform, 3=Zebras, 4=False Color,
- * 5=Framing, 6=Quick Panel.
+ * 5=Framing, 6=Quick Panel, 7=Kill Global Draw (toggle).
  * Returns: 1 = handled (block Canon), -1 = pass to Canon, 0 = not our INFO mapping. */
 static int slim_handle_info_button(unsigned int key)
 {
@@ -464,6 +465,14 @@ static int slim_handle_info_button(unsigned int key)
             {
                 menu_quick_screen_open();
                 gui_open_menu();
+            }
+            return 1;
+
+        case 7: /* Kill Global Draw: same setting as Movie -> Kill Global Draw */
+            if (!RECORDING && lv && is_movie_mode() && !gui_menu_shown() && lv_disp_mode == 0)
+            {
+                int on = mlv_lite_toggle_kill_gd();
+                NotifyBox(2000, "Kill Global Draw: %s", on ? "ON" : "OFF");
             }
             return 1;
 
@@ -3569,56 +3578,6 @@ static int patch_active = 0;
 static volatile int eosm_lv_guard_pending = 1;
 static volatile int eosm_lv_guard_busy = 0;
 
-/* Shutter record also locks the shutter release (Canon's UI lock, shutter bit only), so a full
- * press cannot take a photo.  Only the shutter bit is touched, and only when we set it. */
-static int shutter_rec_locked = 0;
-
-static void slim_shutter_rec_lock_update(void)
-{
-    if (!is_EOSM)
-        return;
-
-    int want = Shutter_rec && lv && is_movie_mode();
-
-    /* some other part of ML holds a full UI lock (e.g. buffer reallocation): leave it alone */
-    if ((icu_uilock & 0xFFFF & ~UILOCK_SHUTTER) != 0)
-        return;
-
-    if (want)
-    {
-        if (!(icu_uilock & UILOCK_SHUTTER))
-            gui_uilock(icu_uilock | UILOCK_SHUTTER);
-        shutter_rec_locked = 1;
-    }
-    else if (shutter_rec_locked && !RECORDING)
-    {
-        if (icu_uilock & UILOCK_SHUTTER)
-            gui_uilock(icu_uilock & ~UILOCK_SHUTTER);
-        shutter_rec_locked = 0;
-    }
-}
-
-/* EOS M Settings -> Shutter record.  The camera does not report a full shutter press to ML (it
- * just takes a photo), so the half-press is used.  Press starts recording, press again stops
- * it; the release is swallowed so Canon does not see half of the pair. */
-static int slim_handle_shutter_record(unsigned int key)
-{
-    if (!Shutter_rec || !is_EOSM)
-        return 0;
-    if (key != MODULE_KEY_PRESS_HALFSHUTTER && key != MODULE_KEY_UNPRESS_HALFSHUTTER)
-        return 0;
-    if (!lv || gui_menu_shown() || !is_movie_mode())
-        return 0;
-
-    /* never start while the Live View transition controller owns the display */
-    if (eosm_lv_guard_busy && !RECORDING)
-        return 1;
-
-    if (key == MODULE_KEY_PRESS_HALFSHUTTER)
-        module_send_keypress(MODULE_KEY_REC);
-
-    return 1;
-}
 static int eosm_lv_guard_started;
 static int eosm_lv_guard_state;
 static int eosm_lv_guard_stable_frames;
@@ -3686,8 +3645,6 @@ int crop_rec_lv_transition_diag(char *buffer, int size)
     return 0;
 }
 static void eosm_lv_guard_request(void) {}
-static int slim_handle_shutter_record(unsigned int key) { (void) key; return 0; }
-static void slim_shutter_rec_lock_update(void) {}
 #endif
 
 static void install_patches()
@@ -4293,8 +4250,8 @@ static struct menu_entry slim_info_button_menu[] = {
     {
         .name      = "INFO Button",
         .priv      = &INFO_button,
-        .max       = 6,
-        .choices   = CHOICES("OFF", "Histogram", "Waveform", "Zebras", "False Color", "Framing", "Quick Panel"),
+        .max       = 7,
+        .choices   = CHOICES("OFF", "Histogram", "Waveform", "Zebras", "False Color", "Framing", "Quick Panel", "Kill Global Draw"),
         .edit_mode = EM_INLINE_ADJUST,
         .update    = slim_info_button_update,
         .icon_type = IT_DICE,
@@ -4340,7 +4297,7 @@ static struct menu_entry slim_info_button_menu[] = {
         .edit_mode = EM_INLINE_ADJUST,
         .icon_type = IT_DICE,
         .help      = "Half-press the shutter button to start/stop recording (movie mode).",
-        .help2     = "Press only halfway. Locks the shutter release so a full press takes no photo. Replaces Shutter zoom.",
+        .help2     = "Press only halfway: a full press still takes a photo. Replaces Shutter zoom.",
     },
 };
 
@@ -4447,6 +4404,11 @@ static int slim_film_active(void)
 }
 
 /* used by mlv_lite; reads the real crop mode, not the menu state */
+int crop_rec_shutter_record()
+{
+    return is_EOSM && Shutter_rec;
+}
+
 int crop_rec_film_format()
 {
     int fmt = slim_film_active();
@@ -5352,6 +5314,7 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
     (void *)&crop_rec_touch_get_value,
     (void *)&crop_rec_custom_adjust,
     (void *)&crop_rec_film_format,
+    (void *)&crop_rec_shutter_record,
     (void *)&crop_rec_lv_transition_busy,
     (void *)&crop_rec_lv_transition_diag,
 };
@@ -6535,8 +6498,6 @@ static int lv_check_is_healthy(void)
 /* when closing ML menu, check whether we need to refresh the LiveView */
 static unsigned int crop_rec_polling_cbr(unsigned int unused)
 {
-    slim_shutter_rec_lock_update();
-
     
     /* touch/Movie-tab shortcuts inject Q+SET into an open menu — not used on slim. */
 #ifndef CONFIG_SLIM_MENUS
@@ -6967,9 +6928,6 @@ static unsigned int crop_rec_keypress_cbr(unsigned int key)
         if ((is_EOSM && is_movie_mode()) || (CROP_PRESET_MENU && patch_active))
         {
             if (slim_handle_main_dial_shutter(key))
-                return 0;
-
-            if (slim_handle_shutter_record(key))
                 return 0;
 
             if (slim_handle_shutter_zoom(key))

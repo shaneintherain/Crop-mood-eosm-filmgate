@@ -4972,7 +4972,15 @@ unsigned int raw_rec_keypress_cbr(unsigned int key)
     if (!RAW_IS_IDLE && key == MODULE_KEY_PRESS_ZOOMIN)
         return 0;
 
-    int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC);
+    /* Settings -> Shutter record (EOS M): a half-press of the shutter button starts/stops
+     * recording, like the REC key (a full press is not reported to ML).  The release is
+     * swallowed so Canon does not see half of the pair. */
+    int shutter_rec = crop_rec_shutter_record();
+    if (shutter_rec && key == MODULE_KEY_UNPRESS_HALFSHUTTER)
+        return 0;
+
+    int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC ||
+                           (shutter_rec && key == MODULE_KEY_PRESS_HALFSHUTTER));
     
     if (rec_key_pressed)
     {
@@ -5114,6 +5122,12 @@ static int preview_dirty = 0;
 
 /* EOS M slim: INFO Button → framing (low-res correct framing, like Preview → Framing). */
 static int slim_info_framing_active = 0;
+
+int mlv_lite_toggle_kill_gd(void)
+{
+    kill_gd = !kill_gd;
+    return kill_gd;
+}
 
 void mlv_lite_info_framing_toggle(void)
 {
