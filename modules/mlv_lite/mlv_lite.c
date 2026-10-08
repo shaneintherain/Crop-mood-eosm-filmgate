@@ -3861,6 +3861,7 @@ void raw_video_rec_task(uint32_t thread)
     int liveview_hacked = 0;
     int lv_paused_early = 0;   /* Live View was already paused by the early-abort path */
     int lv_pause_deferred = 0; /* normal stop: Live View is paused right before cleanup */
+    int lv_rec_state_deferred = 0; /* RECORDING flag is cleared late on a normal EOS M stop */
     int last_write_timestamp = 0;    /* last FIO_WriteFile call */        
     int last_processed_frame = 0;
     static int fps;
@@ -4331,6 +4332,19 @@ abort_and_check_early_stop:
     /* signal end of recording to the compression task */
     msg_queue_post(compress_mq, INT_MIN);
     
+#ifndef CONFIG_EOSM
+    if (cam_eos_m && !lv_paused_early && !RECORDING_H264 && thread == 0)
+    {
+        /* Normal stop on the EOS M: keep the "recording" state on until the
+         * last frames are written and Live View is paused/resumed.  Clearing
+         * it now makes the bit-depth analog gain go back to normal while the
+         * Live View brightening for 10/11/12-bit is still applied, which
+         * shows as a washed-out preview for a moment.  It is cleared in the
+         * cleanup block, right before the Pause/Resume cycle. */
+        lv_rec_state_deferred = 1;
+    }
+    else
+#endif
     set_recording_custom(CUSTOM_RECORDING_NOT_RECORDING);
 
 #ifndef CONFIG_EOSM
@@ -4451,6 +4465,11 @@ cleanup:
     {
         /* everything is written: do the pause that normally comes first */
         lv_pause_deferred = 0;
+        if (lv_rec_state_deferred)
+        {
+            lv_rec_state_deferred = 0;
+            set_recording_custom(CUSTOM_RECORDING_NOT_RECORDING);
+        }
         PauseLiveView();
         gui_uilock(UILOCK_EVERYTHING);
     }
