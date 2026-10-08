@@ -91,6 +91,7 @@ static GUARDED_BY(GuiMainTask) int show_edmac = 0;
 
 /* from mlv_play module */
 extern WEAK_FUNC(ret_0) void mlv_play_file(char *filename);
+extern WEAK_FUNC(ret_0) void crop_rec_request_lv_check(void);
 
 /* Dual ISO: skip ML raw preview while recording (striped dual RAW on LV). */
 static int dual_iso_skip_raw_preview(void)
@@ -4509,13 +4510,14 @@ cleanup:
         if (crop_rec_is_enabled())
         {
 #ifndef CONFIG_EOSM
-            if (cam_eos_m) // what about other models?
+            if (cam_eos_m)
             {
+                /* Used to bounce the zoom here (x5 -> x1 -> x5) every time,
+                 * which made the screen flash dark.  Ask crop_rec to check
+                 * the Live View state instead; it only bounces the zoom if
+                 * Live View did not come back healthy. */
                 if (lv_dispsize == 5)
-                {
-                    set_lv_zoom(1);
-                    set_lv_zoom(5);
-                }
+                    crop_rec_request_lv_check();
             }
 #endif
         }
