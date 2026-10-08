@@ -195,6 +195,7 @@ static int rbf_font_load(char *file, font* f, int maxchar)
     // check size read is correct and magic numbers are valid
     if ((i != sizeof(font_hdr)) || (f->hdr.magic1 != RBF_HDR_MAGIC1) || (f->hdr.magic2 != RBF_HDR_MAGIC2))
     {
+        FIO_CloseFile(fd);
         return 0;
     }
     
@@ -592,6 +593,19 @@ struct font font_med_large;
 struct font font_large;
 struct font font_canon;
 
+/* Load a Jost font into the next font slot.  If its file is missing or unusable (a failed load
+ * does not take a slot), load the stock font instead, so the slot order never changes. */
+static void load_slot_font(const char *jost, const char *stock)
+{
+    if (rbf_font_file_exists(jost))
+    {
+        uint32_t f = font_by_name((char *) jost, COLOR_BLACK, COLOR_WHITE);
+        if (FONT_ID(f) != FONT_ID(FONT_CANON))
+            return;
+    }
+    font_by_name((char *) stock, COLOR_BLACK, COLOR_WHITE);
+}
+
 /* must be called before menu_init, otherwise it can't measure strings */
 void _load_fonts()
 {
@@ -623,13 +637,13 @@ void _load_fonts()
     #else
     /* FONT_MED (slot 2): Jost if its file is present, otherwise the stock font.
      * Either way it takes slot 2, so the other font IDs never move. */
-    font_by_name(rbf_font_file_exists("jost-small") ? "jost-small" : "argnor23", COLOR_BLACK, COLOR_WHITE);
+    load_slot_font("jost-small", "argnor23");
     #endif
     /* FONT_MED_LARGE (slot 3) and FONT_LARGE (slot 4): Jost with the same cell sizes as the stock
      * fonts (and the ML symbols copied over), so alerts, meters and warnings match the menus.
      * Without the files the stock fonts are used; the slots never move either way. */
-    font_by_name(rbf_font_file_exists("jost-medlarge") ? "jost-medlarge" : "argnor28", COLOR_BLACK, COLOR_WHITE);
-    font_by_name(rbf_font_file_exists("jost-large") ? "jost-large" : "argnor32", COLOR_BLACK, COLOR_WHITE);
+    load_slot_font("jost-medlarge", "argnor28");
+    load_slot_font("jost-large", "argnor32");
     /* Jost Medium for the FilmGate menus.  It occupies a spare dynamic slot and
      * is loaded with the ordinary ML fonts, never from a Live View drawing callback. */
     font_by_name("jost-medium", COLOR_BLACK, COLOR_WHITE);

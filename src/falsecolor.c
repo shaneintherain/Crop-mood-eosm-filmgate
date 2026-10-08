@@ -62,9 +62,16 @@ void draw_false_downsampled( void )
     uint8_t* fc = false_colour[falsecolor_palette];
 
     int off = get_y_skip_offset_for_overlays();
+
+    /* EOS M, HDMI 1080: the picture only fills the first half of the assumed
+     * 1920x1080 buffer (on camera, false color stopped at the exact
+     * half-way row). Read it at one line per BMP line instead of two. */
+    extern int hdmi_code;
+    int lv_half = EXT_MONITOR_CONNECTED && hdmi_code >= 5 && vram_lv.height == 1080;
+
     for(int y = os.y0 + off; y < os.y_max - off; y += 2 )
     {
-        uint32_t * const v_row = (uint32_t*)( lvram        + BM2LV_R(y)    );  // 2 pixels
+        uint32_t * const v_row = (uint32_t*)( lvram        + (lv_half ? (y + 30) * vram_lv.pitch : BM2LV_R(y)) );  // 2 pixels
         uint16_t * const b_row = (uint16_t*)( bvram        + BM_R(y)       );  // 2 pixels
         uint16_t * const m_row = (uint16_t*)( bvram_mirror + BM_R(y)       );  // 2 pixels
         

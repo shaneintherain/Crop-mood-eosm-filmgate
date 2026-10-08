@@ -15,7 +15,7 @@ static int failures = 0, checks = 0;
 static int fps_over = 0, tapdisp = 1, crop_preset_fps_reduce = 1, crop_preset_index = 3, shutter_range = 0,
            fix_dual_iso_flicker = 1, bit_depth_analog = 1, brighten_lv_method = 0, crop_preset_ar_menu = 4,
            crop_preset_1x1_res_menu = 3, crop_preset_1x3_res_menu = 1, crop_preset_3x3_res_menu = 2,
-           crop_preset_fps_menu = 0, SET_button = 1, Half_Shutter = 2, INFO_button = 0, Shutter_zoom = 0,
+           crop_preset_fps_menu = 0, SET_button = 1, Half_Shutter = 2, INFO_button = 0, Shutter_zoom = 0, Shutter_rec = 0,
            Arrows_U_D = 3, more_hacks = 1, Arrows_L_R = 2, crop_settings_ver = 0, slim_film_fmt = 0, slim_film_frames = 0;
 
 /* ---- real code from crop_rec.c ---- */
@@ -26,7 +26,7 @@ static void reset_defaults(void)
     fps_over = 0; tapdisp = 1; crop_preset_fps_reduce = 1; crop_preset_index = 3; shutter_range = 0;
     fix_dual_iso_flicker = 1; bit_depth_analog = 1; brighten_lv_method = 0; crop_preset_ar_menu = 4;
     crop_preset_1x1_res_menu = 3; crop_preset_1x3_res_menu = 1; crop_preset_3x3_res_menu = 2;
-    crop_preset_fps_menu = 0; SET_button = 1; Half_Shutter = 2; INFO_button = 0; Shutter_zoom = 0;
+    crop_preset_fps_menu = 0; SET_button = 1; Half_Shutter = 2; INFO_button = 0; Shutter_zoom = 0; Shutter_rec = 0;
     Arrows_U_D = 3; more_hacks = 1; Arrows_L_R = 2; crop_settings_ver = 0; slim_film_fmt = 0; slim_film_frames = 0;
 }
 
@@ -95,9 +95,10 @@ int main(void)
     /* --- current config: INFO untouched, and loading twice changes nothing more --- */
     for (int v = 0; v <= 6; v++)
     {
-        reset_defaults(); crop_settings_ver = 3; INFO_button = v;
+        reset_defaults(); crop_settings_ver = 3; INFO_button = v; Shutter_rec = 1;
         crop_settings_load();
         CHECK(INFO_button == v, "v3 INFO %d must stay, got %d", v, INFO_button);
+        CHECK(Shutter_rec == 1, "v3 Shutter record must stay on");
         crop_settings_load();
         CHECK(INFO_button == v && crop_settings_ver == 3, "second load must change nothing");
     }

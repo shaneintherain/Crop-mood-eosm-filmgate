@@ -403,7 +403,7 @@ static void crop_rec_adjust_iso(int sign)
 
 /* EOS M Settings → INFO Button:
  * 0=OFF, 1=Histogram, 2=Waveform, 3=Zebras, 4=False Color,
- * 5=Framing, 6=Quick Panel, 7=Kill Global Draw (toggle).
+ * 5=Framing, 6=Quick Panel.
  * Returns: 1 = handled (block Canon), -1 = pass to Canon, 0 = not our INFO mapping. */
 static int slim_handle_info_button(unsigned int key)
 {
@@ -465,14 +465,6 @@ static int slim_handle_info_button(unsigned int key)
             {
                 menu_quick_screen_open();
                 gui_open_menu();
-            }
-            return 1;
-
-        case 7: /* Kill Global Draw: same setting as Movie -> Kill Global Draw */
-            if (!RECORDING && lv && is_movie_mode() && !gui_menu_shown() && lv_disp_mode == 0)
-            {
-                int on = mlv_lite_toggle_kill_gd();
-                NotifyBox(2000, "Kill Global Draw: %s", on ? "ON" : "OFF");
             }
             return 1;
 
@@ -4250,8 +4242,8 @@ static struct menu_entry slim_info_button_menu[] = {
     {
         .name      = "INFO Button",
         .priv      = &INFO_button,
-        .max       = 7,
-        .choices   = CHOICES("OFF", "Histogram", "Waveform", "Zebras", "False Color", "Framing", "Quick Panel", "Kill Global Draw"),
+        .max       = 6,
+        .choices   = CHOICES("OFF", "Histogram", "Waveform", "Zebras", "False Color", "Framing", "Quick Panel"),
         .edit_mode = EM_INLINE_ADJUST,
         .update    = slim_info_button_update,
         .icon_type = IT_DICE,
@@ -7486,6 +7478,7 @@ static const struct setting_range crop_settings[] = {
     SETTING(fps_over,             -100000,  100000,      0),
     SETTING(SET_button,                 1,       2,      1),  /* slim: x10 zoom / last settings */
     SETTING(INFO_button,                0,       6,      0),
+    SETTING(Shutter_rec,                0,       1,      0),
     SETTING(Arrows_U_D,                 0,       3,      3),
     SETTING(Shutter_zoom,               0,       2,      0),
     SETTING(tapdisp,                    0,       5,      1),
