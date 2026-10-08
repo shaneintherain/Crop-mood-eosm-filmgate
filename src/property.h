@@ -39,11 +39,7 @@
 #define PROP_LENS_SOMETHING     0x80030022
 
 //~ 5dc doesn't have a PROP_LENS.
-#ifdef CONFIG_5DC
-#define PROP_LENS               0x80030010
-#else
 #define PROP_LENS               0x80030011 // info about lens? flags?
-#endif
 
 #define PROP_HDMI_CHANGE        0x8003002c // 1 if HDMI display connected
 #define PROP_HDMI_CHANGE_CODE   0x8003002e // edidc?
@@ -103,28 +99,10 @@
 #define PROP_DRIVE              0x80000003
 #define DRIVE_SINGLE 0
 #define DRIVE_SELFTIMER_REMOTE 0x10
-#ifdef CONFIG_5DC
-#define DRIVE_SELFTIMER_2SEC 0x10
-#else
 #define DRIVE_SELFTIMER_2SEC 0x11
-#endif
 #define DRIVE_SELFTIMER_CONTINUOUS 7
 
-#if defined(CONFIG_60D) || defined(CONFIG_7D)
-    #define DRIVE_HISPEED_CONTINUOUS 4
-    #define DRIVE_CONTINUOUS 5
-#elif defined(CONFIG_5D3) || defined(CONFIG_70D)
-    #define DRIVE_HISPEED_CONTINUOUS 4
-    #define DRIVE_CONTINUOUS 5
-    #define DRIVE_SILENT 0x13
-    #define DRIVE_SILENT_CONTINUOUS 0x14
-#elif defined(CONFIG_6D)
     #define DRIVE_CONTINUOUS 1
-    #define DRIVE_SILENT 0x13
-    #define DRIVE_SILENT_CONTINUOUS 0x14
-#else
-    #define DRIVE_CONTINUOUS 1
-#endif
 #define PROP_SHUTTER            0x80000005
 #define PROP_SHUTTER_RANGE      0x80000035 // Len=4, 6D:100098 30" & 1/4k
 #define PROP_APERTURE           0x80000006
@@ -176,15 +154,9 @@
 
 #define PROP_ACTIVE_SWEEP_STATUS 0x8002000C     // 1 == cleaning sensor?
 
-#ifndef CONFIG_5DC
 #define PROP_DL_ACTION          0x80020013 // 0 == end?
-#endif
 
-#ifdef CONFIG_5DC
-#define PROP_EFIC_TEMP          0x80030013
-#else
 #define PROP_EFIC_TEMP          0x80030014
-#endif
 
 #define PROP_EFIC_TEMP_MAYBE            0x010100ed
 //#define PROP_BATTERY_RAW_LEVEL_MAYBE          0x80030014
@@ -265,11 +237,7 @@
 
 #define PROP_LAST_JOB_ID     0x02050001 // maybe?
 
-#ifdef CONFIG_5DC
-#define PROP_PICTURE_STYLE 0x80000020
-#else
 #define PROP_PICTURE_STYLE 0x80000028   // 0x81 = std, 82 = portrait, 83 = landscape, 84 = neutral, 85 = faithful, 86 = monochrome, 21 = user 1, 22 = user 2, 23 = user 3
-#endif
 
 #define PROP_PICSTYLE_SETTINGS_STANDARD   0x02060001 // 02060001 for std, 02060002 for portrait... 02060007 for user 1 ... 02060009 for user 3
 #define PROP_PICSTYLE_SETTINGS_PORTRAIT   0x02060002
@@ -289,21 +257,12 @@
 #define PROP_PC_FLAVOR2_PARAM             0x4010003
 #define PROP_PC_FLAVOR3_PARAM             0x4010005
 
-#ifdef CONFIG_7D
-#define PROP_ALO 0x02050012
-#else
 #define PROP_ALO 0x8000003D
-#endif
 #define ALO_STD 0
 #define ALO_LOW 1
 #define ALO_HIGH 2
 #define ALO_OFF 3
 
-#if defined(CONFIG_5D3)
-#define PROP_HTP 0x8000004a
-#define PROP_MULTIPLE_EXPOSURE 0x0202000c
-#define PROP_MLU 0x80000047
-#endif
 
 #ifdef CONFIG_GPS
 #define PROP_GPS 0x8004004c // 0 - Off 1 - External 2 - Internal
@@ -318,44 +277,14 @@
 #endif
 
 // verified with prop spy
-#ifdef CONFIG_70D
-#define PROP_HI_ISO_NR 0x80000049
-#define PROP_HTP 0x8000004a
-#define PROP_MULTIPLE_EXPOSURE 0x0202000c
-#define PROP_MULTIPLE_EXPOSURE_SETTING 0x8000003F
-#define PROP_MLU 0x80000047
-#endif
 
-#ifdef CONFIG_6D //May work for others.
-#define PROP_HI_ISO_NR 0x80000049 //Len 4, 4 is multishot
-#define PROP_HTP 0x8000004a
-#define PROP_MULTIPLE_EXPOSURE 0x0202000c
-#define PROP_MULTIPLE_EXPOSURE_SETTING 0x8000003F
-#define PROP_MLU 0x80000047
-#define PROP_AFFRAME_ENABLE_SETTING 0x8003004F //LV I think
-#define PROP_BT_DEVICE_CONNECT 0x2070008
-#define PROP_AF_METHOD_SELECT_FOCUS_AREA 0x80000046
-#define PROP_VIDEOSNAP_MODE 0x80000041
-//Passwords around 0x77cb4 but no dialog :( Def=0000
-//0x2 Restricted Mode (mymenu only) /0x1 Normal? /0x0 Off
-#define PROP_PHOTO_STUDIO_MODE 0x80040016 
-#define PROP_GPS_TIME_SYNC 0x80040045
-#define PROP_GUIGROUND_STATE 0x80020011
-#define PROP_STROBO_SYNC_AV 0x8000004c //Array 0x77C04
-#define PROP_MOVIE_REC_VOLUME 0x2050017 //Len 4, Vol00Vol
-#define PROP_HEADPHONE_PHYSICAL_CONNECT 0x80030055
-#endif
 /** Job progress
  * 0xB == capture end?
  * 0xA == start face catch pass?
  * 0x8 == "guiSetDarkBusy" -- noise reduction?
  * 0x0 == Job Done
  */
-#ifdef CONFIG_5DC
-#define PROP_LAST_JOB_STATE   0x80030011
-#else
 #define PROP_LAST_JOB_STATE   0x80030012  // 8 == writing to card, 0 = idle, B = busy.
-#endif
 
 #define PROP_STROBO_FIRING    0x80040013  // 0 = enable, 1 = disable, 2 = auto?
 #define PROP_STROBO_ETTLMETER 0x80040014  // 0 = evaluative, 1 = average
@@ -379,18 +308,11 @@
 #define PROP_MOVIE_SIZE_50D 0x205000C
 
 
-#ifdef CONFIG_500D
-#define PROP_VIDEO_MODE 0x2050010
-// buf[0]: 0 if 1080p, 1 if 720p, 2 if 480p
-// buf[1]: 14 if 1080p (20fps), 1e if 720p or 480p (30fps)
-// buf[2]: a if 1080p (1/2 of 20fps??), f if 720p or 480p (1/2 of 30fps??)
-#else
 #define PROP_VIDEO_MODE 0x80000039 
 // buf[0]: 8 if crop else 0
 // buf[1]: 0 if full hd, 1 if 720p, 2 if 680p
 // buf[2]: fps
 // buf[3]: GoP
-#endif
 
 #define PROP_DOF_PREVIEW_MAYBE 0x8005000B
 
@@ -416,7 +338,7 @@
     #define PROP_CARD_RECORD       0x8003000B
     #define PROP_CLUSTER_SIZE      0x2010004
     #define PROP_FREE_SPACE        0x2010006
-#else // DryOS
+#else
     
     #define PROP_CARD_SELECT         0x80040002 //  1=CF, 2=SD
 
@@ -473,11 +395,7 @@
 #define PICQ_SMALL_FINE   0x3010200
 #define PICQ_SMALL_COARSE 0x2010200
 
-#ifdef CONFIG_5DC
-#define PROP_IMAGE_REVIEW_TIME 0x0202000b
-#else
 #define PROP_IMAGE_REVIEW_TIME 0x02020006 // 0, 2, 4, 8, ff
-#endif
 
 #define PROP_BATTERY_REPORT     0x8003001D
 #define PROP_BATTERY_HISTORY    0x0204000F
@@ -532,11 +450,7 @@
 
 #define PROP_ELECTRIC_SHUTTER 0x80040011
 
-#ifdef CONFIG_5D2
-#define PROP_MOVIE_SOUND_RECORD 0x2050015
-#else
 #define PROP_MOVIE_SOUND_RECORD 0x205000E
-#endif
 
 #define PROP_LOGICAL_CONNECT 0x8003000e
 
@@ -552,12 +466,6 @@
 #define PROP_AEB 0x8000000B 
 
 
-#ifdef CONFIG_600D
-#define PROP_PLAYMODE_VOL_CHANGE_600D	0x205000F //volume change when playing a video by wheel
-#define PROP_AUDIO_VOL_CHANGE_600D	0x2050017 //volume change finished from Cannon Audio menu
-#define PROP_PLAYMODE_LAUNCH_600D	0x205000D //Playmode and Q(Quick setting menu) launched
-
-#endif
 /** Properties */
 extern void
 prop_register_slave(

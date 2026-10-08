@@ -5,7 +5,6 @@
 #include "bmp.h"
 
 /* CF/SD device structure. we have two types which have different parameter order and little differences in behavior */
-#if !defined(CONFIG_500D) && !defined(CONFIG_50D) && !defined(CONFIG_5D2) && !defined(CONFIG_40D)
 struct cf_device
 {
     /* type b always reads from raw sectors */
@@ -24,37 +23,10 @@ struct cf_device
     );
     
     /* is 7D the only one with two null pointers between? */
-#if defined(CONFIG_7D)
-    void *null_1;
-    void *null_2;
-#endif
 
     void * io_control;
     void * soft_reset;
 };
-#else
-struct cf_device
-{
-    /* If block has the top bit set the physical blocks will be read instead of from the first partition.  Cool. */
-    int (*read_block)(
-        struct cf_device * dev,
-        uintptr_t block,
-        size_t num_blocks,
-        void * buf
-    );
-
-    int (*write_block)(
-        struct cf_device * dev,
-        uintptr_t block,
-        size_t num_blocks,
-        const void * buf
-    );
-    
-    void * io_control;
-    void * soft_reset;
-};
-
-#endif
 
 /** Shadow copy of the NVRAM boot flags stored at 0xF8000000 */
 #define NVRAM_BOOTFLAGS     ((void*) 0xF8000000)
@@ -120,20 +92,10 @@ static void exfat_sum(uint32_t* buffer) // size: 12 sectors (0-11)
 
 // http://www.datarescue.com/laboratory/partition.htm
 // http://magiclantern.wikia.com/wiki/Bootdisk
-#if !defined(CONFIG_500D) && !defined(CONFIG_50D) && !defined(CONFIG_5D2) && !defined(CONFIG_40D)
 int
 bootflag_write_bootblock( void )
 {
-#if defined(CONFIG_7D)
-    struct cf_device * const dev = (struct cf_device *) cf_device[6];
-#elif defined(CONFIG_5D3)
-    /* dual card slot */
-    int ml_on_cf = (get_ml_card()->drive_letter[0] == 'A');
-    extern struct cf_device ** cf_device_ptr[];
-    struct cf_device * const dev = (struct cf_device *) (ml_on_cf ? cf_device_ptr[0][4] : sd_device[1]);
-#else
     struct cf_device * const dev = (struct cf_device *) sd_device[1];
-#endif
 
     if (!dev)
     {
@@ -195,65 +157,3 @@ bootflag_write_bootblock( void )
     return 1; // success!
 }
 
-#else
-// 500D doesn't use partition table like the 550d and other cameras.
-// This method is a mix of Trammell's old code and a lot of testing / verifying by me.
-// -Coutts
-int
-bootflag_write_bootblock( void )
-{
-#ifdef CONFIG_500D
-    struct cf_device * const dev = sd_device[1];
-#elif defined(CONFIG_50D) || defined(CONFIG_5D2) || defined(CONFIG_40D) // not good for 40D, need checking
-    struct cf_device * const dev = cf_device[5];
-#endif
-    
-    uint8_t *block = fio_malloc( 512 );
-    
-    int i;
-    for(i=0; i<512; i++) block[i] = 0xAA;
-
-    dev->read_block( dev, 0, 1, block ); //overwrite our AAAs in our buffer with the MBR partition of the SD card.
-    
-    // figure out if we are a FAT32 partitioned drive. this spells out FAT32 in chars.
-    // FAT16 not supported yet - I don't have a small enough card to test with.
-    //if( block[0x52] == 0x46 && block[0x53] == 0x41 && block[0x54] == 0x54 && block[0x55] == 0x33 && block[0x56] == 0x32 )
-    if( strncmp((const char*) block + 0x52, "FAT32", 5) == 0 ) //check if this card is FAT32
-    {
-        dev->read_block( dev, 0, 1, block );
-        memcpy( block + 0x47, (uint8_t*) "EOS_DEVELOP", 0xB );
-        memcpy( block + 0x5C, (uint8_t*) "BOOTDISK", 0xB );
-        dev->write_block( dev, 0, 1, block );
-    }
-    else if( strncmp((const char*) block + 0x36, "FAT16", 5) == 0 ) //check if this card is FAT16
-    {
-        dev->read_block( dev, 0, 1, block );
-        memcpy( block + 0x2B, (uint8_t*) "EOS_DEVELOP", 0xB );
-        memcpy( block + 0x40, (uint8_t*) "BOOTDISK", 0xB );
-        dev->write_block( dev, 0, 1, block );
-    }
-    else if( strncmp((const char*) block + 0x3, "EXFAT", 5) == 0 ) //check if this card is EXFAT
-    {
-        uint8_t* buffer = fio_malloc(512*24);
-        dev->read_block( dev, 0, 24, buffer );
-        int off1 = 130;
-        int off2 = 122;
-        memcpy( buffer + off1, (uint8_t*) "EOS_DEVELOP", 0xB );
-        memcpy( buffer + off2, (uint8_t*) "BOOTDISK", 0x8 );
-        memcpy( buffer + 512*12 + off1, (uint8_t*) "EOS_DEVELOP", 0xB );
-        memcpy( buffer + 512*12 + off2, (uint8_t*) "BOOTDISK", 0x8 );
-        exfat_sum((uint32_t*)(buffer));
-        exfat_sum((uint32_t*)(buffer+512*12));
-        dev->write_block( dev, 0, 24, buffer );
-        fio_free( buffer );
-    }
-    else // if it's not FAT16 neither FAT32, don't do anything.
-    {
-        NotifyBox(2000, "Unknown partition :("); msleep(2000);
-        return 0;
-    }
-    
-    fio_free( block );
-    return 1;
-}
-#endif

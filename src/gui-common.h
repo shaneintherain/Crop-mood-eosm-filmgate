@@ -175,15 +175,6 @@ extern void
 gui_hide_menu( int redisplay_time );
 
 //~ 5dc has different gui_state values than DryOS.
-#ifdef CONFIG_5DC
-#define GUISTATE_PLAYMENU 0
-#define GUISTATE_MENUDISP 1
-#define GUISTATE_QR 2
-// 3:   QR erase [unused?]
-#define GUISTATE_IDLE 4
-#define GUISTATE_QMENU 9
-
-#else
 
 #define GUISTATE_IDLE 0
 #define GUISTATE_PLAYMENU 1
@@ -198,7 +189,6 @@ gui_hide_menu( int redisplay_time );
                       // 10: unavi set?
 #define GUISTATE_QMENU 9
 #define GUISTATE_QR_ZOOM 12 // QuickReview zoom
-#endif
 
 void fake_simple_button(int bgmt_code);
 void GUI_Control(int bgmt_code, int obj, int arg, int unknown);

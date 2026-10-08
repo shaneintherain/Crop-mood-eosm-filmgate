@@ -147,15 +147,9 @@ bool FAST is_movie_mode()
 {
     #ifdef CONFIG_NO_DEDICATED_MOVIE_MODE
     return 
-            #if defined(CONFIG_5D2) || defined(CONFIG_50D) /* the switch is in the menus */
-            lv && 
-            #endif
             lv_movie_select == LVMS_ENABLE_MOVIE /* the switch is on the camera body, so you can't be in photo mode when it's enabled */
-            #ifdef CONFIG_5D2
-            && get_expsim() == 2  // movie enabled, but photo display is considered photo mode
-            #endif
         ;
-    #else
+#else
     return shooting_mode == SHOOTMODE_MOVIE;
     #endif
 }
@@ -180,14 +174,9 @@ volatile int video_mode_fps = 0;
 volatile int video_mode_resolution = 0; // 0 if full hd, 1 if 720p, 2 if 480p
 PROP_HANDLER(PROP_VIDEO_MODE)
 {
-    #ifdef CONFIG_500D
-    video_mode_resolution = buf[0];
-    video_mode_fps = buf[1];
-    #else
     video_mode_crop = buf[0];
     video_mode_resolution = buf[1];
     video_mode_fps = buf[2];
-    #endif
 }
 
 #ifdef CONFIG_LIVEVIEW
@@ -237,24 +226,8 @@ PROP_HANDLER(PROP_HDMI_CHANGE_CODE)
     hdmi_vars_update();
 }
 
-#ifdef CONFIG_50D
-int __recording = 0;
-int shooting_type = 0;
-PROP_HANDLER(PROP_SHOOTING_TYPE)
-{
-    shooting_type = buf[0];
-    __recording = (shooting_type == 4 ? 2 : 0);
-}
-
-PROP_HANDLER(PROP_MOVIE_SIZE_50D)
-{
-    video_mode_resolution = buf[0];
-    video_mode_fps = 30;
-}
-#else
 volatile PROP_INT(PROP_MVR_REC_START, __recording);
 volatile PROP_INT(PROP_SHOOTING_TYPE, shooting_type);
-#endif
 int __recording_custom = 0;
 
 void set_recording_custom(int state)
@@ -267,22 +240,12 @@ int lv_disp_mode;
 #ifndef CONFIG_EOSM //~ we update lv_disp_mode from 
 PROP_HANDLER(PROP_HOUTPUT_TYPE)
 {
-    #if defined(CONFIG_5D3)
-    /* 1 when Canon overlays are present on the built-in LCD, 0 when they are not present (so we can display our overlays) */
-    /* 2 on external monitor with mirroring enabled; however, you can't tell when Canon overlays are present (FIXME) */
-    /* todo: check whether this snippet is portable */
-    lv_disp_mode = (uint8_t)buf[1] & 1;
-    hdmi_mirroring = buf[1] & 2;
-    hdmi_vars_update();
-    #elif defined(EVF_STATE) || defined(CONFIG_50D)
+#if defined(EVF_STATE)
     lv_disp_mode = (uint8_t)buf[1];
-    #else
+#else
     lv_disp_mode = (uint8_t)buf[0];
     #endif
 
-    #ifdef CONFIG_5D2 // PROP_HOUTPUT_TYPE not reported correctly?
-    lv_disp_mode = (MEM(0x34894 + 0x48) != 3); // AJ_LDR_0x34894_guess_HDMI_disp_type_related_0x48
-    #endif
 
 }
 #endif

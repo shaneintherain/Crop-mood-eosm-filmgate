@@ -937,9 +937,6 @@ int menu_grid_handle_key(int button_code, int *needs_full_redraw)
         break;
 
     case BGMT_PRESS_SET:
-#if defined(CONFIG_7D)
-    case BGMT_JOY_CENTER:
-#endif
 #ifdef BGMT_Q_SET
     case BGMT_Q_SET:
 #endif
@@ -958,7 +955,7 @@ int menu_grid_handle_key(int button_code, int *needs_full_redraw)
     return 0;
 }
 
-#else /* !CONFIG_SLIM_MENUS */
+#else
 
 int menu_grid_is_active(void)   { return 0; }
 int menu_grid_is_launched(void) { return 0; }

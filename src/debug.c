@@ -33,9 +33,6 @@
 #endif
 //#include "lua.h"
 
-#if defined(CONFIG_600D) && defined(CONFIG_AUDIO_600D_DEBUG)
-void audio_reg_dump_once();
-#endif
 
 #if defined(CONFIG_EDMAC_MEMCPY)
 #include "edmac-memcpy.h"
@@ -94,7 +91,7 @@ void info_led_on()
     LEDBLUE = LEDON;
     #elif defined(CONFIG_BLUE_LED)
     call("EdLedOn");
-    #else
+#else
     _card_led_on();
     #endif
 }
@@ -104,7 +101,7 @@ void info_led_off()
     LEDBLUE = LEDOFF;
     #elif defined(CONFIG_BLUE_LED)
     call("EdLedOff");
-    #else
+#else
     _card_led_off();
     #endif
 }
@@ -961,7 +958,7 @@ static struct menu_entry debug_menus[] = {
                 .select = tasks_toggle_flags,
                 #ifdef CONFIG_VXWORKS
                 .help = "Task info: name, priority, stack memory usage.",
-                #else
+#else
                 .help = "Task info: ID, name, priority, wait_id, mem, state.",
                 #endif
             },
@@ -1023,7 +1020,7 @@ static struct menu_entry debug_menus[] = {
         .icon_type = IT_ALWAYS_ON,
      #ifdef EFIC_CELSIUS
         .help = "EFIC chip temperature (somewhere on the mainboard).",
-     #else
+#else
     .help = "EFIC chip temperature (raw values).",
     .help2 = "http://www.magiclantern.fm/forum/index.php?topic=9673.0",
      #endif
@@ -1187,13 +1184,7 @@ ack:
 
 #endif
 
-#if defined(CONFIG_500D)
-#define num_properties 2048
-#elif defined(CONFIG_5DC)
-#define num_properties 202
-#else
 #define num_properties 8192
-#endif
 
 void
 debug_init( void )
@@ -1276,9 +1267,6 @@ debug_init_stuff( void )
     }
     #endif
 
-    #ifdef CONFIG_5D3
-    _card_tweaks();
-    #endif
 }
 
 TASK_CREATE( "debug_task", debug_loop_task, 0, 0x1e, 0x2000 );
@@ -1746,12 +1734,7 @@ void spy_event(struct event * event)
     }
 }
 
-#ifdef CONFIG_5DC
-static int halfshutter_pressed;
-bool get_halfshutter_pressed() { return halfshutter_pressed; }
-#else
 bool get_halfshutter_pressed() { return HALFSHUTTER_PRESSED && !dofpreview; }
-#endif
 
 static int zoom_in_pressed = 0;
 static int zoom_out_pressed = 0;
@@ -1760,10 +1743,6 @@ int get_zoom_out_pressed() { return zoom_out_pressed; }
 int handle_buttons_being_held(struct event * event)
 {
     // keep track of buttons being pressed
-    #ifdef CONFIG_5DC
-    if (event->param == BGMT_PRESS_HALFSHUTTER) halfshutter_pressed = 1;
-    if (event->param == BGMT_UNPRESS_HALFSHUTTER) halfshutter_pressed = 0;
-    #endif
     #ifdef BGMT_UNPRESS_ZOOM_IN
     if (event->param == BGMT_PRESS_ZOOM_IN) {zoom_in_pressed = 1; zoom_out_pressed = 0; }
     if (event->param == BGMT_UNPRESS_ZOOM_IN) {zoom_in_pressed = 0; zoom_out_pressed = 0; }

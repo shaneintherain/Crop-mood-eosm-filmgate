@@ -42,98 +42,6 @@ int audio_meters_are_drawn()
 }
 
 #ifdef FEATURE_ANALOG_GAIN
-#if defined(CONFIG_500D)
-
-static inline void
-audio_ic_set_mgain(
-                   unsigned             index
-                   )
-{
-    unsigned sig1 = audio_ic_read( AUDIO_IC_SIG1 );
-    unsigned sig2 = audio_ic_read( AUDIO_IC_SIG2 );
-    
-    // setting the bits for each possible gain setting in the 500d.
-    switch (index)
-        {
-        case 0: // 0 dB
-            sig1 &= ~(1 << 0);
-            sig1 &= ~(1 << 1);
-            sig1 &= ~(1 << 3);
-            sig2 &= ~(1 << 5);
-            break;
-            
-        case 1: // 3 dB
-            sig1 &= ~(1 << 0);
-            sig1 &= ~(1 << 1);
-            sig1 |= 1 << 3;
-            sig2 &= ~(1 << 5);
-            break;
-            
-        case 2: // 6 dB
-            sig1 &= ~(1 << 1);
-            sig1 |= 1 << 0;
-            sig1 |= 1 << 3;
-            sig2 &= ~(1 << 5);
-            break;
-            
-        case 3: // 10 dB
-            sig1 &= ~(1 << 0);
-            sig1 &= ~(1 << 3);
-            sig1 |= 1 << 1;
-            sig2 &= ~(1 << 5);
-            break;
-            
-        case 4: // 17 dB
-            sig1 &= ~(1 << 3);
-            sig1 |= 1 << 0;
-            sig1 |= 1 << 1;
-            sig2 &= ~(1 << 5);
-            break;
-            
-        case 5: // 20 dB
-            sig1 &= ~(1 << 1);
-            sig1 &= ~(1 << 3);
-            sig1 |= 1 << 0;            
-            sig2 &= ~(1 << 5);
-            break;
-            
-        case 6: // 23 dB
-            sig1 &= ~(1 << 0);
-            sig1 &= ~(1 << 3);
-            sig1 |= 1 << 1;
-            sig2 |= 1 << 5;
-            break;
-            
-        case 7: // 26 dB
-            sig1 &= ~(1 << 0);
-            sig1 &= ~(1 << 1);
-            sig1 &= ~(1 << 3);
-            sig2 |= 1 << 5;
-            break;
-            
-        case 8: // 29 dB
-            sig1 &= ~(1 << 3);
-            sig1 |= 1 << 0;
-            sig1 |= 1 << 1;
-            sig2 |= 1 << 5;
-            break;
-            
-        case 9: // 32 dB
-            sig1 &= ~(1 << 1);
-            sig1 &= ~(1 << 3);
-            sig1 |= 1 << 0;
-            sig2 |= 1 << 5;
-            break;
-        }
-    
-    audio_ic_write( AUDIO_IC_SIG1 | sig1 );
-    gain.sig1 = sig1;
-    
-    audio_ic_write( AUDIO_IC_SIG2 | sig2 );
-    gain.sig2 = sig2;
-}
-/* <- CONFIG_500D*/
-#else
 static inline void
 audio_ic_set_mgain(
                    unsigned             index
@@ -155,10 +63,8 @@ audio_ic_set_mgain(
     gain.sig2 = sig2;
 }
 #endif
-#endif
 
 #ifdef FEATURE_DIGITAL_GAIN
-#if !defined(CONFIG_500D)
 //no support for anything but gain for now.
 static inline void
 audio_ic_set_input_volume(
@@ -174,7 +80,6 @@ audio_ic_set_input_volume(
     
     audio_ic_write( cmd );
 }
-#endif
 #endif
 
 #ifdef FEATURE_MIC_POWER
@@ -215,7 +120,7 @@ audio_configure( int force )
     return;
 #endif
 
-#if defined(CONFIG_AUDIO_CONTROLS) && !defined(CONFIG_500D)
+#if defined(CONFIG_AUDIO_CONTROLS)
     // redirect wav playing to headphones if they are connected
     int loopback0 = beep_playing ? 0 : loopback;
 #endif
@@ -243,11 +148,7 @@ audio_configure( int force )
     
     audio_ic_write( AUDIO_IC_PM1 | 0x6D ); // power up ADC and DAC
         
-#ifdef CONFIG_500D //500d only has internal mono audio :(
-    int input_source = 0;
-#else
     int input_source = get_input_source();
-#endif
 
 #ifdef FEATURE_MIC_POWER
     //mic_power is forced on if input source is 0 or 1
@@ -268,12 +169,8 @@ audio_configure( int force )
         
         
     
-#ifdef CONFIG_500D
-    audio_ic_write( AUDIO_IC_SIG4 | pm3[input_source] );
-#else
     //PM3 is set according to the input choice
     audio_ic_write( AUDIO_IC_PM3 | pm3[input_source] );
-#endif
     
     gain.alc1 = alc_enable ? (1<<5) : 0;
     audio_ic_write( AUDIO_IC_ALC1 | gain.alc1 ); // disable all ALC
@@ -290,13 +187,10 @@ audio_configure( int force )
     audio_ic_set_mgain( mgain );
 #endif
     
-#ifdef CONFIG_500D
-    // nothing here yet.
-#else
 
 #ifdef FEATURE_WIND_FILTER // no sound with external mic?!
     audio_ic_write( AUDIO_IC_FIL1 | (enable_filters ? 0x1 : 0));
-#else //Turn it off
+#else
     audio_ic_write( AUDIO_IC_FIL1 | 0);
 #endif
         
@@ -308,25 +202,10 @@ audio_configure( int force )
                     | loopback0 << 6              // loop mode
                     | (o2gain & 0x3) << 2        // output volume
                     );
-#endif /* CONFIG_500D nothing here yet*/
 #endif
 }
 
 #ifdef FEATURE_ANALOG_GAIN
-#ifdef CONFIG_500D
-static inline unsigned mgain_index2gain(int index) // sorted mgain values
-{
-    static uint8_t gains[] = { 0, 3, 6, 10, 17, 20, 23, 26, 29, 32 };
-    index = COERCE(index, 0, 10);
-    return gains[index];
-}
-static inline unsigned mgain_index2bits(int index) // sorted mgain values
-{
-    static uint8_t bitsv[] = { 0, 0x8, 0x9, 0x4, 0x5, 0x1, 0x6, 0x2, 0x7, 0x3 };
-    index = COERCE(index, 0, 10);
-    return bitsv[index];
-}
-#else
 static inline unsigned mgain_index2gain(int index) // sorted mgain values
 {
     static uint8_t gains[] = { 0, 10, 17, 20, 23, 26, 29, 32 };
@@ -337,7 +216,6 @@ static inline unsigned mgain_index2bits(int index) // sorted mgain values
     static uint8_t bitsv[] = { 0, 0x4, 0x5, 0x01, 0x06, 0x02, 0x07, 0x03 };
     return bitsv[index & 0x7];
 }
-#endif
 #endif
 
 
@@ -356,11 +234,7 @@ audio_gain_to_cmd(
 static CONFIG_VAR_CHANGE_FUNC(mgain_on_change)
 {
 #ifdef FEATURE_ANALOG_GAIN
-#ifdef CONFIG_500D
-    *(var->value) = MOD(new_value, 10);
-#else
     *(var->value) = new_value & 0x7;
-#endif
     audio_configure( 1 );
     return 1;
 #else
@@ -453,14 +327,8 @@ static struct menu_entry audio_menus[] = {
         .name = "Analog Gain",
         .priv           = &mgain,
         .icon_type = IT_PERCENT_OFF,
-        #ifdef CONFIG_500D
-        // should match gains[]
-        .max = 9,
-        .choices = (const char *[]) {"0 dB", "3 dB", "6 dB", "10 dB", "17 dB", "20 dB", "23 dB", "26 dB", "29 dB", "32 dB"},
-        #else
         .max = 7,
         .choices = (const char *[]) {"0 dB", "10 dB", "17 dB", "20 dB", "23 dB", "26 dB", "29 dB", "32 dB"},
-        #endif
         .help = "Gain applied to both inputs in analog domain (preferred).",
         .depends_on = DEP_SOUND_RECORDING,
     },
@@ -581,7 +449,7 @@ static struct menu_entry audio_menus[] = {
     #endif
 };
 
-#if defined(CONFIG_AUDIO_CONTROLS) && !defined(CONFIG_7D)
+#if defined(CONFIG_AUDIO_CONTROLS)
 
 void sounddev_task();
 

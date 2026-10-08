@@ -5950,7 +5950,7 @@ int handle_ml_menu_keyrepeat(struct event * event)
 
             #ifdef BGMT_UNPRESS_UDLR
             case BGMT_UNPRESS_UDLR:
-            #else
+#else
             case BGMT_UNPRESS_LEFT:
             case BGMT_UNPRESS_RIGHT:
             case BGMT_UNPRESS_UP:
@@ -6336,9 +6336,6 @@ handle_ml_menu_keys(struct event * event)
     struct menu * menu = get_current_menu_or_submenu();
     
     int button_code = event->param;
-#if defined(CONFIG_60D) || defined(CONFIG_600D) || defined(CONFIG_7D) // Q not working while recording, use INFO instead
-    if (button_code == BGMT_INFO && RECORDING) button_code = BGMT_Q;
-#endif
 
     int menu_needs_full_redraw = 0; // if true, do not allow quick redraws
 
@@ -6415,7 +6412,7 @@ handle_ml_menu_keys(struct event * event)
             // (off, 10, 20); 3 = show all (unused)
             junkie_mode = MOD(junkie_mode+1, 3);
             my_menu_dirty = 1;
-            #else
+#else
             // close ML menu
             give_semaphore(gui_sem);
             #endif
@@ -6437,11 +6434,9 @@ handle_ml_menu_keys(struct event * event)
         give_semaphore(gui_sem);
         return 1;
     
-    #if !defined(CONFIG_500D) && !defined(CONFIG_5DC) // LV is Q
     case BGMT_LV:
         if (!lv) return 1;
         // else fallthru
-    #endif
     case BGMT_PRESS_ZOOM_IN:
         if (lv) menu_lv_transparent_mode = !menu_lv_transparent_mode;
         else edit_mode = !edit_mode;
@@ -6566,9 +6561,6 @@ handle_ml_menu_keys(struct event * event)
     case BGMT_UNPRESS_SET:
         return 0; // block Canon menu redraws
 
-#if defined(CONFIG_7D)
-    case BGMT_JOY_CENTER:
-#endif
 #ifdef BGMT_Q_SET
     case BGMT_Q_SET:
 #endif
@@ -6970,12 +6962,6 @@ static void close_canon_menu()
     msleep(100);
     // bitmap will be re-enabled in the caller
 #endif
-#ifdef CONFIG_5DC
-    //~ forces the 5dc screen to turn off for ML menu.
-    if (DISPLAY_IS_ON && !HALFSHUTTER_PRESSED) 
-        fake_simple_button(BGMT_MENU);
-    msleep(50);
-#endif
 }
 
 static void menu_open() 
@@ -7000,11 +6986,6 @@ static void menu_open()
     }
     */
 
-#ifdef CONFIG_5DC
-    //~ forces the 5dc screen to turn on for ML menu.
-    if (!DISPLAY_IS_ON) fake_simple_button(BGMT_MENU);
-    msleep(50);
-#endif
     
     menu_lv_transparent_mode = 0;
     submenu_level = 0;
@@ -7930,7 +7911,7 @@ int handle_quick_access_menu_items(struct event * event)
     {
         #ifdef ISO_ADJUSTMENT_ACTIVE
         if (ISO_ADJUSTMENT_ACTIVE)
-        #else
+#else
         if (0)
         #endif
         {
@@ -7940,7 +7921,7 @@ int handle_quick_access_menu_items(struct event * event)
         }
         #ifdef CURRENT_GUI_MODE_2
         else if (CURRENT_GUI_MODE_2 == DLG2_FOCUS_MODE)
-        #else
+#else
         else if (CURRENT_GUI_MODE == GUIMODE_FOCUS_MODE)
         #endif
         #ifndef CONFIG_SLIM_MENUS

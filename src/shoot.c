@@ -210,12 +210,8 @@ static CONFIG_INT( "mlu.mode", mlu_mode, 1);
 static int mlu_handled_debug = 0;
 #endif
 
-#ifndef CONFIG_5DC
 static CONFIG_INT("mlu.handheld.delay", mlu_handheld_delay, 4);
 static CONFIG_INT("mlu.handheld.shutter", mlu_handheld_shutter, 1); // restrict it to shutter speeds where the improvement is noticeable
-#else
-#define mlu_handheld_shutter 0
-#endif
 
 extern int lcd_release_running;
 extern int lens_mlu_delay;
@@ -387,14 +383,6 @@ static void do_this_every_second() // called every second
     #endif
 
     // TODO: update bitrate.c to use this approach too
-    #if defined(CONFIG_5D3) || defined(CONFIG_6D)
-    if (RECORDING_H264)
-    {
-        extern void measure_bitrate();
-        measure_bitrate();
-        lens_display_set_dirty();
-    }
-    #endif
 
     /* update lens info outside LiveView */
     if (!lv && lens_info.lens_exists)
@@ -776,16 +764,7 @@ int get_mlu_delay(int raw)
 #ifdef FEATURE_MLU_HANDHELD
 static void mlu_take_pic()
 {
-    #if defined(CONFIG_5D2) || defined(CONFIG_50D) // not sure about 7D
-    SW1(1,00);
-    SW2(1,250);
-    SW2(0,50);
-    SW1(0,50);
-    #elif defined(CONFIG_40D)
-    call("FA_Release");
-    #else
     call("Release"); // new cameras (including 500D)
-    #endif
 }
 
 static int mlu_shake_running = 0;
@@ -866,26 +845,12 @@ int focus_box_get_raw_crop_offset(int* delta_x, int* delta_y)
     /* are we in x5/x10 zoom mode? */
     if (lv && lv_dispsize > 1)
     {
-        #ifdef CONFIG_5D3
-        /* might be generic, need to check */
-        uint32_t is_centered_zoom_mode = shamem_read(0xc0f383d4) & 
-                                         shamem_read(0xc0f383dc) & 
-                                         0x80008000;
-        if (is_centered_zoom_mode)
-        {
-            /* zoom mode patched by crop_rec; assume it's centered */
-            /* todo: get the zoom position directly from the above registers? */
-            *delta_x = 0;
-            *delta_y = 0;
-            return 1;
-        }
-        #endif
 
         /* find out where we are inside the raw frame */
         #ifdef CONFIG_DIGIC_V
         uint32_t pos1 = shamem_read(0xc0f09050);
         uint32_t pos2 = shamem_read(0xc0f09054);
-        #else
+#else
         uint32_t pos1 = shamem_read(0xc0f0851C);
         uint32_t pos2 = shamem_read(0xc0f08520);
         #endif
@@ -1188,7 +1153,7 @@ int handle_lv_afframe_workaround(struct event * event)
     /* most cameras will block the focus box keys in Manual Focus mode while recording */
     /* 6D seems to block them always in MF, https://bitbucket.org/hudson/magic-lantern/issue/1816/cant-move-focus-box-on-6d */
     if (
-        #if !defined(CONFIG_6D) && !defined(CONFIG_100D) /* others? */
+#if !defined(CONFIG_100D)
         RECORDING_H264 &&
         #endif
         liveview_display_idle() &&
@@ -1402,36 +1367,6 @@ static const uint8_t chroma_cor[256] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
 
 void expo_adjust_playback(int dir)
 {
-#ifdef CONFIG_5DC
-    static int expo_value = 0;
-    if (dir == 0) 
-    { 
-        if (expo_value) EngDrvOut(0xC0F140c0, 0x80);
-        expo_value = 0; return; 
-    }
-    expo_value = COERCE(expo_value + dir, -3, 1);
-    //~ expo_value = expo_value + dir;
-    NotifyBox(1000, "%s%d", expo_value > 0 ? "+" : "", expo_value);
-    BmpDDev_take_semaphore();
-    if (expo_value > 0) 
-    {
-        EngDrvOut(0xC0F14080, 0xfc0000);
-        EngDrvOut(0xC0F140c0, 0xFF);
-    }   
-    else if (expo_value < 0) 
-    {
-        EngDrvOut(0xC0F14080, 0x1000000 * (-expo_value-1));
-        EngDrvOut(0xC0F140c0, 0x80);
-    }
-    else 
-    {
-        EngDrvOut(0xC0F14080, 0xfc0000);
-        EngDrvOut(0xC0F140c0, 0x80);
-    }
-    EngDrvOut(0xC0F14078, 1);
-    BmpDDev_give_semaphore();
-
-#else
     ASSERT(set_maindial_sem);
     take_semaphore(set_maindial_sem, 0);
 
@@ -1504,7 +1439,6 @@ void expo_adjust_playback(int dir)
 
 end:
     give_semaphore(set_maindial_sem);
-#endif
 }
 
 #endif
@@ -1514,18 +1448,11 @@ void ensure_movie_mode()
 #ifdef CONFIG_MOVIE
     if (!is_movie_mode())
     {
-        #ifdef CONFIG_50D
-        GUI_SetLvMode(2);
-        GUI_SetMovieSize_b(1);
-        #elif defined(CONFIG_5D2)
-        GUI_SetLvMode(2);
-        #else
         while (!is_movie_mode())
         {
             NotifyBox(2000, "Please switch to Movie mode.");
             msleep(500);
         }
-        #endif
         msleep(500); 
     }
     if (!lv) force_liveview();
@@ -2533,30 +2460,6 @@ static void rec_picstyle_change(int rec)
 /* to be refactored with CBR */
 extern void rec_notify_trigger(int rec);
 
-#ifdef CONFIG_50D
-PROP_HANDLER(PROP_SHOOTING_TYPE)
-{
-    /* there might be a false trigger at startup - issue #1992 */
-    extern int ml_started;
-    if (!ml_started) return;
-
-    int rec = (shooting_type == 4 ? 2 : 0);
-
-    #ifdef FEATURE_REC_NOTIFY
-    rec_notify_trigger(rec);
-    #endif
-    
-    #ifdef FEATURE_REC_PICSTYLE
-    rec_picstyle_change(rec);
-    #endif
-    
-    #ifdef CONFIG_MOVIE_RECORDING_50D_SHUTTER_HACK
-    extern void shutter_btn_rec_do(int rec); /* movtweaks.c */
-    shutter_btn_rec_do(rec);
-    #endif
-}
-void mvr_rec_start_shoot(){}
-#else
 void mvr_rec_start_shoot(int rec)
 {
     #ifdef FEATURE_REC_NOTIFY
@@ -2567,7 +2470,6 @@ void mvr_rec_start_shoot(int rec)
     rec_picstyle_change(rec);
     #endif
 }
-#endif
 
 #ifdef FEATURE_FLASH_TWEAKS
 static void
@@ -2660,7 +2562,7 @@ static void zoom_halfshutter_step()
         {
             #ifdef CONFIG_ZOOM_HALFSHUTTER_UILOCK
             msleep(500);
-            #else
+#else
             msleep(50);
             #endif
             int hs2 = get_halfshutter_pressed();
@@ -2738,9 +2640,6 @@ int handle_zoom_x5_x10(struct event * event)
     if (!lv) return 1;
     if (RECORDING) return 1;
     
-    #ifdef CONFIG_600D
-    if (get_disp_pressed()) return 1;
-    #endif
 
     if (event->param == BGMT_PRESS_ZOOM_IN && liveview_display_idle() && !gui_menu_shown())
     {
@@ -2861,22 +2760,6 @@ static void zoom_auto_exposure_step()
         // note: turning off the tweak on half-shutter interferes with autofocus
         if (is_movie_mode())
         {
-            #ifdef CONFIG_5D2
-            if (es == -1)
-            {
-                es = get_expsim();
-                set_expsim(0);
-            }
-            /* #else // unstable
-                #ifndef CONFIG_50D
-                if (aem == -1)
-                {
-                    aem = ae_mode_movie;
-                    int x = 0;
-                    prop_request_change(PROP_AE_MODE_MOVIE, &x, 4);
-                }
-                #endif */
-            #endif
         }
         else // photo mode
         {
@@ -3090,7 +2973,7 @@ void ensure_bulb_mode()
         set_shooting_mode(SHOOTMODE_BULB);
         if (get_expsim() == 2) set_expsim(1);
         lens_set_rawaperture(a);
-    #else
+#else
         if (shooting_mode != SHOOTMODE_M)
             set_shooting_mode(SHOOTMODE_M);
         int shutter = SHUTTER_BULB;
@@ -3118,7 +3001,7 @@ int set_drive_single()
         int orig_mode = drive_mode;
         #ifdef DRIVE_SILENT
         lens_set_drivemode(DRIVE_SILENT);
-        #else
+#else
         lens_set_drivemode(DRIVE_SINGLE);
         #endif
         return orig_mode;
@@ -3368,7 +3251,7 @@ mlu_toggle_mode( void * priv, int delta )
 {
     #ifdef FEATURE_MLU_HANDHELD
     mlu_mode = MOD(mlu_mode + delta, 3);
-    #else
+#else
     mlu_mode = !mlu_mode;
     #endif
     mlu_update();
@@ -3377,10 +3260,8 @@ mlu_toggle_mode( void * priv, int delta )
 static void
 mlu_toggle( void * priv, int delta )
 {
-    #ifndef CONFIG_1100D
     mlu_auto = !mlu_auto;
     mlu_update();
-    #endif
 }
 
 static MENU_UPDATE_FUNC(mlu_display)
@@ -3819,7 +3700,6 @@ static struct menu_entry shoot_menus[] = {
                     "Take dark, bright, even darker, even brigther images, in that order\n"
                     "Take brighter images.\n"
             },
-            #ifndef CONFIG_5DC
             {
                 .name = "2-second delay",
                 .priv       = &hdr_delay,
@@ -3828,7 +3708,6 @@ static struct menu_entry shoot_menus[] = {
                 .help2 = "Only used if you start bracketing by pressing the shutter.",
                 .choices = CHOICES("OFF", "Auto"),
             },
-            #endif
             {
                 .name = "ISO shifting",
                 .priv       = &hdr_iso,
@@ -3924,7 +3803,7 @@ MENU_PLACEHOLDER("Post Deflicker"),
                 .priv = &bulb_display_mode,
                 #ifdef FEATURE_BULB_TIMER_SHOW_PREVIOUS_PIC
                 .max = 2,
-                #else
+#else
                 .max = 1,   /* just option to turn it off */
                 #endif
                 .icon_type = IT_DICE_OFF,
@@ -4033,9 +3912,7 @@ MENU_PLACEHOLDER("Post Deflicker"),
         .depends_on = DEP_PHOTO_MODE | DEP_NOT_LIVEVIEW,
         #ifdef FEATURE_MLU_HANDHELD
         .help = "MLU tricks: hand-held or self-timer modes.",
-        #elif defined(CONFIG_5DC)
-        .help = "You can toggle MLU w. DirectPrint or link it to self-timer.",
-        #else
+#else
         .help = "You can link MLU with self-timer (handy).",
         #endif
         .submenu_width = 700,
@@ -4046,7 +3923,7 @@ MENU_PLACEHOLDER("Post Deflicker"),
                 .select = mlu_toggle_mode,
                 #ifdef FEATURE_MLU_HANDHELD
                 .max = 2,
-                #else
+#else
                 .max = 1,
                 #endif
                 .choices = CHOICES("Always ON", "Self-Timer", "Handheld"),
@@ -4290,9 +4167,7 @@ struct menu_entry tweak_menus_shoot[] = {
                 .priv = &zoom_auto_exposure,
                 .max = 1,
                 .help = "Auto adjusts exposure, so you can focus manually wide open.",
-                #ifndef CONFIG_5D2
                 .depends_on = DEP_PHOTO_MODE,
-                #endif
             },
             #endif
             #ifdef FEATURE_LV_ZOOM_SHARP_CONTRAST
@@ -4318,15 +4193,6 @@ struct menu_entry tweak_menus_shoot[] = {
                 .depends_on = DEP_MANUAL_FOCUS,
             },
             #ifdef FEATURE_ZOOM_TRICK_5D3
-            #ifdef CONFIG_6D
-            {
-                .name = "Double Click",
-                .priv = &zoom_trick,
-                .max = 2,
-                .help = "Double-click top-right button in LV. Shortcuts or Zoom.",
-                .choices = CHOICES("OFF", "Zoom", "Shortcuts"),
-            },
-            #else // 5D3
             {
                 .name = "Zoom with old button",
                 .priv = &zoom_trick,
@@ -4334,7 +4200,6 @@ struct menu_entry tweak_menus_shoot[] = {
                 .help = "Use the old Zoom In button, as in 5D2. Double-click in LV.",
                 .choices = CHOICES("OFF", "ON (!)"),
             },
-            #endif
             #endif
             MENU_EOL
         },
@@ -5146,9 +5011,6 @@ static int hdr_shutter_release(int ev_x8)
         int rc = rs - ev_x8;
 
         int s0r = lens_info.raw_shutter; // save settings (for restoring them back)
-        #if defined(CONFIG_5D2) || defined(CONFIG_50D)
-        int expsim0 = get_expsim();
-        #endif
         
         //printf("ms=%d msc=%d rs=%x rc=%x\n", ms,msc,rs,rc);
 
@@ -5161,9 +5023,6 @@ static int hdr_shutter_release(int ev_x8)
         else
 #endif
         {
-            #if defined(CONFIG_5D2) || defined(CONFIG_50D)
-            if (get_expsim() == 2) { set_expsim(1); msleep(300); } // can't set shutter slower than 1/30 in movie mode
-            #endif
             ans &= (hdr_set_rawshutter(rc) == 1);
             take_a_pic(AF_DONT_CHANGE);
         }
@@ -5182,9 +5041,6 @@ static int hdr_shutter_release(int ev_x8)
         }
 
         hdr_iso_shift_restore();
-        #if defined(CONFIG_5D2) || defined(CONFIG_50D)
-        if (expsim0 == 2) set_expsim(expsim0);
-        #endif
     }
 
     if (is_hdr_bracketing_enabled() && hdr_type == 2) // aperture bracket - restore initial value
@@ -5472,11 +5328,7 @@ end:
 
 static void press_rec_button()
 {
-#if defined(CONFIG_50D) || defined(CONFIG_5D2)
-    fake_simple_button(BGMT_PRESS_SET);
-#else
     fake_simple_button(BGMT_LV);
-#endif
 }
 
 void movie_start()
@@ -5493,14 +5345,6 @@ void movie_start()
         return;
     }
     
-    #if defined(CONFIG_500D) || defined(CONFIG_50D) || defined(CONFIG_5D2) // record button is used in ML menu => won't start recording
-    //~ gui_stop_menu(); msleep(1000);
-    while (gui_menu_shown())
-    {
-        gui_stop_menu();
-        msleep(1000);
-    }
-    #endif
     
     while (get_halfshutter_pressed()) msleep(100);
     
@@ -5645,13 +5489,11 @@ static void display_expsim_status()
 
 void display_shooting_info_lv()
 {
-#ifndef CONFIG_5D2
 #ifdef FEATURE_LCD_SENSOR_REMOTE
     int screen_layout = get_screen_layout();
     int audio_meters_at_top = audio_meters_are_drawn() 
         && (screen_layout == SCREENLAYOUT_3_2);
     display_lcd_remote_icon(450, audio_meters_at_top ? 25 : 3);
-#endif
 #endif
     display_trap_focus_info();
     display_expsim_status();
@@ -5908,15 +5750,6 @@ int take_fast_pictures( int number )
         SW2(0,100);
         SW1(0,100);
 
-        #if defined(CONFIG_7D)
-        /* on EOS 7D the code to trigger SW1/SW2 is buggy that the metering somehow locks up.
-         * This causes the camera not to shut down when the card door is opened.
-         * There is a workaround: Just wait until shooting is possible again and then reset SW1.
-         * Then the camera will shut down clean.
-         */
-        lens_wait_readytotakepic(64);
-        SW1(0,0);
-        #endif
 
         lens_cleanup_af();
     }
@@ -5999,23 +5832,6 @@ static void misc_shooting_info()
                 display_shooting_info_lv();
             )
             #ifdef CONFIG_MOVIE_AE_WARNING
-            #if defined(CONFIG_5D2)
-            static int ae_warned = 0;
-            if (is_movie_mode() && !lens_info.raw_shutter && RECORDING && MVR_FRAME_NUMBER < 10)
-            {
-                if (!ae_warned && !gui_menu_shown())
-                {
-                    msleep(2000);
-                    bmp_printf(SHADOW_FONT(FONT_MED), 50, 50, 
-                        "!!! Auto exposure !!!\n"
-                        "Use M mode and set 'LV display: Movie' from Expo menu");
-                    msleep(4000);
-                    redraw();
-                    ae_warned = 1;
-                }
-            }
-            else ae_warned = 0;
-            #else
             if (is_movie_mode() && !ae_mode_movie && lv_dispsize == 1) 
             {
                 static int ae_warned = 0;
@@ -6029,7 +5845,6 @@ static void misc_shooting_info()
                     ae_warned = 1;
                 }
             }
-            #endif
             #endif
             
             if (EXT_MONITOR_RCA) 
@@ -6198,9 +6013,7 @@ shoot_task( void* unused )
             if (get_halfshutter_pressed())
             {
                 drive_mode_bk = drive_mode;
-                #ifndef CONFIG_5DC
                 lens_set_drivemode(DRIVE_SELFTIMER_2SEC);
-                #endif
                 info_led_on();
                 msleep(100);
             }
@@ -6446,7 +6259,7 @@ shoot_task( void* unused )
 
         // same for motion detect
         int mdx = motion_detect && (liveview_display_idle() || (lv && !DISPLAY_IS_ON)) && NOT_RECORDING && !gui_menu_shown() && !intervalometer_running;
-        #else
+#else
         int mdx = 0;
         #endif
 
@@ -6759,7 +6572,7 @@ shoot_task( void* unused )
             #endif
 
 #ifdef FEATURE_AUDIO_REMOTE_SHOT
-#if defined(CONFIG_7D) || defined(CONFIG_6D) || defined(CONFIG_650D) || defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_100D) || defined(CONFIG_70D)
+#if defined(CONFIG_650D) || defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_100D)
             /* experimental for 7D now, has to be made generic */
             static int last_audio_release_running = 0;
             

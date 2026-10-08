@@ -186,10 +186,6 @@ static void tskmon_stack_checker(struct task *next_task)
         char* task_name = get_task_name_from_id(id);
         
         /* at 136 it gives warning for LightMeasure task (5D2/7D) - Canon allocated only 512 bytes for this task */
-        #if defined(CONFIG_5D2) || defined(CONFIG_7D)
-        if (streq(task_name, "LightMeasure") && free > 64)
-            return;
-        #endif
 
         bmp_printf(FONT(FONT_MED, free < 128 ? COLOR_RED : COLOR_WHITE, COLOR_BLACK), 0, 0, 
             "[%d] %s: stack %s: free=%d used=%d ",
@@ -251,48 +247,10 @@ null_pointer_check()
 
             /* for reference only */
             #if 0
-            #if defined(CONFIG_60D) || defined(CONFIG_1100D) || defined(CONFIG_600D)
-            /* [60D]   AeWB -> pc=ff07cb10
-             * [1100D] AeWB -> pc=ff07dbd4 lr=ff07dbd4 stack=137058+0x4000 entry=ff1ee5d8(9b9604)
-             * [600D]  AeWB -> pc=ff07f658 lr=ff07f658 stack=137058+0x4000 entry=ff1fbab4(90df10)
-             */
-            if (streq(task_name, "AeWb"))
-                return;
-            #endif
 
-            #if defined(CONFIG_550D) || defined(CONFIG_500D) || defined(CONFIG_60D) || defined(CONFIG_1100D) || defined(CONFIG_600D)
-            /* Ignore FileMgr NPE
-             * [500D] FileMgr -> pc=ffff0740 lr=ffff0728 stack=13bf88+0x1000 entry=ff1a67b0(65d230)
-             * [550D] FileMgr -> pc=      10 lr=ff01380c stack=113128+0x1000 entry=ff1d8a3c(72c488)
-             * [60D]  FileMgr -> pc=ff013e9c
-             */
-            if (streq(task_name, "FileMgr"))
-                return;
-            #endif
 
-            #if defined(CONFIG_550D) || defined(CONFIG_500D)
-            /* Ignore MovieRecorder NPE
-             * [550D] MovieRecorder -> pc=ff069f78 lr=    1ed0 stack=12c1b8+0x1000 entry=ff1d8a3c(8c2b04)
-             * [500D] MovieRecorder -> pc=ffff0740 lr=ffff0728 stack=154010+0x1000 entry=ff1a67b0(8638b8)
-             */
-            if (streq(task_name, "MovieRecorder"))
-                return;
-            #endif
 
-            #if defined(CONFIG_600D)
-            /* Ignore CLR_CALC NPE
-             */
-            if (streq(task_name, "CLR_CALC"))
-                return;
-            #endif
 
-            #ifdef CONFIG_5D2
-            /* Ignore USBTrns NPE
-             * [5D2] USBTrns -> pc=ffff0748 lr=ffff0730 stack=15ac60+0x1000 entry=ff914d28(0)
-             */
-            if (streq(task_name, "USBTrns"))
-                return;
-            #endif
             #endif
 
             static char msg[256];

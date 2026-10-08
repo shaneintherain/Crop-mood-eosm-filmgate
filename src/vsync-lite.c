@@ -15,10 +15,10 @@ void _lv_vsync_signal()
 
 void _lv_vsync(int mz)
 {
-    #if defined(CONFIG_DIGIC_V) || defined(CONFIG_60D)
+#if defined(CONFIG_DIGIC_V)
     int msg;
     msg_queue_receive(vsync_msg_queue, (struct event**)&msg, 100);
-    #else
+#else
     static int k = 0; k++;
     msleep(mz ? (k % 50 == 0 ? MIN_MSLEEP : 10) : MIN_MSLEEP);
     #endif

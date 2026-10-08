@@ -148,15 +148,8 @@ static void fail()
     print_line(COLOR_GRAY+2, 2, "with firmware version " STR(CONFIG_FW_VERSION) ".");
     print_line(COLOR_WHITE, 2, "");
     print_line(COLOR_WHITE, 2, "");
-  #ifdef CONFIG_70D
-    char* camera_model_line =  "Please try installing ML for 70D " STR(CONFIG_FW_VERSION) ".";
-    camera_model_line[36] = (camera_model_line[36] == 'A') ? 'B' : 'A';
-    print_line(COLOR_WHITE, 2, camera_model_line);
-    print_line(COLOR_WHITE, 2, "");
-  #else
     print_line(COLOR_WHITE, 2, "Please reinstall Canon firmware " STR(CONFIG_FW_VERSION) ",");
     print_line(COLOR_WHITE, 2, "even if you already have this version.");
-  #endif
     print_line(COLOR_WHITE, 2, "");
     print_line(COLOR_WHITE, 2, "");
     print_line(COLOR_WHITE, 2, "");
@@ -212,7 +205,7 @@ cstart( void )
 {
     #if !(CURRENT_CAMERA_SIGNATURE)
     #warning Signature Checking bypassed!! Please use a proper signature
-    #else
+#else
     int s = compute_signature((int*)SIG_START, SIG_LEN);
     int _signature = (int)CURRENT_CAMERA_SIGNATURE;
     if (s != _signature)
@@ -225,10 +218,7 @@ cstart( void )
 
 #ifdef __ARM__
     /* turn on the LED as soon as autoexec.bin is loaded (may happen without powering on) */
-    #if defined(CONFIG_40D) || defined(CONFIG_5DC)
-        *(volatile int*) (LEDBLUE) = (LEDON);
-        *(volatile int*) (LEDRED)  = (LEDON); // do we need the red too ?
-    #elif defined(CARD_LED_ADDRESS) && defined(LEDON) // A more portable way, hopefully
+#if defined(CARD_LED_ADDRESS) && defined(LEDON) // A more portable way, hopefully
         *(volatile int*) (CARD_LED_ADDRESS) = (LEDON);
     #endif
 
@@ -240,9 +230,6 @@ cstart( void )
     
     sync_caches();
 
-    #if defined(CONFIG_7D)
-        *(volatile int*)0xC0A00024 = 0x80000010; // send SSTAT for master processor, so it is in right state for rebooting
-    #endif
 
     /* Jump into the newly relocated code
        Q: Why target/compiler-specific attribute long_call?

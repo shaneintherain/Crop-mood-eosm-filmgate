@@ -55,15 +55,6 @@
 #define FPS_REGISTER_B_VALUE ((int) shamem_read(FPS_REGISTER_B))
 #define FPS_REGISTER_B_DUAL_PIXEL_VALUE ((int) shamem_read(FPS_REGISTER_B_DUAL_PIXEL))
 
-#ifdef CONFIG_7D
-uint32_t *buf = NULL;
-uint32_t QuickOutIPCTransfer(int type, uint32_t *buffer, int length, uint32_t master_addr, void (*cb)(uint32_t*, uint32_t, uint32_t), volatile uint32_t* cb_parm);
-
-void fps_bulk_cb(uint32_t *parm, uint32_t address, uint32_t length)
-{
-    *parm = 0;
-}
-#endif
 
 void EngDrvOutLV(uint32_t reg, uint32_t val)
 {
@@ -72,19 +63,6 @@ void EngDrvOutLV(uint32_t reg, uint32_t val)
     if (lens_info.job_state) return;
     if (ml_shutdown_requested) return;
 
-#if defined(CONFIG_7D)
-    if (reg == FPS_REGISTER_A || reg == FPS_REGISTER_B || reg == FPS_REGISTER_CONFIRM_CHANGES)
-    {
-        volatile uint32_t wait = 1;
-        memcpy(buf, &val, sizeof(uint32_t));
-        QuickOutIPCTransfer(0, buf, sizeof(uint32_t), reg, &fps_bulk_cb, &wait);
-        
-        while(wait)
-        {
-            msleep(10);
-        }
-    }
-#endif
     
     _EngDrvOut(reg, val);
 }
@@ -112,7 +90,7 @@ static void EngDrvOutFPS(uint32_t reg, uint32_t val)
     {
         fps_set_timers_from_evfstate(a, b, 1);
     }
-    #else
+#else
     EngDrvOutLV(reg, val);
     #endif
 }
@@ -131,10 +109,8 @@ static int fps_values_x1000[] = {
     17000, 18000, 19000, 20000, 21000, 22000, 23000, 23976, 24000, 25000, 26000, 27000,
     28000, 29000, 29970, 30000, 31000, 32000, 33000, 33333, 34000, 35000,
     // restrict max fps to 35 for 1100D, 5D2, 50D, 500D (others?)
-    #if !defined(CONFIG_1100D) && !defined(CONFIG_5D2) && !defined(CONFIG_50D) && !defined(CONFIG_500D)
     36000, 37000, 38000, 39000, 40000, 41000, 42000, 43000, 44000, 45000, 46000, 47000, 48000,
     50000, 55000, 59940, 60000, 61000, 62000, 63000, 64000, 65000, 70000
-    #endif
 };
 
 static CONFIG_INT("fps.override", fps_override, 0);
@@ -142,12 +118,7 @@ static CONFIG_INT("fps.override", fps_override, 0);
 static inline int get_fps_override()
 {
 #ifdef FEATURE_FPS_OVERRIDE
-    #ifdef CONFIG_7D
-    /* on 7D, FPS override can be used only for RAW and in photo mode */
-    return fps_override && (!is_movie_mode() || raw_lv_is_enabled());
-    #else
     return fps_override;
-    #endif
 #else
     return 0;
 #endif
@@ -191,9 +162,6 @@ static int is_current_mode_ntsc()
 {
     if (!is_movie_mode()) return 0;
 
-    #if defined(CONFIG_50D)
-    return !video_system_pal;
-    #endif
     if (video_mode_fps == 30 || video_mode_fps == 60 || video_mode_fps == 24) return 1;
     return 0;
 }
@@ -223,29 +191,13 @@ static void fps_read_current_timer_values();
 #define MV1080CROP (MV1080 && video_mode_crop)
 #define MV480CROP (MV480 && video_mode_crop)
 
-#if defined(CONFIG_5D2)
-    #define TG_FREQ_BASE 24000000
-    #define FPS_TIMER_A_MIN MIN(fps_timer_a_orig - (ZOOM ? 0 : 20), ZOOM ? 0x262 : 0x228) // trial and error (with digic poke)
-#elif defined(CONFIG_7D)
-    #define TG_FREQ_BASE 24000000
-    #define FPS_TIMER_A_MIN MIN(fps_timer_a_orig - (ZOOM ? 0 : 20), ZOOM ? 0x262 : 0x228) // todo
-#elif defined(CONFIG_5D3)
-    #define TG_FREQ_BASE 24000000
-    #define FPS_TIMER_A_MIN (fps_timer_a_orig - (ZOOM ? 4 : MV720 ? 30 : 42)) /* zoom: can do 20, but has a black bar on the right */
-    #undef FPS_TIMER_B_MIN
-    #define FPS_TIMER_B_MIN (fps_timer_b_orig - (ZOOM ? 44 : MV720 ? 0 : 70)) /* you can push LiveView until 68fps (timer_b_orig - 50), but good luck recording that */
-#elif defined(CONFIG_EOSM)
+#if defined(CONFIG_EOSM)
     #define TG_FREQ_BASE 32000000
     #define FPS_TIMER_A_MIN (ZOOM ? 716 : MV1080CROP ? 532 : 520)
     #undef FPS_TIMER_B_MIN
     #define FPS_TIMER_B_MIN ( \
     RECORDING_H264 ? (MV1080CROP ? 1750 : MV720 ? 990 : 1970) \
                    : (ZOOM || MV1080CROP ? 1336 : 1970))
-#elif defined(CONFIG_6D)
-    #define TG_FREQ_BASE 25600000
-    #define FPS_TIMER_A_MIN (fps_timer_a_orig - (ZOOM ? 22 : MV720 ? 10 : 34) ) //, ZOOM ? 708 : 512)
-    #undef FPS_TIMER_B_MIN
-    #define FPS_TIMER_B_MIN (fps_timer_b_orig - (ZOOM ? 6 : MV720 ? 10 : 10)) 
 #elif defined(CONFIG_650D)
     #define TG_FREQ_BASE 32000000
     #define FPS_TIMER_A_MIN (fps_timer_a_orig)
@@ -262,58 +214,9 @@ static void fps_read_current_timer_values();
     // to achieve a "snappy" autofocus by doubling the fps
     // MV720 is not LV so we need to extend the definition for the LCD.
     #define FPS_TIMER_B_MIN (ZOOM ? 1450 : MV1080CROP ? 1750 : MV720 || (lv && lv_dispsize==1 && !is_movie_mode()) ? 990 : 1970)
-#elif defined(CONFIG_500D)
-    #define TG_FREQ_BASE 32000000    // not 100% sure
-    #define FPS_TIMER_A_MIN MIN(fps_timer_a_orig - (ZOOM ? 0 : 10), ZOOM ? 1400 : video_mode_resolution == 0 ? 1284 : 1348)
-#elif defined(CONFIG_50D)
-    #define TG_FREQ_BASE 28800000
-    #define FPS_TIMER_A_MIN MIN(fps_timer_a_orig - (ZOOM ? 0 : 10), ZOOM ? 630 : 688 )
-#elif defined(CONFIG_550D) || defined(CONFIG_600D) || defined(CONFIG_60D)
-    #define TG_FREQ_BASE 28800000
-    #define FPS_TIMER_A_MIN MIN(fps_timer_a_orig - (ZOOM ? 0 : 10), ZOOM ? 734 : video_mode_crop ? (video_mode_resolution == 2 ? 400 : 560) : 0x21A)
-#elif defined(CONFIG_70D)
-    #define TG_FREQ_BASE 32000000
-    #define FPS_TIMER_A_MIN (fps_timer_a_orig)
 #endif
 
 // these can change timer B with another method, more suitable for high FPS
-#ifdef CONFIG_600D
-    #define NEW_FPS_METHOD 1
-    #define SENSOR_TIMING_TABLE MEM(0xCB20)
-    #define VIDEO_PARAMETERS_SRC_3 0x70AE8 // notation from g3gg0
-    #undef FPS_TIMER_B_MIN
-    #define FPS_TIMER_B_MIN MIN(fps_timer_b_orig, 1420)
-#elif defined(CONFIG_60D)
-    #define NEW_FPS_METHOD 1
-    #define SENSOR_TIMING_TABLE MEM(0x2a668)
-    #define VIDEO_PARAMETERS_SRC_3 0x4FDA8
-    #undef FPS_TIMER_B_MIN
-    #define FPS_TIMER_B_MIN MIN(fps_timer_b_orig, 1420)
-#elif defined(CONFIG_1100D)
-    #define NEW_FPS_METHOD 1
-    #undef TG_FREQ_BASE
-    #define TG_FREQ_BASE 32000000
-    #undef FPS_TIMER_A_MIN
-    #define FPS_TIMER_A_MIN (ZOOM ? 940 : 872)
-    #undef FPS_TIMER_B_MIN
-    #define FPS_TIMER_B_MIN 1050
-    #define SENSOR_TIMING_TABLE MEM(0xce98)
-    #define VIDEO_PARAMETERS_SRC_3 0x70C0C
-#elif defined(CONFIG_5D3)
-    #define NEW_FPS_METHOD 1
-    #ifdef CONFIG_5D3_123
-    #define SENSOR_TIMING_TABLE MEM(0x32530)
-    #else
-    #define SENSOR_TIMING_TABLE MEM(0x325ac)
-    #endif
-    //~ #define VIDEO_PARAMETERS_SRC_3 MEM(MEM(0x25FF0))
-
-    #undef FPS_TIMER_A_MIN
-    #define FPS_TIMER_A_MIN (ZOOM ? 510 : MV720 ? 410 : 398)
-
-    #undef FPS_TIMER_B_MIN
-    #define FPS_TIMER_B_MIN (ZOOM ? 1490 : MV720 ? 873 : raw_lv_is_enabled() ? 1500 : 1580)
-#endif
 
 static int fps_timer_b_method = 0;
 #ifdef NEW_FPS_METHOD
@@ -466,7 +369,7 @@ int get_current_shutter_reciprocal_x1000()
 #ifdef FRAME_SHUTTER_BLANKING_READ
     #ifdef FRAME_SHUTTER_BLANKING_WRITE
     int blanking = nrzi_decode(*FRAME_SHUTTER_BLANKING_WRITE);   /* prefer to use the overriden value */
-    #else
+#else
     int blanking = nrzi_decode(FRAME_SHUTTER_BLANKING_READ);
     #endif
 
@@ -604,15 +507,8 @@ int was_sound_recording_disabled_by_fps_override()
 
 static void set_sound_recording(int x)
 {
-    #ifdef CONFIG_50D
-    return;
-    #endif
     
-    #ifdef CONFIG_5D2
-    Gui_SetSoundRecord(COERCE(x,1,3));
-    #else
     prop_request_change(PROP_MOVIE_SOUND_RECORD, &x, 4);
-    #endif
 }
 
 static void restore_sound_recording()
@@ -666,9 +562,6 @@ static int fps_get_timer(int fps_x1000)
     int ntsc = is_current_mode_ntsc();
     int fps_timer = FPS_x1000_TO_TIMER(fps_x1000);
 
-    #if defined(CONFIG_500D) || defined(CONFIG_50D) // these cameras use 30.000 fps, not 29.97 => look in system settings to check if PAL or NTSC
-    ntsc = !video_system_pal;
-    #endif
 
     // in PAL/NTSC, round FPS to match the power supply frequency and avoid flicker
     // if criteria is "exact FPS", or fps ramping is enabled, or we are in photo mode, don't round
@@ -752,9 +645,6 @@ static void fps_setup_timerB(int fps_x1000)
         timerB -= 1;
         written_value_b = PACK(timerB, fps_reg_b_orig);
         EngDrvOutFPS(FPS_REGISTER_B, written_value_b);
-        #ifdef CONFIG_70D
-        EngDrvOutFPS(FPS_REGISTER_B_DUAL_PIXEL, written_value_b);
-        #endif
         fps_needs_updating = 0;
     #if defined(NEW_FPS_METHOD)
     }
@@ -845,12 +735,6 @@ static MENU_UPDATE_FUNC(fps_print)
         }
     }
 
-#ifdef CONFIG_7D
-    if (is_movie_mode() && !raw_lv_is_enabled())
-    {
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "On 7D, FPS override can be used only with RAW, or in photo mode.");
-    }
-#endif
 
 }
 
@@ -986,11 +870,7 @@ static void flip_zoom_twostage(int stage)
                 f0 = video_mode[2];
                 video_mode[2] = 
                     f0 == 24 ? 25 : 
-#ifndef CONFIG_1100D
                     f0 == 25 ? 24 : 
-#else
-                    f0 == 25 ? 30 :
-#endif
                     f0 == 30 ? 25 : 
                     f0 == 50 ? 60 :
                   /*f0 == 60*/ 50;
@@ -1055,9 +935,6 @@ static void fps_register_reset()
         written_value_b = 0;
         EngDrvOutFPS(FPS_REGISTER_A, fps_reg_a_orig);
         EngDrvOutFPS(FPS_REGISTER_B, fps_reg_b_orig);
-        #ifdef CONFIG_70D
-        EngDrvOutFPS(FPS_REGISTER_B_DUAL_PIXEL, fps_reg_b_orig);
-        #endif
         EngDrvOutFPS(FPS_REGISTER_CONFIRM_CHANGES, 1);
     }
 }
@@ -1269,9 +1146,7 @@ static void fps_setup_timerA(int fps_x1000)
     int ntsc = is_current_mode_ntsc();
     ntsc += 0; // bypass warning
     if (fps_criteria == 1) ntsc = 0; // use PAL-like rounding [hack]
-    #if !defined(CONFIG_500D) && !defined(CONFIG_50D) // these cameras use 30.000 fps, not 29.97
     if (ntsc) fps_x1000 = fps_x1000 * 1000/1001;
-    #endif
 
     int timerA = fps_timer_a_orig;
     int timerA_max = FPS_TIMER_A_MAX;
@@ -1307,7 +1182,7 @@ static void fps_setup_timerA(int fps_x1000)
             #ifdef NEW_FPS_METHOD
             timerA = fps_timer_a_orig;
             fps_timer_b_method = 1;
-            #else
+#else
             timerA = fps_try_to_get_180_360_shutter(fps_x1000);
             #endif
             break;
@@ -1430,7 +1305,7 @@ static struct menu_entry fps_menu[] = {
                     #if defined(NEW_FPS_METHOD) || defined(FRAME_SHUTTER_BLANKING_WRITE)
                     "High FPS",
                     "High Jello",
-                    #else
+#else
                     "Low Jello, 180d", 
                     "HiJello, FastTv",
                     #endif
@@ -1442,14 +1317,14 @@ static struct menu_entry fps_menu[] = {
                 .help2 =
                         #ifdef FRAME_SHUTTER_BLANKING_WRITE
                         "Low light: slow shutter speeds. Shutter angle is constant.\n"
-                        #else
+#else
                         "Low light: at low FPS, use 1/FPS (360 deg) shutter speeds.\n"
                         #endif
                         "Exact FPS: for 24.000 instead of 23.976 and similar.\n"
                         #if defined(NEW_FPS_METHOD) || defined(FRAME_SHUTTER_BLANKING_WRITE)
                         "High FPS: best for slight overcranking (eg 35fps from 30).\n"
                         "High Jello: slit-scan effect (use 2-5 fps and fast shutter).\n"
-                        #else
+#else
                         "Low Jello, 180d: for 1/2fps shutter speed (1/20 at 10fps).\n" 
                         "HiJello, FastTv: jello effects and fast shutters (2-5 fps).\n"
                         #endif
@@ -1613,7 +1488,7 @@ static void fps_read_default_timer_values()
     unsigned int pos = get_table_pos(mode, video_mode_crop, 0, lv_dispsize);
     fps_reg_b_orig = sensor_timing_table_original[pos] - 1; // nobody will change it from here :)
     //bmp_printf(FONT_LARGE, 50, 50, "%08x %08x %08x", fps_reg_a_orig, bmp_vram_real(), bmp_vram_idle());
-    #else
+#else
     int val = FPS_REGISTER_B_VALUE;
     if (val & 0xFFFF0000)
         fps_reg_b_orig = val >> 16; // timer value written by ML - contains original value in highest 16 bits
@@ -1661,9 +1536,6 @@ void fps_update_timers_from_evfstate()
     {
         EngDrvOutLV(FPS_REGISTER_A, fps_timerA_override);
         EngDrvOutLV(FPS_REGISTER_B, fps_timerB_override);
-        #ifdef CONFIG_70D
-        EngDrvOutLV(FPS_REGISTER_B_DUAL_PIXEL, fps_timerB_override);
-        #endif
         EngDrvOutLV(FPS_REGISTER_CONFIRM_CHANGES, 1);
     }
     fps_timers_updated = 1;
@@ -1689,9 +1561,6 @@ static void fps_disable_timers_evfstate()
 // do all FPS changes from this task only - to avoid trouble ;)
 static void fps_task()
 {
-    #ifdef CONFIG_7D
-    buf = fio_malloc(sizeof(uint32_t));
-    #endif
     
     TASK_LOOP
     {
@@ -1705,7 +1574,7 @@ static void fps_task()
         {
             #ifdef CONFIG_FPS_AGGRESSIVE_UPDATE
             msleep(get_fps_override() && RECORDING ? 10 : 100);
-            #else
+#else
             msleep(100);
             #endif
         }
@@ -1843,10 +1712,6 @@ static void fps_task()
 
         // 50D-specific warning when the FPS is incorrectly locked to 22, likely due to overheating
         // http://www.magiclantern.fm/forum/index.php?topic=6537.0
-        #ifdef CONFIG_50D
-        if (fps_warned && ((fps_get_current_x1000()/1000) == 22) && (fps_get_current_x1000() != fps_values_x1000[fps_override_index]) ) 
-            NotifyBox(2000, "FPS warning, possible overheating!\n");
-        #endif
 
         #ifdef FEATURE_EXPO_OVERRIDE
         if (CONTROL_BV && !is_movie_mode()) // changes in FPS may affect expsim calculations in photo mode
@@ -1855,11 +1720,7 @@ static void fps_task()
     }
 }
 
-#ifdef CONFIG_500D
-TASK_CREATE("fps_task", fps_task, 0, 0x17, 0x1000 );
-#else
 TASK_CREATE("fps_task", fps_task, 0, 0x1c, 0x1000 );
-#endif
 #endif
 
 void fps_mvr_log(char* mvr_logfile_buffer)
@@ -1895,11 +1756,7 @@ int handle_fps_events(struct event * event)
     // and to make the user interface responsive without having to wait for 30 frames
     int f = fps_values_x1000[fps_override_index];
     if (f < 5000 && NOT_RECORDING &&
-    #if defined(CONFIG_50D) || defined(CONFIG_5D2)
-        event->param == BGMT_PRESS_SET
-    #else
         event->param == BGMT_LV
-    #endif
     
     #if defined(NEW_FPS_METHOD)
     // we won't be able to change/restore FPS on the fly with table patching method :(
@@ -2116,7 +1973,7 @@ int get_frame_iso()
 {
     #ifdef FRAME_ISO
     return FRAME_ISO & 0xFF;
-    #else
+#else
     return 0;
     #endif
 }
@@ -2136,7 +1993,7 @@ int can_set_frame_iso()
     
     #ifdef CONFIG_FRAME_ISO_OVERRIDE
     return 1;
-    #else
+#else
     return 0;
     #endif
 }
@@ -2145,7 +2002,7 @@ int get_frame_shutter_timer()
 {
     #ifdef FRAME_SHUTTER_TIMER
     return FRAME_SHUTTER_TIMER;
-    #else
+#else
     return 0;
     #endif
 }
@@ -2155,7 +2012,7 @@ void set_frame_shutter_timer(int timer)
     #ifdef CONFIG_FRAME_SHUTTER_OVERRIDE
         #ifdef CONFIG_DIGIC_V
         FRAME_SHUTTER_TIMER = MAX(timer, 1);
-        #else
+#else
         FRAME_SHUTTER_TIMER = MAX(timer, 0);
         #endif
     #endif
@@ -2174,7 +2031,7 @@ int can_set_frame_shutter_timer()
 
     #ifdef CONFIG_FRAME_SHUTTER_OVERRIDE
     return 1;
-    #else
+#else
     return 0;
     #endif
 }
@@ -2183,7 +2040,7 @@ int get_frame_aperture()
 {
     #ifdef FRAME_APERTURE
     return FRAME_APERTURE & 0xFF;
-    #else
+#else
     return 0;
     #endif
 }

@@ -32,10 +32,6 @@
 /* copied from lens.c to get crop information */
 #ifdef CONFIG_FULLFRAME
 #define SENSORCROPFACTOR 10
-#elif defined(CONFIG_600D)
-static PROP_INT(PROP_DIGITAL_ZOOM_RATIO, digital_zoom_ratio);
-#define DIGITAL_ZOOM ((is_movie_mode() && video_mode_crop && video_mode_resolution == 0) ? digital_zoom_ratio : 100)
-#define SENSORCROPFACTOR (16 * DIGITAL_ZOOM / 100)
 #else
 #define SENSORCROPFACTOR 16
 #endif
@@ -157,202 +153,11 @@ info_elem_t info_config_photo[] =
 {
     { .config = { { INFO_TYPE_CONFIG } } },
 
-#if defined(CONFIG_7D)
-    /* print ISO range */
-    { .string = { { INFO_TYPE_STRING, { ISO_RANGE_POS_X, ISO_RANGE_POS_Y, 2, .name = "ISO Range" }}, INFO_STRING_ISO_MINMAX, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
 
-    /* entry 2 and 3, WB strings */
-    { .string = { { INFO_TYPE_STRING, { WBS_POS_X - 10, WBS_POS_Y, 2, .name = "WB GM" }}, INFO_STRING_WBS_GM, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { WBS_POS_X + 60, WBS_POS_Y, 2, .name = "WB BA" }}, INFO_STRING_WBS_BA, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
 
-    /* entry 4, battery_icon referenced as anchor */
-    { .battery_icon = { { INFO_TYPE_BATTERY_ICON, { DISPLAY_BATTERY_POS_X, DISPLAY_BATTERY_POS_Y, 2, .name = "Battery Icon" }}, DISPLAY_BATTERY_LEVEL_2, DISPLAY_BATTERY_LEVEL_1 } },
-    { .battery_perf = { { INFO_TYPE_BATTERY_PERF, { 100, 2, 3, INFO_ANCHOR_LEFT | INFO_ANCHOR_TOP, 4 }}, /* 0=vert,1=horizontal */ 0, /* x size */ 8, /* y size */ 8 } },
-    { .string = { { INFO_TYPE_STRING, { 8, 3, 2, INFO_ANCHOR_HCENTER | INFO_ANCHOR_BOTTOM, 4, INFO_ANCHOR_HCENTER | INFO_ANCHOR_TOP }}, INFO_STRING_BATTERY_PCT, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { -20, 2, 2, INFO_ANCHOR_LEFT | INFO_ANCHOR_TOP, 4 }}, INFO_STRING_BATTERY_ID, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_LARGE } },
 
-    /* entry 8, MLU string */
-    { .string = { { INFO_TYPE_STRING, { MLU_STATUS_POS_X, MLU_STATUS_POS_Y, 2, .name = "MLU" }}, INFO_STRING_MLU, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
 
-    /* entry 9, kelvin */
-    { .string = { { INFO_TYPE_STRING, { WB_KELVIN_POS_X, WB_KELVIN_POS_Y, 2, .name = "Kelvin" }}, INFO_STRING_KELVIN, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM_SHADOW } },
 
-    /* entry 10, pictures */
-    { .fill = { { INFO_TYPE_FILL, { 540, 390, 1, 0, 0, 0, 150, 60, .name = "Pics (clear)" }}, .color = INFO_COL_FIELD } },
-    { .string = { { INFO_TYPE_STRING, { 0, 0, 2, .name = "Pics", .anchor = 10, .anchor_flags = INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER, .anchor_flags_self = INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER }}, INFO_STRING_PICTURES_AVAIL, COLOR_FG_NONLV, INFO_COL_FIELD, INFO_FONT_CANON } },
-
-    /* entry 12, header (optional) */
-    { .string = { { INFO_TYPE_STRING, { 28, 3, 2, .name = "Date", .user_disable = 1 }}, INFO_STRING_CAM_DATE, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 710, 3, 2, .name = "Build", .user_disable = 1, .anchor_flags_self = INFO_ANCHOR_RIGHT }}, INFO_STRING_BUILD, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    /* entry 14, footer (optional) */
-    { .string = { { INFO_TYPE_STRING, { 28, 459, 2, .name = "Card label", .user_disable = 1 }}, INFO_STRING_CARD_LABEL_A, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 693, 459, 2, .name = "Copyright", .user_disable = 1, .anchor_flags_self = INFO_ANCHOR_RIGHT }}, INFO_STRING_COPYRIGHT, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-
-    /* entry 16, free space */
-    { .text = { { INFO_TYPE_TEXT, { 144, 162, 2, .anchor_flags_self = (INFO_ANCHOR_RIGHT | INFO_ANCHOR_BOTTOM), .name = "GB" }}, "GB", COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 0, 2, 2, INFO_ANCHOR_LEFT | INFO_ANCHOR_BOTTOM, 16, INFO_ANCHOR_RIGHT | INFO_ANCHOR_BOTTOM, .name = "Space" }}, INFO_STRING_FREE_GB_FLOAT, COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_CANON } },
-
-    /* entry 18, clock */
-    { .string = { { INFO_TYPE_STRING, { 35, 250, 2, .name = "Hrs" }}, INFO_STRING_TIME_HH24, COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_CANON } },
-    { .text = { { INFO_TYPE_TEXT, { 0, 0, 2, INFO_ANCHOR_RIGHT | INFO_ANCHOR_TOP, 18, INFO_ANCHOR_LEFT | INFO_ANCHOR_TOP, .name = ":" }}, ":", COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_CANON } },
-    { .string = { { INFO_TYPE_STRING, { 0, 0, 2, INFO_ANCHOR_RIGHT | INFO_ANCHOR_TOP, 19, INFO_ANCHOR_LEFT | INFO_ANCHOR_TOP, .name = "Min" }}, INFO_STRING_TIME_MM, COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_CANON } },
-    { .string = { { INFO_TYPE_STRING, { 0, -2, 2, INFO_ANCHOR_RIGHT | INFO_ANCHOR_BOTTOM, 20, INFO_ANCHOR_LEFT | INFO_ANCHOR_BOTTOM, .name = "Sec" }}, INFO_STRING_TIME_SS, COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_MEDIUM } },
-#endif
-
-#if defined(CONFIG_5D2)
-    /* entry 1, print ISO range, not printed correctly, 5D2 has larger ISO range => disable */
-    { .string = { { INFO_TYPE_STRING, { ISO_RANGE_POS_X, ISO_RANGE_POS_Y, 2, .name = "ISO Range", .user_disable = 1 }}, INFO_STRING_ISO_MINMAX, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-
-    /* entry 2 and 3, WB strings */
-    { .string = { { INFO_TYPE_STRING, { 320, 384, 2, .name = "WB GM" }}, INFO_STRING_WBS_GM, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 398, 384, 2, .name = "WB BA" }}, INFO_STRING_WBS_BA, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-
-    /* entry 4, battery_icon referenced as anchor */
-    { .battery_icon = { { INFO_TYPE_BATTERY_ICON, { DISPLAY_BATTERY_POS_X, DISPLAY_BATTERY_POS_Y, 2, .name = "Battery Icon" }}, DISPLAY_BATTERY_LEVEL_2, DISPLAY_BATTERY_LEVEL_1 } },
-    { .battery_perf = { { INFO_TYPE_BATTERY_PERF, { 4, 0, 3, INFO_ANCHOR_VCENTER | INFO_ANCHOR_RIGHT, 4, INFO_ANCHOR_VCENTER | INFO_ANCHOR_LEFT }}, /* 0=vert,1=horizontal */ 0, /* x size */ 8, /* y size */ 8 } },
-    { .string = { { INFO_TYPE_STRING, { 8, 2, 2, INFO_ANCHOR_HCENTER | INFO_ANCHOR_BOTTOM, 4, INFO_ANCHOR_HCENTER | INFO_ANCHOR_TOP }}, INFO_STRING_BATTERY_PCT, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 0, 1, 2, INFO_ANCHOR_VCENTER | INFO_ANCHOR_LEFT, 4, INFO_ANCHOR_VCENTER | INFO_ANCHOR_RIGHT }}, INFO_STRING_BATTERY_ID, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_LARGE } },
-
-    /* entry 8, MLU string */
-    { .string = { { INFO_TYPE_STRING, { 260, 310, 2, .name = "MLU" }}, INFO_STRING_MLU, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-
-    /* entry 9, kelvin */
-    { .string = { { INFO_TYPE_STRING, { 505, 275, 2, .name = "Kelvin" }}, INFO_STRING_KELVIN, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM_SHADOW } },
-
-    /* entry 10, pictures */
-    { .fill = { { INFO_TYPE_FILL, { 540, 390, 1, 0, 0, 0, 150, 60, .name = "Pics (clear)" }}, .color = INFO_COL_FIELD } },
-    { .string = { { INFO_TYPE_STRING, { 0, 0, 2, .name = "Pics", .anchor = 10, .anchor_flags = INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER, .anchor_flags_self = INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER }}, INFO_STRING_PICTURES_AVAIL, COLOR_FG_NONLV, INFO_COL_FIELD, INFO_FONT_CANON } },
-
-    /* entry 12, header (optional) */
-    { .string = { { INFO_TYPE_STRING, { 693, 3, 2, .name = "Date", .user_disable = 1, .anchor_flags_self = INFO_ANCHOR_RIGHT }}, INFO_STRING_CAM_DATE, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 28, 459, 2, .name = "Build", .user_disable = 1 }}, INFO_STRING_BUILD, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    /* entry 14, footer (optional) */
-    { .string = { { INFO_TYPE_STRING, { 28, 3, 2, .name = "Lens", .user_disable = 1 }}, INFO_STRING_LENS, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 693, 459, 2, .name = "Copyright", .user_disable = 1, .anchor_flags_self = INFO_ANCHOR_RIGHT }}, INFO_STRING_COPYRIGHT, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-
-    /* entry 16, free space */
-    { .text = { { INFO_TYPE_TEXT, { 144, 162, 2, .anchor_flags_self = (INFO_ANCHOR_RIGHT | INFO_ANCHOR_BOTTOM), .name = "GB" }}, "GB", COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 0, 2, 2, INFO_ANCHOR_LEFT | INFO_ANCHOR_BOTTOM, 16, INFO_ANCHOR_RIGHT | INFO_ANCHOR_BOTTOM, .name = "Space" }}, INFO_STRING_FREE_GB_FLOAT, COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_CANON } },
-
-    /* entry 18, clock */
-    { .string = { { INFO_TYPE_STRING, { 38, 250, 2, .name = "Hrs" }}, INFO_STRING_TIME_HH24, COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_LARGE } },
-    { .text = { { INFO_TYPE_TEXT, { -4, 0, 2, INFO_ANCHOR_RIGHT | INFO_ANCHOR_TOP, 18, INFO_ANCHOR_LEFT | INFO_ANCHOR_TOP, .name = ":" }}, ":", COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_LARGE } },
-    { .string = { { INFO_TYPE_STRING, { -4, 0, 2, INFO_ANCHOR_RIGHT | INFO_ANCHOR_TOP, 19, INFO_ANCHOR_LEFT | INFO_ANCHOR_TOP, .name = "Min" }}, INFO_STRING_TIME_MM, COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_LARGE } },
-    { .string = { { INFO_TYPE_STRING, { 0, -2, 2, INFO_ANCHOR_RIGHT | INFO_ANCHOR_BOTTOM, 20, INFO_ANCHOR_LEFT | INFO_ANCHOR_BOTTOM, .name = "Sec" }}, INFO_STRING_TIME_SS, COLOR_CYAN, INFO_COL_PEEK, INFO_FONT_MEDIUM } },
-#endif
-
-#if defined(CONFIG_5D3) || defined(CONFIG_6D)
-    /* print ISO range */
-    { .string = { { INFO_TYPE_STRING, { ISO_RANGE_POS_X, ISO_RANGE_POS_Y, 2, .name = "ISO Range" }}, INFO_STRING_ISO_MINMAX, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-
-    /* entry 2 and 3, WB strings */
-    { .string = { { INFO_TYPE_STRING, { WBS_POS_X, WBS_POS_Y, 2, .name = "WB GM" }}, INFO_STRING_WBS_GM, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { WBS_POS_X + 24, WBS_POS_Y, 2, .name = "WB BA" }}, INFO_STRING_WBS_BA, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-
-    /* entry 4, battery_icon referenced as anchor */
-    { .battery_icon = { { INFO_TYPE_BATTERY_ICON, { DISPLAY_BATTERY_POS_X, DISPLAY_BATTERY_POS_Y, 2, .name = "Battery Icon" }}, DISPLAY_BATTERY_LEVEL_2, DISPLAY_BATTERY_LEVEL_1 } },
-    { .battery_perf = { { INFO_TYPE_BATTERY_PERF, { 86, 2, 3, INFO_ANCHOR_LEFT | INFO_ANCHOR_TOP, 4 }}, /* 0=vert,1=horizontal */ 0, /* x size */ 8, /* y size */ 8 } },
-    { .string = { { INFO_TYPE_STRING, { 8, 0, 2, INFO_ANCHOR_HCENTER | INFO_ANCHOR_BOTTOM, 4, INFO_ANCHOR_HCENTER | INFO_ANCHOR_TOP }}, INFO_STRING_BATTERY_PCT, COLOR_YELLOW, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 4, 2, 2, INFO_ANCHOR_RIGHT | INFO_ANCHOR_TOP, 4 }}, INFO_STRING_BATTERY_ID, COLOR_YELLOW, INFO_COL_BG, INFO_FONT_LARGE } },
-
-    /* entry 8, MLU string */
-    { .string = { { INFO_TYPE_STRING, { MLU_STATUS_POS_X, MLU_STATUS_POS_Y, 2, .name = "MLU" }}, INFO_STRING_MLU, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-
-    /* entry 9, kelvin */
-    { .string = { { INFO_TYPE_STRING, { WB_KELVIN_POS_X, WB_KELVIN_POS_Y, 2, .name = "Kelvin" }}, INFO_STRING_KELVIN, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM_SHADOW } },
-
-    /* entry 10, HDR bracketing status */
-    { .string = { { INFO_TYPE_STRING, { HDR_STATUS_POS_X, HDR_STATUS_POS_Y, 2, .name = "HDR" }}, INFO_STRING_HDR, COLOR_YELLOW, INFO_COL_BG, INFO_FONT_MEDIUM } },
-
-    /* entry 11: Time */
-    { .string = { { INFO_TYPE_STRING, { DISPLAY_CLOCK_POS_X, DISPLAY_CLOCK_POS_Y, 2, .name = "Time" }}, INFO_STRING_TIME, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_LARGE } },
-#endif
-
-#if defined(CONFIG_60D)
-    /* print ISO range */
-    { .string = { { INFO_TYPE_STRING, { ISO_RANGE_POS_X, ISO_RANGE_POS_Y, 2, .name = "ISO Range" }}, INFO_STRING_ISO_MINMAX, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-
-    /* entry 2 and 3, WB strings */
-    { .string = { { INFO_TYPE_STRING, { WBS_POS_X, WBS_POS_Y, 2, .name = "WB GM" }}, INFO_STRING_WBS_GM, COLOR_YELLOW, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { WBS_POS_X + 24, WBS_POS_Y, 2, .name = "WB BA" }}, INFO_STRING_WBS_BA, COLOR_YELLOW, INFO_COL_BG, INFO_FONT_MEDIUM } },
-
-    /* entry 4, battery_icon referenced as anchor */
-    { .battery_icon = { { INFO_TYPE_BATTERY_ICON, { DISPLAY_BATTERY_POS_X, DISPLAY_BATTERY_POS_Y, 2, .name = "Battery Icon" }}, DISPLAY_BATTERY_LEVEL_2, DISPLAY_BATTERY_LEVEL_1 } },
-    { .battery_perf = { { INFO_TYPE_BATTERY_PERF, { 86, 2, 3, INFO_ANCHOR_LEFT | INFO_ANCHOR_TOP, 4 }}, /* 0=vert,1=horizontal */ 0, /* x size */ 8, /* y size */ 8 } },
-    { .string = { { INFO_TYPE_STRING, { 8, 0, 2, INFO_ANCHOR_HCENTER | INFO_ANCHOR_BOTTOM, 4, INFO_ANCHOR_HCENTER | INFO_ANCHOR_TOP }}, INFO_STRING_BATTERY_PCT, COLOR_YELLOW, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 4, 2, 2, INFO_ANCHOR_RIGHT | INFO_ANCHOR_TOP, 4 }}, INFO_STRING_BATTERY_ID, COLOR_YELLOW, INFO_COL_BG, INFO_FONT_LARGE } },
-
-    /* entry 8, MLU string */
-    { .string = { { INFO_TYPE_STRING, { MLU_STATUS_POS_X, MLU_STATUS_POS_Y, 2, .name = "MLU" }}, INFO_STRING_MLU, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM } },
-
-    /* entry 9, kelvin */
-    { .string = { { INFO_TYPE_STRING, { WB_KELVIN_POS_X, WB_KELVIN_POS_Y, 2, .name = "Kelvin" }}, INFO_STRING_KELVIN, COLOR_YELLOW, INFO_COL_FIELD, INFO_FONT_MEDIUM_SHADOW } },
-
-    /* entry 10, HDR bracketing status */
-    { .string = { { INFO_TYPE_STRING, { HDR_STATUS_POS_X, HDR_STATUS_POS_Y, 2, .name = "HDR" }}, INFO_STRING_HDR, COLOR_YELLOW, INFO_COL_BG, INFO_FONT_MEDIUM } },
-
-    /* entry 11: Time */
-    { .string = { { INFO_TYPE_STRING, { DISPLAY_CLOCK_POS_X, DISPLAY_CLOCK_POS_Y, 2, .name = "Time" }}, INFO_STRING_TIME, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_LARGE } },
-#endif
-
-#if defined(CONFIG_500D)
-    /* entry 1 and 2, WB strings */
-    { .string = { { INFO_TYPE_STRING, { 420, 245, 2, .name = "WB BA" }}, INFO_STRING_WBS_BA, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_MEDIUM_SHADOW } },
-    { .string = { { INFO_TYPE_STRING, { 420, 270, 2, .name = "WB GM" }}, INFO_STRING_WBS_GM, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_MEDIUM_SHADOW } },
-
-    /* entry 3, MLU string */
-    { .string = { { INFO_TYPE_STRING, { 78, 260, 2, .name = "MLU" }}, INFO_STRING_MLU, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_MEDIUM } },
-    
-    /* entry 4, Kelvin */
-    { .string = { { INFO_TYPE_STRING, { 307+(94/2), 237+(62/2), 2, .anchor_flags_self = INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER, .name = "Kelvin" }}, INFO_STRING_KELVIN, COLOR_FG_NONLV, INFO_COL_FIELD, INFO_FONT_CANON } },
-    { .fill =   { { INFO_TYPE_FILL,   { 307, 237, 1, INFO_ANCHOR_ABSOLUTE, 4, INFO_ANCHOR_ABSOLUTE, 94, 62, .name = "Kelvin (clear)" }}, .color = INFO_COL_PEEK } },
-
-    /* entry 6, clock */
-    { .string = { { INFO_TYPE_STRING, { 200, 410, 2, .name = "Time" }}, INFO_STRING_TIME, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_LARGE } },
-    
-    /* entry 7, HDR bracketing status */
-    { .string = { { INFO_TYPE_STRING, { 316, 200, 2, .anchor_flags_self = INFO_ANCHOR_HCENTER, .name = "HDR" }}, INFO_STRING_HDR, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_MEDIUM } },
-
-    /* entry 8-11, free space & photos left*/
-    { .fill =   { { INFO_TYPE_FILL,   { 519, 396, 1, INFO_ANCHOR_ABSOLUTE, 0, INFO_ANCHOR_ABSOLUTE, 138, 55, .name = "Space (clear)" }}, .color = INFO_COL_PEEK } },
-    { .string = { { INFO_TYPE_STRING, { 519+(138/2), 412, 2, .anchor_flags_self = (INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER), .name = "Space Pics" }}, INFO_STRING_PICTURES_AVAIL, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_CANON } },
-    { .string = { { INFO_TYPE_STRING, { 573, 442, 3, .anchor_flags_self = (INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER), .name = "Space GB" }}, INFO_STRING_FREE_GB_FLOAT, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_LARGE } },
-    { .text =   { { INFO_TYPE_TEXT,   { 2, 0, 3, (INFO_ANCHOR_VCENTER|INFO_ANCHOR_RIGHT), 10, (INFO_ANCHOR_VCENTER|INFO_ANCHOR_LEFT), .name = "GB" }}, "GB", COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_LARGE } },
-
-    /* entry 12, header (optional) */
-    { .string = { { INFO_TYPE_STRING, { 28, 2, 2, .name = "Lens", .user_disable = 0 }}, INFO_STRING_LENS, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-    { .string = { { INFO_TYPE_STRING, { 710, 2, 2, .name = "Date", .user_disable = 0, .anchor_flags_self = INFO_ANCHOR_RIGHT }}, INFO_STRING_CAM_DATE, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
-
-    /* entry 13, footer (optional) */
-    { .string = { { INFO_TYPE_STRING, { 28, 459, 2, .name = "Build", .user_disable = 0 }}, INFO_STRING_BUILD, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_MEDIUM_SHADOW } },
-    { .string = { { INFO_TYPE_STRING, { 693, 459, 2, .name = "Copyright", .user_disable = 0, .anchor_flags_self = INFO_ANCHOR_RIGHT }}, INFO_STRING_COPYRIGHT, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_MEDIUM_SHADOW } },
-#endif
-
-#if defined(CONFIG_550D)
-    /* entry 1 and 2, WB strings */
-    { .string = { { INFO_TYPE_STRING, { 485, 245, 2, .name = "WB BA" }}, INFO_STRING_WBS_BA, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM_SHADOW } },
-    { .string = { { INFO_TYPE_STRING, { 485, 270, 2, .name = "WB GM" }}, INFO_STRING_WBS_GM, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM_SHADOW } },
-
-    /* entry 3, MLU string */
-    { .string = { { INFO_TYPE_STRING, { 69, 260, 2, .name = "MLU" }}, INFO_STRING_MLU, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_MEDIUM } },
-    
-    /* entry 4, Kelvin */
-    { .string = { { INFO_TYPE_STRING, { 307+(94/2), 237+(62/2), 2, .anchor_flags_self = INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER, .name = "Kelvin" }}, INFO_STRING_KELVIN, COLOR_FG_NONLV, INFO_COL_FIELD, INFO_FONT_CANON } },
-    { .fill =   { { INFO_TYPE_FILL,   { 307, 237, 1, INFO_ANCHOR_ABSOLUTE, 4, INFO_ANCHOR_ABSOLUTE, 94, 62, .name = "Kelvin (clear)" }}, .color = INFO_COL_FIELD } },
-
-    /* entry 6, clock */
-    { .string = { { INFO_TYPE_STRING, { 200, 410, 2, .name = "Time" }}, INFO_STRING_TIME, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_LARGE } },
-    
-    /* entry 7, HDR bracketing status */
-    { .string = { { INFO_TYPE_STRING, { 316, 200, 2, .anchor_flags_self = INFO_ANCHOR_HCENTER, .name = "HDR" }}, INFO_STRING_HDR, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_MEDIUM } },
-
-    /* entry 8-11, free space & photos left*/
-    { .fill =   { { INFO_TYPE_FILL,   { 519, 396, 1, INFO_ANCHOR_ABSOLUTE, 0, INFO_ANCHOR_ABSOLUTE, 138, 55, .name = "Space (clear)" }}, .color = INFO_COL_PEEK } },
-    { .string = { { INFO_TYPE_STRING, { 519+(138/2), 412, 2, .anchor_flags_self = (INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER), .name = "Space Pics" }}, INFO_STRING_PICTURES_AVAIL, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_CANON } },
-    { .string = { { INFO_TYPE_STRING, { 568, 442, 3, .anchor_flags_self = (INFO_ANCHOR_VCENTER|INFO_ANCHOR_HCENTER), .name = "Space GB" }}, INFO_STRING_FREE_GB_FLOAT, COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_LARGE } },
-    { .text =   { { INFO_TYPE_TEXT,   { 2, 0, 3, (INFO_ANCHOR_VCENTER|INFO_ANCHOR_RIGHT), 10, (INFO_ANCHOR_VCENTER|INFO_ANCHOR_LEFT), .name = "GB" }}, "GB", COLOR_FG_NONLV, INFO_COL_PEEK, INFO_FONT_LARGE } },
-    
-#endif
 
 #if defined(CONFIG_100D)
     /* print ISO range */
@@ -384,7 +189,7 @@ info_elem_t info_config_photo[] =
     { .text =   { { INFO_TYPE_TEXT,   { 685, 459, 2, .name = "GB",  .user_disable = 0, }}, "GB",  COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM } },
 #endif
 
-#if defined(CONFIG_600D) || defined(CONFIG_650D) || defined(CONFIG_700D) || defined(CONFIG_1100D)
+#if defined(CONFIG_650D) || defined(CONFIG_700D)
     /* entry 1, max AUTO ISO */
     { .string = { { INFO_TYPE_STRING, { MAX_ISO_POS_X, MAX_ISO_POS_Y, 2, .name = "Max ISO Range"  }}, INFO_STRING_ISO_MAX, COLOR_FG_NONLV, INFO_COL_BG, INFO_FONT_MEDIUM_SHADOW } },
 
@@ -3074,7 +2879,7 @@ int handle_flexinfo_keys(struct event * event)
 
         #ifdef BGMT_UNPRESS_UDLR
         case BGMT_UNPRESS_UDLR:
-        #else
+#else
         case BGMT_UNPRESS_LEFT:
         case BGMT_UNPRESS_RIGHT:
         case BGMT_UNPRESS_UP:
@@ -3089,11 +2894,7 @@ int handle_flexinfo_keys(struct event * event)
             info_edit_mode = 0;
             break;
             
-        #if defined(CONFIG_500D)
-        case BGMT_LV:
-        #else
         case BGMT_Q:
-        #endif
             info_edit_mode = (info_edit_mode + 1) % (sizeof(info_edit_handlers) / sizeof(info_edit_handlers[0]));
             if(info_edit_mode == 0)
             {

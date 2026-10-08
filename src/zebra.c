@@ -231,11 +231,7 @@ static CONFIG_INT( "zoom.overlay", zoom_overlay_enabled, 0);
 static CONFIG_INT( "zoom.overlay.trig", zoom_overlay_trigger_mode, MZ_TAKEOVER_ZOOM_IN_BTN);
 static CONFIG_INT( "zoom.overlay.size", zoom_overlay_size, 1);
 static CONFIG_INT( "zoom.overlay.x", zoom_overlay_x, 1);
-#ifdef CONFIG_5D3
-static CONFIG_INT( "zoom.overlay.pos", zoom_overlay_pos, 4); // less flicker when MZ is at the bottom
-#else
 static CONFIG_INT( "zoom.overlay.pos", zoom_overlay_pos, 1);
-#endif
 static CONFIG_INT( "zoom.overlay.split", zoom_overlay_split, 0);
 
 int get_zoom_overlay_trigger_mode() 
@@ -255,7 +251,7 @@ int get_zoom_overlay_trigger_by_focus_ring()
     int z = get_zoom_overlay_trigger_mode();
     #ifdef CONFIG_ZOOM_BTN_NOT_WORKING_WHILE_RECORDING
     return z == 2 || z == 3;
-    #else
+#else
     return z == 2;
     #endif
 #else
@@ -269,7 +265,7 @@ static int get_zoom_overlay_trigger_by_halfshutter()
     #ifdef CONFIG_ZOOM_BTN_NOT_WORKING_WHILE_RECORDING
     int z = get_zoom_overlay_trigger_mode();
     return z == 1 || z == 3;
-    #else
+#else
     return 0;
     #endif
 #else
@@ -306,7 +302,7 @@ int should_draw_zoom_overlay()
 
     #ifdef CONFIG_ZOOM_BTN_NOT_WORKING_WHILE_RECORDING
     if (zoom_overlay_triggered_by_zoom_btn || zoom_overlay_triggered_by_focus_ring_countdown) return true;
-    #else
+#else
     int zt = zoom_overlay_triggered_by_zoom_btn;
     int zm = get_zoom_overlay_trigger_mode();
     if (zt && (zm==1 || zm==2) && NOT_RECORDING) zt = 0; // in ZR and ZR+F modes, if triggered while recording, it should only work while recording
@@ -321,7 +317,7 @@ int digic_zoom_overlay_enabled()
     #ifdef FEATURE_MAGIC_ZOOM_FULL_SCREEN
     return zoom_overlay_size == 3 &&
         should_draw_zoom_overlay();
-    #else
+#else
     return 0;
     #endif
 }
@@ -400,7 +396,7 @@ int focus_peaking_as_display_filter()
 {
     #if defined(CONFIG_DISPLAY_FILTERS) && defined(FEATURE_FOCUS_PEAK_DISP_FILTER)
     return lv && focus_peaking && focus_peaking_disp;
-    #else
+#else
     return 0;
     #endif
 }
@@ -536,9 +532,6 @@ int get_global_draw() // menu setting, or off if
             !(lv && kill_canon_gui_mode && !canon_gui_front_buffer_disabled() && !gui_menu_shown()) &&
             #endif
             !LV_PAUSED && 
-            #ifdef CONFIG_5D3
-            !(hdmi_code >= 5 && video_mode_resolution>0) && // unusual VRAM parameters
-            #endif
             job_state_ready_to_take_pic();
     }
     
@@ -1576,7 +1569,7 @@ void bvram_mirror_init()
         #if defined(RSCMGR_MEMORY_PATCH_END)
         extern unsigned int ml_reserved_mem;
         bvram_mirror_start = (uint8_t*) (RESTARTSTART + ml_reserved_mem);
-        #else
+#else
         bvram_mirror_start = (void*)malloc(BMP_VRAM_SIZE);
         #endif
         if (!bvram_mirror_start) 
@@ -2613,10 +2606,6 @@ static MENU_UPDATE_FUNC(global_draw_display)
         if (entry->selected && info->can_custom_draw) bmp_printf(FONT(FONT_MED, COLOR_CYAN, COLOR_BLACK), 700 - font_med.width * strlen(Q_BTN_NAME), info->y + font_large.height, Q_BTN_NAME);
     }
 
-    #ifdef CONFIG_5D3
-    if (hdmi_code >= 5 && video_mode_resolution>0) // unusual VRAM parameters
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Not compatible with HDMI 50p/60p.");
-    #endif
     if (lv && lv_disp_mode && ZEBRAS_IN_LIVEVIEW)
         MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Press " INFO_BTN_NAME " (outside ML menu) to turn Canon displays off.");
     if (global_draw && lv && !ZEBRAS_IN_LIVEVIEW)
@@ -2680,7 +2669,7 @@ static MENU_UPDATE_FUNC(zoom_overlay_display)
     if (display_broken_for_mz())
         MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "After using display filters, go outside LiveView and back.");
     #endif
-    #if !defined(CONFIG_6D) && !defined(CONFIG_5D3) && !defined(CONFIG_EOSM)
+#if !defined(CONFIG_EOSM)
     else if (is_movie_mode() && video_mode_fps > 30)
         MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Magic Zoom does not work well in current video mode");
     #endif
@@ -3226,7 +3215,7 @@ int handle_transparent_overlay(struct event * event)
         }
         #if defined(BGMT_JOY_CENTER)
         if (event->param == BGMT_JOY_CENTER)
-        #else
+#else
         if (event->param == BGMT_PRESS_SET)
         #endif
         {
@@ -3248,7 +3237,7 @@ struct menu_entry zebra_menus[] = {
         .priv       = &global_draw,
         #ifdef FEATURE_OVERLAYS_IN_PLAYBACK_MODE
         .max = 3,
-        #else
+#else
         .max = 1,
         #endif
         .select_Q   = toggle_disp_mode_menu,
@@ -3287,7 +3276,7 @@ struct menu_entry zebra_menus[] = {
                 .priv = &zebra_colorspace, 
                 #ifdef FEATURE_ZEBRA_FAST
                 .max = 2,
-                #else
+#else
                 .max = 1,
                 #endif
                 .choices = (const char *[]) {"Luma", "RGB", "Luma Fast"},
@@ -3471,7 +3460,7 @@ struct menu_entry zebra_menus[] = {
                 #ifdef CONFIG_ZOOM_BTN_NOT_WORKING_WHILE_RECORDING
                 .choices = (const char *[]) {"HalfShutter", "Focus Ring", "FocusR+HalfS", "Always On"},
                 .help = "Trigger Magic Zoom by focus ring or half-shutter.",
-                #else
+#else
                 .choices = (const char *[]) {"Zoom.REC", "Focus+ZREC", "ZoomIn (+)", "Always On"},
                 .help = "Zoom when recording / trigger from focus ring / Zoom button",
                 #endif
@@ -3482,7 +3471,7 @@ struct menu_entry zebra_menus[] = {
                 #ifdef FEATURE_MAGIC_ZOOM_FULL_SCREEN // most new cameras can do fullscreen :)
                 .max = 3,
                 .help = "Size of zoom box (small / medium / large / full screen).",
-                #else // old cameras - simple zoom box
+#else
                 .max = 2,
                 .help = "Size of zoom box (small / medium / large).",
                 #endif
@@ -3593,7 +3582,7 @@ struct menu_entry zebra_menus[] = {
                 .priv = &spotmeter_formula, 
                 #ifdef FEATURE_RAW_SPOTMETER
                 .max = 4,
-                #else
+#else
                 .max = 3,
                 #endif
                 .choices = (const char *[]) {"Percent", "0..255", "RGB (HTML)", "RAW (EV)", "RGB (Percent)"},
@@ -3685,7 +3674,7 @@ struct menu_entry zebra_menus[] = {
                 .update = raw_histo_update,
                 #ifdef FEATURE_RAW_HISTOGRAM
                 .max = 3,
-                #else
+#else
                 .max = 1,
                 #endif
                 .choices = (const char *[]) {
@@ -3888,9 +3877,6 @@ int handle_zoom_overlay(struct event * event)
     if (gui_menu_shown()) return 1;
     if (!lv) return 1;
     if (!get_global_draw()) return 1;
-    #ifdef CONFIG_600D
-    if (get_disp_pressed()) return 1;
-    #endif
 
 #ifdef CONFIG_ZOOM_BTN_NOT_WORKING_WHILE_RECORDING
     if (event->param == BGMT_PRESS_HALFSHUTTER && get_zoom_overlay_trigger_by_halfshutter())
@@ -3901,11 +3887,7 @@ int handle_zoom_overlay(struct event * event)
 
     // zoom in when recording => enable Magic Zoom 
     if (get_zoom_overlay_trigger_mode() && RECORDING_H264_STARTED && MVR_FRAME_NUMBER > 10 && event->param ==
-        #if defined(CONFIG_5D3) || defined(CONFIG_6D)
-        BGMT_PRESS_ZOOM_IN
-        #else
         BGMT_UNPRESS_ZOOM_IN
-        #endif
     )
     {
         zoom_overlay_toggle();
@@ -3923,7 +3905,7 @@ int handle_zoom_overlay(struct event * event)
     {
         #ifdef FEATURE_LCD_SENSOR_SHORTCUTS
         int lcd_sensor_trigger = (get_lcd_sensor_shortcuts() && display_sensor && DISPLAY_SENSOR_POWERED);
-        #else
+#else
         int lcd_sensor_trigger = 0;
         #endif
         // magic zoom toggled by sensor+zoom in (modes Zr and Zr+F)
@@ -4040,7 +4022,7 @@ static void draw_zoom_overlay(int dirty)
     uint16_t*       hdr = (uint16_t*) hd->vram;
 
     // select buffer where MZ should be written (camera-specific, guesswork)
-    #if defined(CONFIG_5D2) || defined(CONFIG_EOSM) || defined(CONFIG_50D)
+#if defined(CONFIG_EOSM)
     #warning FIXME: this method uses busy waiting, which causes high CPU usage and overheating when using Magic Zoom
     void busy_vsync(int hd, int timeout_ms)
     {
@@ -4155,9 +4137,6 @@ static void draw_zoom_overlay(int dirty)
         int w = W * lv->width / hd->width;
         int h = H * lv->width / hd->width;
 
-        #ifdef CONFIG_1100D
-        h /= 2; // LCD half-height fix
-        #endif
         w /= X;
         h /= X;
         w &= ~3;    /* (w<<1) should be 64-bit aligned for memset64 */
@@ -4196,9 +4175,6 @@ static void draw_zoom_overlay(int dirty)
     {
         int off = zoom_overlay_split ? (y < H/2 ? rawoff : -rawoff) : 0;
         if (rev) off = -off;
-        #ifdef CONFIG_1100D
-        if(y%2 == 0) // The 1100D has half-height LCD res so we line-skip one from the sensor
-        #endif
         {
             yuvcpy_main((uint32_t*)d, (uint32_t*)(s + off), W, X);
             d += lv->width;
@@ -4206,9 +4182,6 @@ static void draw_zoom_overlay(int dirty)
         if (y%X==0) s += hd->width;
     }
 
-    #ifdef CONFIG_1100D
-    H /= 2; //LCD res fix (half height)
-    #endif
 
     memset64(lvr + x0c + COERCE(0   + y0c, 0, 720) * lv->width, rawoff ? MZ_BLACK : MZ_GREEN, W<<1);
     memset64(lvr + x0c + COERCE(1   + y0c, 0, 720) * lv->width, rawoff ? MZ_WHITE : MZ_GREEN, W<<1);
@@ -4220,9 +4193,6 @@ static void draw_zoom_overlay(int dirty)
     }
     memset64(lvr + x0c + COERCE(H-2 + y0c, 0, 720) * lv->width, rawoff ? MZ_WHITE : MZ_GREEN, W<<1);
     memset64(lvr + x0c + COERCE(H-1 + y0c, 0, 720) * lv->width, rawoff ? MZ_BLACK : MZ_GREEN, W<<1);
-    #ifdef CONFIG_1100D
-    H *= 2; // Undo it
-    #endif
 
     if (dirty) bmp_fill(0, LV2BM_X(x0c), LV2BM_Y(y0c), LV2BM_DX(W), LV2BM_DY(H));
     //~ bmp_fill(rawoff ? COLOR_BLACK : COLOR_GREEN1, x0c, y0c, W, 1);
@@ -4238,15 +4208,10 @@ int liveview_display_idle()
     struct dialog * dialog = current->priv;
     extern thunk LiveViewApp_handler;
 
-    #if defined(CONFIG_5D3)
-    extern thunk LiveViewLevelApp_handler;
-    #elif defined(CONFIG_DIGIC_V)
+#if defined(CONFIG_DIGIC_V)
     extern thunk LiveViewShutterApp_handler;
     #endif
 
-    #if defined(CONFIG_6D)
-    extern thunk LiveViewWifiApp_handler;
-    #endif
 
     #if defined(CONFIG_LVAPP_HACK_RELOC)
     extern uintptr_t new_LiveViewApp_handler;
@@ -4262,14 +4227,8 @@ int liveview_display_idle()
                   #if defined(CONFIG_LVAPP_HACK_RELOC)
                   || dialog->handler == (dialog_handler_t) new_LiveViewApp_handler
                   #endif
-                  #if defined(CONFIG_5D3)
-                  || dialog->handler == (dialog_handler_t) &LiveViewLevelApp_handler
-                  #endif
-                  #if defined(CONFIG_6D)
-                  || dialog->handler == (dialog_handler_t) &LiveViewWifiApp_handler
-                  #endif
                   //~ for this, check value of get_current_dialog_handler()
-                  #if defined(CONFIG_DIGIC_V) && !defined(CONFIG_5D3)
+#if defined(CONFIG_DIGIC_V)
                   || dialog->handler == (dialog_handler_t) &LiveViewShutterApp_handler
                   #endif
               ) &&
@@ -4640,7 +4599,7 @@ BMP_LOCK (
                 
                 #ifdef CONFIG_KILL_FLICKER
                 idle_kill_flicker();
-                #else
+#else
                 canon_gui_disable_front_buffer();
                 #endif
             }
@@ -4838,9 +4797,7 @@ livev_hipriority_task( void* unused )
             /* only raw zebras, raw histogram and raw spotmeter are working in LV raw mode */
             /* 70D has problems with RAW zebras */
             /* ToDo: Adjust with appropriate internals-config: CONFIG_NO_RAW_ZEBRAS */
-            #if !defined(CONFIG_70D)
             if (monitoring_enabled(zebra_draw) && raw_zebra_enable == 1) raw_needed = 1;        /* raw zebras: always */
-            #endif            
             if (monitoring_enabled(hist_draw) && RAW_HISTOGRAM_ENABLED) raw_needed = 1;          /* raw hisogram (any kind) */
 #ifdef CONFIG_SLIM_MENUS
             if (monitoring_enabled(waveform_draw)) raw_needed = 1;                               /* slim waveform uses raw scan */
@@ -4944,10 +4901,6 @@ livev_hipriority_task( void* unused )
         int kmm = k % m;
         if (!gui_menu_shown()) // don't update everything in one step, to reduce magic zoom flicker
         {
-            #if defined(CONFIG_550D) || defined(CONFIG_5D2) || defined(CONFIG_50D) || defined(CONFIG_7D)
-            if (kmm == 0)
-                BMP_LOCK( if (lv) black_bars(); )
-            #endif
 
             if (kmm == 2)
             {
@@ -5407,14 +5360,6 @@ PROP_HANDLER(PROP_LV_ACTION)
     zoom_sharpen_step();
     #endif
 
-    #ifdef CONFIG_500D
-    if (buf[0] == 0 && !is_manual_focus())
-    {
-        /* disable the "Perform autofocus with AE lock <*> button" message in LiveView */
-        extern void FirstWarningTimer_CBR(void);
-        FirstWarningTimer_CBR();
-    }
-    #endif
 }
 
 void peaking_benchmark()

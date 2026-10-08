@@ -743,9 +743,6 @@ static int bottom_bar_hack = 0;
 
 #if defined(CONFIG_LVAPP_HACK_DEBUGMSG)
 
-#ifdef CONFIG_5D3
-extern int cf_card_workaround;
-#endif
 
 static void hacked_DebugMsg(int class, int level, char* fmt, ...)
 {
@@ -756,16 +753,6 @@ static void hacked_DebugMsg(int class, int level, char* fmt, ...)
     }
     #endif
 
-    #ifdef CONFIG_5D3
-    if (cf_card_workaround)
-    {
-        if (class == 34 && level == 1) // cfDMAWriteBlk
-        {
-            for (int i = 0; i < 10000; i++) 
-                asm("nop");
-        }
-    }
-    #endif
 
 #ifdef FRAME_SHUTTER_BLANKING_WRITE
     if (class == 145) /* 5D3-specific? */
@@ -884,19 +871,11 @@ int handle_common_events_startup(struct event * event)
         
         if (handle_select_config_file_by_key_at_startup(event) == 0) return 0;
 
-        #ifdef CONFIG_60D
-        if (event->param == BGMT_MENU) return 0; // otherwise would interfere with swap menu-erase
-        #endif
         
-        #if !defined(CONFIG_50D) && !defined(CONFIG_5D2) && !defined(CONFIG_5D3) && !defined(CONFIG_650D) && !defined(CONFIG_700D) && !defined(CONFIG_100D)
+#if !defined(CONFIG_650D) && !defined(CONFIG_700D) && !defined(CONFIG_100D)
         if (event->param == BGMT_LV) return 0; // discard REC button if it's pressed too early
         #endif
         
-        #ifdef CONFIG_5D3
-        // block LV button at startup to avoid lockup with manual lenses (Canon bug?)
-        if (event->param == BGMT_LV && !lv && (lv_movie_select == 0 || is_movie_mode()) && !GUIMODE_MOVIE_ENSURE_A_LENS_IS_ATTACHED && !GUIMODE_MOVIE_PRESS_LV_TO_RESUME)
-            return 0;
-        #endif
                 
         return 1; // don't alter any other buttons/events until ML is fully initialized
     }
@@ -986,19 +965,6 @@ static int handle_Q_button_equiv(struct event * event)
 #endif
 #ifdef BGMT_RATE
     case BGMT_RATE:
-#endif
-#if defined(CONFIG_5D2) || defined(CONFIG_7D)
-    case BGMT_PICSTYLE:
-#endif
-#ifdef CONFIG_50D
-    case BGMT_FUNC:
-#endif
-#ifdef CONFIG_500D
-    case BGMT_LV:
-#endif
-#ifdef CONFIG_5DC
-    case BGMT_JUMP:
-    case BGMT_PRESS_DIRECT_PRINT:
 #endif
         fake_simple_button(BGMT_Q);
         return 0;
@@ -1288,9 +1254,7 @@ int handle_common_events_by_feature(struct event * event)
     if (handle_zoom_x5_x10(event) == 0) return 0;
     #endif
     
-    #if !defined(CONFIG_50D) && !defined(CONFIG_5D2) && !defined(CONFIG_5D3) && !defined(CONFIG_6D)
     if (handle_quick_access_menu_items(event) == 0) return 0;
-    #endif
     
 #ifdef CONFIG_RESTORE_AFTER_FORMAT
     if (handle_keep_ml_after_format_toggle(event) == 0) return 0;
@@ -1538,12 +1502,8 @@ void exit_menu_mode()
 int is_pure_play_photo_mode() // no other dialogs active (such as delete)
 {
     if (!PLAY_MODE) return 0;
-#ifdef CONFIG_5DC
-    return 1;
-#else
     extern thunk PlayMain_handler;
     return (intptr_t)get_current_dialog_handler() == (intptr_t)&PlayMain_handler;
-#endif
 }
 
 int is_pure_play_movie_mode() // no other dialogs active (such as delete)

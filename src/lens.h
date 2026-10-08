@@ -95,7 +95,7 @@ extern struct lens_info lens_info;
 
 #define DOF_DIFFRACTION_LIMIT_REACHED 1
 
-#if defined(CONFIG_6D) || defined(CONFIG_5D3_123) || defined(CONFIG_100D) || defined(CONFIG_70D)
+#if defined(CONFIG_100D)
 struct prop_lv_lens
 {  
         uint32_t                lens_rotation; // Identical Doesn't Change
@@ -371,14 +371,10 @@ void kelvin_toggle( void* priv, int sign );
 #define MAX_ISO 128 // may be better to fine-tune this for each camera
 
 // max iso with expo override
-#if defined(CONFIG_6D)
-#define MAX_ISO_BV 136 // see ControlIso <= LVGAIN_MAX_ISO
-#elif defined(CONFIG_100D)
+#if defined(CONFIG_100D)
 #define MAX_ISO_BV 120 // 128 will freeze if iso expansion not set
 #elif defined(CONFIG_DIGIC_V) //All DigicV except 6D apparently
 #define MAX_ISO_BV 199
-#elif defined(CONFIG_500D)
-#define MAX_ISO_BV (is_movie_mode() ? 104 : 112) // 1600 or 3200
 #else
 #define MAX_ISO_BV 120
 #endif

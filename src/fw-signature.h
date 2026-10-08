@@ -7,8 +7,6 @@
 
 #if defined(CONFIG_DIGIC_V)
 #define SIG_START 0xFF0C0000
-#elif defined(CONFIG_7D) || defined(CONFIG_7D_MASTER)
-#define SIG_START 0xF8010000
 #else
 #define SIG_START 0xFF010000
 #endif

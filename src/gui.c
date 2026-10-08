@@ -111,13 +111,8 @@ void ml_gui_main_task()
     
     while(1)
     {
-        #if defined(CONFIG_550D) || defined(CONFIG_7D)
-        msg_queue_receive(gui_main_struct.msg_queue_550d, &event, 0);
-        gui_main_struct.counter_550d--;
-        #else
         msg_queue_receive(gui_main_struct.msg_queue, &event, 0);
         gui_main_struct.counter--;
-        #endif
 
         if (event == NULL) {
             continue;

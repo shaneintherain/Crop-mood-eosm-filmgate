@@ -195,11 +195,7 @@ static void movie_rec_halfshutter_step()
 //**********************************************************************
 
 static CONFIG_INT( "enable-liveview",  enable_liveview,
-    #ifdef CONFIG_5D2
-    0
-    #else
     1
-    #endif
 );
 
 void force_liveview()
@@ -262,14 +258,9 @@ void close_liveview()
             /* in photo mode, just exit LiveView by "pressing" the LiveView button */
             fake_simple_button(BGMT_LV);
         } else {
-            #if defined(CONFIG_5D2) || defined(CONFIG_50D)
-            /* on these cameras, pressing the LiveView button won't start recording */
-            fake_simple_button(BGMT_LV);
-            #else
             /* in movie mode, pressing LiveView would start recording,
              * so go to PLAY mode instead */
             enter_play_mode();
-            #endif
         }
         msleep(1000);
     }
@@ -407,11 +398,7 @@ void movtweak_step()
     #ifdef FEATURE_MOVIE_RESTART
         static int recording_prev = 0;
         
-        #if defined(CONFIG_5D2) || defined(CONFIG_50D) || defined(CONFIG_7D)
-        if(!RECORDING_H264 && recording_prev && !movie_was_stopped_by_set) // see also gui.c
-        #else
         if(!RECORDING_H264 && recording_prev && wait_for_lv_err_msg(0))
-        #endif
         {
             if (movie_restart)
             {
@@ -436,7 +423,7 @@ void movtweak_step()
             #ifdef FEATURE_SHUTTER_LOCK
             #ifdef CONFIG_EOSM
             shutter_lock_step();
-            #else
+#else
             if (shutter_lock) shutter_lock_step();
             #endif
             #endif
@@ -623,10 +610,8 @@ void rec_notify_trigger(int rec)
         if (!rec) info_led_off();
     }
 
-#ifndef CONFIG_50D
     if (rec == 1 && sound_recording_mode == 1 && !fps_should_record_wav())
         NotifyBox(1000, "Sound is disabled.");
-#endif
 }
 #endif
 
@@ -779,7 +764,7 @@ void smooth_iso_step()
     static int prev_bv = (int)0xdeadbeef;
     #ifdef FRAME_BV
     int current_bv = FRAME_BV;
-    #else
+#else
     int current_bv = -(FRAME_ISO & 0xFF);
     #endif
     int current_iso = FRAME_ISO & 0xFF;
@@ -852,24 +837,6 @@ void smooth_iso_step()
             FRAME_ISO = altered_iso | (altered_iso << 8);
         }
 
-        #if defined(CONFIG_5D2) || defined(CONFIG_550D) || defined(CONFIG_50D)
-        // FRAME_ISO not synced perfectly, use digital gain to mask the flicker
-        static int prev_altered_iso = 0;
-        if (prev_altered_iso && prev_altered_iso != altered_iso)
-            gf = gf * powf(2, (altered_iso - prev_altered_iso) / 8.0);
-        prev_altered_iso = altered_iso;
-        
-        // also less than perfect sync when shutter speed is changed
-        #ifdef FRAME_SHUTTER
-        static int prev_tv = 0;
-        int tv = FRAME_SHUTTER;
-        if (prev_tv && prev_tv != tv)
-        {
-            gf = gf * powf(2, (prev_tv - tv) / 8.0);
-        }
-        prev_tv = tv;
-        #endif
-        #endif
 
 
         int g = (int)roundf(COERCE(gf, 1, 1<<20));
@@ -1041,7 +1008,7 @@ static struct menu_entry movie_tweaks_menus[] =
                     .max = 3,
                     #elif !defined(CONFIG_BLUE_LED) && defined(FEATURE_REC_NOTIFY_BEEP)
                     .max = 3,
-                    #else
+#else
                     .max = 2,
                     #endif
                     .choices = (const char *[]) {"OFF", "Red Crossout", "REC/STBY",

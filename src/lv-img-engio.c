@@ -15,9 +15,6 @@
 #include "focus.h"
 #include "beep.h"
 
-#if defined(CONFIG_7D)
-#include "ml_rpc.h"
-#endif
 
 //~ #define EngDrvOutLV(reg, value) *(int*)(reg) = value
 
@@ -523,35 +520,15 @@ static void vignetting_correction_set_coeffs(int a, int b, int c)
         int ev2 = vignetting_data[2*index+1] - 512;
         int val2 = 512 * powf(2, ev2 / 256.0);
         uint32_t data = (val1 & 0xFFFF) | ((val2 & 0xFFFF) << 16);
-        #else
+#else
         uint32_t data = (vignetting_data[2*index] & 0x03FF) | ((vignetting_data[2*index+1] & 0x03FF) << 10);
         #endif
         vignetting_data_prep[index] = data;
     }
     
-#if defined(CONFIG_7D)
-    /* send vignetting data to master */
-    ml_rpc_send_vignetting(vignetting_data_prep, vignetting_correction_enable ? sizeof(vignetting_data_prep) : 0);
-#endif
 }
 
 
-#if defined(CONFIG_7D)
-/* 7D version doesnt rewrite digic registers, but updates canon's register value buffer which is held in LVMgr */
-void vignetting_correction_apply_lvmgr(uint32_t *lvmgr)
-{
-    uint32_t index = 0;
-    if(vignetting_correction_enable && lvmgr && is_movie_mode())
-    {
-        uint32_t *vign = &lvmgr[0x83];
-
-        for(index = 0; index < 0x80; index++)
-        {
-            vign[index] = vignetting_data_prep[index];
-        }
-    }
-}
-#else
 /* the other cameras rewrite digic registers */
 void vignetting_correction_apply_regs()
 {
@@ -571,7 +548,7 @@ void vignetting_correction_apply_regs()
         *(volatile uint32_t*)(0xC0F08D1C) = vignetting_data_prep[index];
         *(volatile uint32_t*)(0xC0F08D24) = vignetting_data_prep[index];
     }
-    #else
+#else
     for(uint32_t index = 0; index < COUNT(vignetting_data_prep); index++)
     {
         *(volatile uint32_t*)(0xC0F08578) = index * 2;
@@ -581,7 +558,6 @@ void vignetting_correction_apply_regs()
     #endif
 
 }
-#endif
 
 extern void flip_zoom();
 
@@ -590,9 +566,6 @@ static void vignetting_correction_toggle(void* priv, int delta)
     uint32_t *state = (uint32_t *)priv;
     
     *state = !*state;
-#if defined(CONFIG_7D)
-    ml_rpc_send_vignetting(vignetting_data_prep, *state ? sizeof(vignetting_data_prep) : 0);
-#endif
 }
 
 static void vignetting_coeff_toggle(void* priv, int delta)
@@ -601,10 +574,6 @@ static void vignetting_coeff_toggle(void* priv, int delta)
 
     vignetting_correction_set_coeffs(vignetting_correction_a, vignetting_correction_b, vignetting_correction_c);
 
-#if defined(CONFIG_7D)
-    if (vignetting_correction_enable)
-        ml_rpc_send_vignetting(vignetting_data_prep, sizeof(vignetting_data_prep));
-#endif
 }
 
 static int vignetting_luma[0x100];
@@ -688,7 +657,7 @@ static MENU_UPDATE_FUNC(vignetting_graphs_update)
         #ifdef CONFIG_DIGIC_V
         bmp_printf(FONT(FONT_MED, 60, COLOR_BLACK), xb + 225, yb-128 - font_med.height/2, "+2 EV");
         bmp_printf(FONT(FONT_MED, 60, COLOR_BLACK), xb + 225, yb - font_med.height/2, "-2 EV");
-        #else
+#else
         bmp_printf(FONT(FONT_MED, 60, COLOR_BLACK), xb + 225, yb-128 - font_med.height/2, "+1 EV");
         bmp_printf(FONT(FONT_MED, 60, COLOR_BLACK), xb + 225, yb - font_med.height/2, "0");
         #endif
@@ -1034,7 +1003,6 @@ static struct menu_entry lv_img_menu[] = {
                 .help = "Disable sharpening completely (below Canon's zero level).",
                 .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
             },
-            #if !(defined(CONFIG_600D) || defined(CONFIG_1100D))
             {
                 .name = "Edge Emphasis", 
                 .priv = &sharp, 
@@ -1042,7 +1010,6 @@ static struct menu_entry lv_img_menu[] = {
                 .help = "Darken sharp edges in bright areas.",
                 .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
             },
-            #endif
             #endif
             
             MENU_EOL,

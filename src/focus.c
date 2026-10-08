@@ -110,7 +110,7 @@ int get_follow_focus_mode()
 {
     #ifdef CONFIG_LCD_SENSOR
     return follow_focus_mode;
-    #else
+#else
     return 0; // no LCD sensor, use arrows only
     #endif
 }
@@ -387,15 +387,11 @@ static void focus_stack_ensure_preconditions()
 
     if (is_movie_mode())
     {
-        #ifdef CONFIG_5D2
-            set_expsim(1);
-        #else
             while (is_movie_mode())
             {
                 NotifyBox(2000, "Please switch to photo mode");
                 msleep(2000);
             }
-        #endif
     }
     
     while (is_manual_focus())
@@ -925,7 +921,6 @@ static int focus_graph_dirty = 0;
 // focus confirmation bars in magic Zoom wouldn't work. See also:
 // http://www.magiclantern.fm/forum/index.php?topic=14309.msg147257#msg147257
 // we also need to disable the focus misc task to cleanup debugmsg logs
-#if !defined(CONFIG_70D)
 #if defined(FEATURE_TRAP_FOCUS) || defined(FEATURE_MAGIC_ZOOM)
 
 #define NMAGS 64
@@ -940,11 +935,7 @@ static void update_focus_mag(int mag)
     int maxmag = 1;
     int minmag = 100000000;
     int i;
-    #if defined(CONFIG_550D) || defined(CONFIG_500D)
-    #define WEIGHT(i) (i > 40 ? 1 : 0.2)
-    #else
     #define WEIGHT(i) 1
-    #endif
     for (i = 0; i < NMAGS-1; i++)
     {
         if (mags[i] * WEIGHT(i) > maxmag) maxmag = mags[i] * WEIGHT(i);
@@ -1001,9 +992,9 @@ PROP_HANDLER(PROP_LV_FOCUS_DATA)
     focus_mag_a = buf[2];
     focus_mag_b = buf[3];
     focus_mag_c = buf[4];
-    #if defined(CONFIG_600D) || defined(CONFIG_1100D) || defined(CONFIG_100D)
+#if defined(CONFIG_100D)
     int focus_mag = focus_mag_c;
-    #else
+#else
     int focus_mag = focus_mag_a + focus_mag_b;
     #endif
     
@@ -1028,27 +1019,18 @@ focus_misc_task(void* unused)
             focus_graph_dirty = 0;
         }
         
-#ifdef CONFIG_60D
-        if (CURRENT_GUI_MODE_2 == DLG2_FOCUS_MODE && is_manual_focus())
-#else
         if (CURRENT_GUI_MODE == GUIMODE_FOCUS_MODE && is_manual_focus())
-#endif
         {   
             #ifdef FEATURE_TRAP_FOCUS
             trap_focus_toggle_from_af_dlg();
             #endif
             
-            #ifdef CONFIG_60D
-            while (CURRENT_GUI_MODE_2 == DLG2_FOCUS_MODE) msleep(100);
-            #else
             while (CURRENT_GUI_MODE == GUIMODE_FOCUS_MODE) msleep(100);
-            #endif
         }
     }
 }
 
 TASK_CREATE( "focus_misc_task", focus_misc_task, 0, 0x1e, 0x1000 );
-#endif
 
 #ifdef FEATURE_TRAP_FOCUS
 static MENU_UPDATE_FUNC(trap_focus_display)
@@ -1068,7 +1050,6 @@ extern int trap_focus;
 
 static void trap_focus_toggle_from_af_dlg()
 {
-    #ifndef CONFIG_50D
     trap_focus = !trap_focus;
     clrscr();
     NotifyBoxHide();
@@ -1079,17 +1060,15 @@ static void trap_focus_toggle_from_af_dlg()
     if (beep_enabled) beep();
     if (trap_focus) info_led_blink(3, 50, 50);
     else info_led_blink(1, 50, 50);
-    #endif
 }
 
 static struct menu_entry trap_focus_menu[] = {
-#ifndef CONFIG_5DC
     {
         .name = "Trap Focus",
         .priv       = &trap_focus,
         #ifdef CONFIG_PROP_REQUEST_CHANGE
         .max = 2,
-        #else
+#else
         .max = 1,
         #endif
         .update    = trap_focus_display,
@@ -1113,7 +1092,6 @@ static struct menu_entry trap_focus_menu[] = {
             MENU_EOL
         }*/
     },
-#endif
 };
 #endif
 
@@ -1407,7 +1385,7 @@ int handle_rack_focus_menu_overrides(struct event * event)
         {
             #ifdef BGMT_UNPRESS_UDLR
             case BGMT_UNPRESS_UDLR:
-            #else
+#else
             case BGMT_UNPRESS_LEFT:
             case BGMT_UNPRESS_RIGHT:
             case BGMT_UNPRESS_UP:
@@ -1444,7 +1422,7 @@ int handle_follow_focus(struct event * event)
                     return 0;
                 #ifdef BGMT_UNPRESS_UDLR
                 case BGMT_UNPRESS_UDLR:
-                #else
+#else
                 case BGMT_UNPRESS_LEFT:
                 case BGMT_UNPRESS_RIGHT:
                 case BGMT_UNPRESS_UP:

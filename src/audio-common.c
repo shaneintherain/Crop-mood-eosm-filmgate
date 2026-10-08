@@ -45,9 +45,6 @@ int sound_recording_enabled()
     return sound_recording_enabled_canon();
 }
 
-#if defined(CONFIG_500D) || defined(CONFIG_5D3)
-int audio_thresholds[] = { 0x7fff, 0x7213, 0x65ab, 0x5a9d, 0x50c2, 0x47fa, 0x4026, 0x392c, 0x32f4, 0x2d6a, 0x2879, 0x2412, 0x2026, 0x1ca7, 0x1989, 0x16c2, 0x1449, 0x1214, 0x101d, 0xe5c, 0xccc, 0xb68, 0xa2a, 0x90f, 0x813, 0x732, 0x66a, 0x5b7, 0x518, 0x48a, 0x40c, 0x39b, 0x337, 0x2dd, 0x28d, 0x246, 0x207, 0x1ce, 0x19c, 0x16f, 0x147 };
-#endif
 
 void audio_configure(int force);
 static void volume_display();
@@ -58,16 +55,9 @@ static void audio_monitoring_display_headphones_connected_or_not();
 static void audio_menus_init();
 static void audio_input_toggle( void * priv, int delta );
 
-#ifdef CONFIG_600D
-//Prototypes for 600D
-static void audio_ic_set_lineout_onoff(int op_mode);
-static void audio_ic_set_lineout_vol();
-static void audio_ic_set_input(int op_mode);
-#else
 static inline unsigned mgain_index2gain(int index);
 static inline unsigned mgain_index2bits(int index);
 static inline uint8_t audio_gain_to_cmd(int gain);
-#endif
 
 // Dump the audio registers to a file if defined
 #undef CONFIG_AUDIO_REG_LOG
@@ -501,17 +491,11 @@ static void draw_meters(void)
 
     draw_meter( x0, y0 + 0, 10, &audio_levels[0], left_label, width);
     draw_ticks( x0, y0 + 10, 2, width);
-#if !(defined(CONFIG_500D) || defined(CONFIG_1100D))         // mono mic on 500d and 1100d
     draw_meter( x0, y0 + 12, 10, &audio_levels[1], right_label, width);
-#endif
 
         if (gui_menu_shown() && alc_enable)
         {
-#ifdef CONFIG_600D
-            int dgain_x1000 = audio_cmd_to_gain_x1000(audio_ic_read(ML_ALC_TARGET_LEV-0x100));
-#else
             int dgain_x1000 = audio_cmd_to_gain_x1000(audio_ic_read(AUDIO_IC_ALCVOL));
-#endif
             bmp_printf(FONT_MED, 10, 410, "AGC:%s%d.%03d dB", dgain_x1000 < 0 ? "-" : " ", ABS(dgain_x1000) / 1000, ABS(dgain_x1000) % 1000);
         }
 }
@@ -625,9 +609,7 @@ static int audio_meters_step( int reconfig_audio )
         }
         else if(!reconfig_audio)
         {
-            #if defined(CONFIG_600D) || defined(CONFIG_7D)
-            audio_configure(1);
-            #elif defined(CONFIG_650D) || defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_100D) || defined(CONFIG_70D)
+#if defined(CONFIG_650D) || defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_100D)
             void PowerMicAmp();
             PowerMicAmp(0);
             #endif
@@ -661,9 +643,9 @@ static void audio_common_task(void * unused)
     audio_levels[0].avg = audio_levels[1].avg = 0;
 
     /* some models require the audio to be enabled using audio_configure() */
-    #if defined(CONFIG_600D) || defined(CONFIG_650D) || defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_100D) || defined(CONFIG_70D)
+#if defined(CONFIG_650D) || defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_100D)
     int reconfig_audio = 0; // Needed to turn on Audio IC at boot, maybe need for 100D
-    #else
+#else
     int reconfig_audio = 1;
     #endif
 
@@ -838,208 +820,6 @@ audio_reg_dump_screen()
 
 #endif
 
-#if defined(CONFIG_600D) && defined(CONFIG_AUDIO_600D_DEBUG)
-static uint16_t audio_regs_once[] = {
-    ML_SMPLING_RATE-0x100,
-    ML_PLLNL-0x100,
-    ML_PLLNH-0x100,
-    ML_PLLML-0x100,
-    ML_PLLMH-0x100,
-    ML_PLLDIV-0x100,
-    ML_CLK_EN-0x100,
-    ML_CLK_CTL-0x100,
-    ML_SW_RST-0x100,
-    ML_RECPLAY_STATE-0x100,
-    ML_MIC_IN_CHARG_TIM-0x100,
-    ML_PW_REF_PW_MNG-0x100,
-    ML_PW_IN_PW_MNG-0x100,
-    ML_PW_DAC_PW_MNG-0x100,
-    ML_PW_SPAMP_PW_MNG-0x100,
-    ML_PW_ZCCMP_PW_MNG-0x100,
-    ML_MICBIAS_VOLT-0x100,
-    ML_MIC_IN_VOL-0x100,
-    ML_MIC_BOOST_VOL1-0x100,
-    ML_MIC_BOOST_VOL2-0x100,
-    ML_SPK_AMP_VOL-0x100,
-    ML_HP_AMP_VOL-0x100,
-    ML_AMP_VOLFUNC_ENA-0x100,
-    ML_AMP_VOL_FADE-0x100,
-    ML_SPK_AMP_OUT-0x100,
-    ML_HP_AMP_OUT_CTL-0x100,
-    ML_MIC_IF_CTL-0x100,
-    ML_RCH_MIXER_INPUT-0x100,
-    ML_LCH_MIXER_INPUT-0x100,
-    ML_RECORD_PATH-0x100,
-    ML_SAI_TRANS_CTL-0x100,
-    ML_SAI_RCV_CTL-0x100,
-    ML_SAI_MODE_SEL-0x100,
-    ML_FILTER_EN-0x100,
-    ML_FILTER_DIS_ALL-0x100,
-    ML_DVOL_CTL_FUNC_EN-0x100,
-    ML_MIXER_VOL_CTL-0x100,
-    ML_REC_DIGI_VOL-0x100,
-    ML_REC_LR_BAL_VOL-0x100,
-    ML_PLAY_DIG_VOL-0x100,
-    ML_EQ_GAIN_BRAND0-0x100,
-    ML_EQ_GAIN_BRAND1-0x100,
-    ML_EQ_GAIN_BRAND2-0x100,
-    ML_EQ_GAIN_BRAND3-0x100,
-    ML_EQ_GAIN_BRAND4-0x100,
-    ML_HPF2_CUTOFF-0x100,
-    ML_EQBRAND0_F0L-0x100,
-    ML_EQBRAND0_F0H-0x100,
-    ML_EQBRAND0_F1L-0x100,
-    ML_EQBRAND0_F1H-0x100,
-    ML_EQBRAND1_F0L-0x100,
-    ML_EQBRAND1_F0H-0x100,
-    ML_EQBRAND1_F1L-0x100,
-    ML_EQBRAND1_F1H-0x100,
-    ML_EQBRAND2_F0L-0x100,
-    ML_EQBRAND2_F0H-0x100,
-    ML_EQBRAND2_F1L-0x100,
-    ML_EQBRAND2_F1H-0x100,
-    ML_EQBRAND3_F0L-0x100,
-    ML_EQBRAND3_F0H-0x100,
-    ML_EQBRAND3_F1L-0x100,
-    ML_EQBRAND3_F1H-0x100,
-    ML_EQBRAND4_F0L-0x100,
-    ML_EQBRAND4_F0H-0x100,
-    ML_EQBRAND4_F1L-0x100,
-    ML_EQBRAND4_F1H-0x100,
-    ML_MIC_PARAM10-0x100,
-    ML_MIC_PARAM11-0x100,
-    ML_SND_EFFECT_MODE-0x100,
-    ML_ALC_MODE-0x100,
-    ML_ALC_ATTACK_TIM-0x100,
-    ML_ALC_DECAY_TIM-0x100,
-    ML_ALC_HOLD_TIM-0x100,
-    ML_ALC_TARGET_LEV-0x100,
-    ML_ALC_MAXMIN_GAIN-0x100,
-    ML_NOIS_GATE_THRSH-0x100,
-    ML_ALC_ZERO_TIMOUT-0x100,
-    ML_PL_ATTACKTIME-0x100,
-    ML_PL_DECAYTIME-0x100,
-    ML_PL_TARGET_LEVEL-0x100,
-    ML_PL_MAXMIN_GAIN-0x100,
-    ML_PLYBAK_BOST_VOL-0x100,
-    ML_PL_0CROSS_TIMEOUT-0x100,
-};
-
-static const char * audio_reg_names_once[] = {
-    "ML_SMPLING_RATE",
-    "ML_PLLNL",
-    "ML_PLLNH",
-    "ML_PLLML",
-    "ML_PLLMH",
-    "ML_PLLDIV",
-    "ML_CLK_EN",
-    "ML_CLK_CTL",
-    "ML_SW_RST",
-    "ML_RECPLAY_STATE",
-    "ML_MIC_IN_CHARG_TIM",
-    "ML_PW_REF_PW_MNG",
-    "ML_PW_IN_PW_MNG",
-    "ML_PW_DAC_PW_MNG",
-    "ML_PW_SPAMP_PW_MNG",
-    "ML_PW_ZCCMP_PW_MNG",
-    "ML_MICBIAS_VOLT",
-    "ML_MIC_IN_VOL",
-    "ML_MIC_BOOST_VOL1",
-    "ML_MIC_BOOST_VOL2",
-    "ML_SPK_AMP_VOL",
-    "ML_HP_AMP_VOL",
-    "ML_AMP_VOLFUNC_ENA",
-    "ML_AMP_VOL_FADE",
-    "ML_SPK_AMP_OUT",
-    "ML_HP_AMP_OUT_CTL",
-    "ML_MIC_IF_CTL",
-    "ML_RCH_MIXER_INPUT",
-    "ML_LCH_MIXER_INPUT",
-    "ML_RECORD_PATH",
-    "ML_SAI_TRANS_CTL",
-    "ML_SAI_RCV_CTL",
-    "ML_SAI_MODE_SEL",
-    "ML_FILTER_EN",
-    "ML_FILTER_DIS_ALL",
-    "ML_DVOL_CTL_FUNC_EN",
-    "ML_MIXER_VOL_CTL",
-    "ML_REC_DIGI_VOL",
-    "ML_REC_LR_BAL_VOL",
-    "ML_PLAY_DIG_VOL",
-    "ML_EQ_GAIN_BRAND0",
-    "ML_EQ_GAIN_BRAND1",
-    "ML_EQ_GAIN_BRAND2",
-    "ML_EQ_GAIN_BRAND3",
-    "ML_EQ_GAIN_BRAND4",
-    "ML_HPF2_CUTOFF",
-    "ML_EQBRAND0_F0L",
-    "ML_EQBRAND0_F0H",
-    "ML_EQBRAND0_F1L",
-    "ML_EQBRAND0_F1H",
-    "ML_EQBRAND1_F0L",
-    "ML_EQBRAND1_F0H",
-    "ML_EQBRAND1_F1L",
-    "ML_EQBRAND1_F1H",
-    "ML_EQBRAND2_F0L",
-    "ML_EQBRAND2_F0H",
-    "ML_EQBRAND2_F1L",
-    "ML_EQBRAND2_F1H",
-    "ML_EQBRAND3_F0L",
-    "ML_EQBRAND3_F0H",
-    "ML_EQBRAND3_F1L",
-    "ML_EQBRAND3_F1H",
-    "ML_EQBRAND4_F0L",
-    "ML_EQBRAND4_F0H",
-    "ML_EQBRAND4_F1L",
-    "ML_EQBRAND4_F1H",
-    "ML_MIC_PARAM10",
-    "ML_MIC_PARAM11",
-    "ML_SND_EFFECT_MODE",
-    "ML_ALC_MODE",
-    "ML_ALC_ATTACK_TIM",
-    "ML_ALC_DECAY_TIM",
-    "ML_ALC_HOLD_TIM",
-    "ML_ALC_TARGET_LEV",
-    "ML_ALC_MAXMIN_GAIN",
-    "ML_NOIS_GATE_THRSH",
-    "ML_ALC_ZERO_TIMOUT",
-    "ML_PL_ATTACKTIME",
-    "ML_PL_DECAYTIME",
-    "ML_PL_TARGET_LEVEL",
-    "ML_PL_MAXMIN_GAIN",
-    "ML_PLYBAK_BOST_VOL",
-    "ML_PL_0CROSS_TIMEOUT",
-};
-
-void
-audio_reg_dump_once()
-{
-    char log_filename[100];
-    
-    int log_number = 0;
-    for (log_number = 0; log_number < 100; log_number++)
-        {
-            snprintf(log_filename, sizeof(log_filename), "ML/audio%02d.LOG", log_number);
-            unsigned size;
-            if( FIO_GetFileSize( log_filename, &size ) != 0 ) break;
-            if (size == 0) break;
-        }
-    
-    FILE* f = FIO_CreateFile(log_filename);
-    if (f)
-    {
-        unsigned i;
-        for( i=0 ; i<COUNT(audio_regs_once) ; i++ )
-        {
-            const uint16_t reg = audio_ic_read( audio_regs_once[i] );
-            my_fprintf(f, "%s %02x\n", audio_reg_names_once[i], reg);
-            msleep(10);
-        }
-        FIO_CloseFile(f);
-        NotifyBox(4000, "log audio%02d.log saved", log_number );
-    }
-}
-#endif
 
 
 int mic_inserted = -1;
@@ -1056,11 +836,7 @@ PROP_HANDLER( PROP_MIC_INSERTED )
     
     mic_inserted = buf[0];
     
-#ifdef CONFIG_600D
-    audio_ic_set_input(OP_STANDALONE); //Need faster finish this prop on 600D. audio_configure() is slow.Then get hang
-#else
     audio_configure( 1 );
-#endif
 }
 
 static int get_input_source()
@@ -1078,11 +854,7 @@ static int get_input_source()
 static void
 audio_set_meterlabel(){
 
-#if (defined(CONFIG_500D) || defined(CONFIG_1100D))  //500d and 1100d only have internal mono audio :(
-	int input_source = 0;
-#else
 	int input_source = get_input_source();
-#endif
     
     //those char*'s cause a memory corruption, don't know why
     //char * left_labels[] =  {"L INT", "L INT", "L EXT", "L INT"}; //these are used by draw_meters()
@@ -1090,13 +862,8 @@ audio_set_meterlabel(){
     switch (input_source)
         {
         case 0:
-            #if (defined(CONFIG_500D) || defined(CONFIG_1100D))
-            snprintf(left_label,  sizeof(left_label),  " MIC ");
-            snprintf(right_label, sizeof(right_label), " N/C ");
-            #else
             snprintf(left_label,  sizeof(left_label),  "L INT");
             snprintf(right_label, sizeof(right_label), "R INT");
-            #endif
             break;
         case 1:
             snprintf(left_label,  sizeof(left_label),  "L INT");
@@ -1167,9 +934,6 @@ void audio_monitoring_display_headphones_connected_or_not()
               AUDIO_MONITORING_HEADPHONES_CONNECTED ? 
               "connected" :
               "disconnected");
-#ifdef CONFIG_600D
-    audio_configure(1);
-#endif
 }
 
 PROP_INT(PROP_USBRCA_MONITOR, rca_monitor);
@@ -1193,11 +957,7 @@ enable_recording(int mode)
             // Movie recording stopped;  (fallthrough)
         case 2:
             // Movie recording started
-            #if defined(CONFIG_600D) || defined(CONFIG_7D)
-            audio_configure(1);
-            #else
             give_semaphore( gain.sem );
-            #endif
             break;
         case 1:
             // Movie recording about to start? : 600D do not override audio here. Recording start/stop will call case2 and case 2 together. So twice audio_configre() need more cpu/mem overhead. will stop recording.because buffer will full.
@@ -1218,9 +978,7 @@ static void
 enable_meters(int mode)
 {
     loopback = do_draw_meters = !mode;
-#if !defined(CONFIG_600D)
     audio_configure( 1 );
-#endif
 }
 
 
