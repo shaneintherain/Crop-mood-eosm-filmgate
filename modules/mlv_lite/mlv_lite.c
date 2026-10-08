@@ -838,6 +838,11 @@ static void refresh_cropmarks_if_changed(void)
 static int film_bars_missing(void)
 {
     int x, y, w, h;
+
+    /* the pixel positions are only known for the camera LCD */
+    if (!is_LCD_Output())
+        return 0;
+
     if (!film_frame_rect(&x, &y, &w, &h))
         return 0;
 
@@ -4951,9 +4956,19 @@ static struct menu_entry raw_video_menu[] =
 };
 
 
+/* Shutter record: set when a half-press was used as the REC key, so only then is the matching
+ * release swallowed (otherwise Canon would see a release without its press, or the reverse). */
+static int shutter_rec_press_taken = 0;
+
 static REQUIRES(GuiMainTask)
 unsigned int raw_rec_keypress_cbr(unsigned int key)
 {
+    if (key == MODULE_KEY_UNPRESS_HALFSHUTTER && shutter_rec_press_taken)
+    {
+        shutter_rec_press_taken = 0;
+        return 0;
+    }
+
     if (!raw_video_enabled)
         return 1;
 
@@ -4976,8 +4991,6 @@ unsigned int raw_rec_keypress_cbr(unsigned int key)
      * recording, like the REC key (a full press is not reported to ML).  The release is
      * swallowed so Canon does not see half of the pair. */
     int shutter_rec = crop_rec_shutter_record();
-    if (shutter_rec && key == MODULE_KEY_UNPRESS_HALFSHUTTER)
-        return 0;
 
     int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC ||
                            (shutter_rec && key == MODULE_KEY_PRESS_HALFSHUTTER));
@@ -4985,6 +4998,8 @@ unsigned int raw_rec_keypress_cbr(unsigned int key)
     if (rec_key_pressed)
     {
         printf("REC key pressed.\n");
+        if (key == MODULE_KEY_PRESS_HALFSHUTTER)
+            shutter_rec_press_taken = 1;
 
         if (!compress_mq)
         {

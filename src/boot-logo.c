@@ -1673,8 +1673,10 @@ static void boot_logo_task(void *unused)
         boot_logo_active = 0;
 
         /* Releasing the canvas wipes everything drawn during the splash (e.g. the Film Format
-         * bars); redraw like closing a menu does. */
-        redraw();
+         * bars); redraw like closing a menu does.  Not during power-off, and not if a
+         * recording was started while the splash was still up. */
+        if (!ml_shutdown_requested && !RECORDING)
+            redraw();
     }
 }
 

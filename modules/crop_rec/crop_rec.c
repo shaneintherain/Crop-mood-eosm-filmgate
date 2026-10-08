@@ -469,7 +469,8 @@ static int slim_handle_info_button(unsigned int key)
             return 1;
 
         case 7: /* Kill Global Draw: same setting as Movie -> Kill Global Draw */
-            if (!RECORDING && lv && is_movie_mode() && !gui_menu_shown() && lv_disp_mode == 0)
+            /* not while a recording is starting or finishing: the setting is read at both ends */
+            if (!RECORDING && !mlv_raw_rec_busy() && lv && is_movie_mode() && !gui_menu_shown() && lv_disp_mode == 0)
             {
                 int on = mlv_lite_toggle_kill_gd();
                 NotifyBox(2000, "Kill Global Draw: %s", on ? "ON" : "OFF");
