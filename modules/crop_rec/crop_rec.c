@@ -134,7 +134,7 @@ enum crop_preset {
     CROP_PRESET_OFF = 0,
     CROP_PRESET_3K,     /* only used to pick a row of max_resolutions[] (see crop_preset_yres_lookup) */
 
-    /* these are for 650D / 700D / EOSM/M2 / 100D */
+    /* these are for EOS M */
     CROP_PRESET_1X1,
     CROP_PRESET_1X3,
     CROP_PRESET_3X3,
@@ -152,7 +152,7 @@ static enum crop_preset * crop_presets = 0;
 /* current menu selection (*/
 #define CROP_PRESET_MENU crop_presets[crop_preset_index]
 
-/* menu choices for entry level DIGIC 5 models, 650D / 700D / EOS M/M2 / 100D */
+/* menu choices for entry level DIGIC 5 models, EOS M */
 static enum crop_preset crop_presets_DIGIC_5[] = {
     CROP_PRESET_OFF,
     CROP_PRESET_1X1,
@@ -816,7 +816,7 @@ static int is_supported_mode()
         );
     }
     
-    /* 650D / 700D / EOSM/M2 / 100D prests will only work in x5 mode, don't patch x1 */
+    /* EOS M prests will only work in x5 mode, don't patch x1 */
     if (PathDriveMode->zoom == 1)
     {
         if (is_EOSM) 
@@ -995,7 +995,7 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
 
 
 
-    // 650D / 700D / EOSM/M2 / 100D presets
+    // EOS M presets
     // cmos_new[5] used for vertical offset, cmos_new[7] for horizontal offset
     if (is_DIGIC_5)
     {
@@ -1384,7 +1384,7 @@ static void FAST adtg_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
     /* hopefully generic; to be tested later */
     if (1)
     {
-        // 650D / 700D / EOSM/M2 / 100D presets
+        // EOS M presets
         // ADTG2[0x8183] and ADTG2[0x8184] enable horizontal pixel binning instead of skipping
         // in 1080p ADTG2[0x8183] = 0x21, ADTG2[0x8183] = 0x7B, in x5 both are = 0x0 
         // ADTG2[0x800C] = 2: vertical binning/skipping factor = 3, ADTG2[0x800C] = 0 read all vertical lines
@@ -1571,7 +1571,7 @@ int Adjust_TimerB_For_Dual_ISO(int TimerB)
     return TimerB + 3;
 }
 
-/* 650D / 700D / EOSM/M2 / 100D reg_override presets */
+/* EOS M reg_override presets */
 
 int preview_debug_1 = 0;
 int preview_debug_2 = 0;
@@ -2565,7 +2565,7 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
 static void * get_engio_reg_override_func()
 {
     uint32_t (*reg_override_func)(uint32_t, uint32_t) = 
-        /* 650D / 700D / EOSM/M2 / 100D reg_override_func presets */
+        /* EOS M reg_override_func presets */
         (crop_preset == CROP_PRESET_1X1)        ? reg_override_1X1        :
         (crop_preset == CROP_PRESET_1X3)        ? reg_override_1X3        :
         (crop_preset == CROP_PRESET_3X3)        ? reg_override_3X3        :
@@ -5889,7 +5889,7 @@ static int crop_rec_needs_lv_refresh()
                 return 1;
             }
 
-            /* Currently settings_changed is only supprted for 650D / 700D / EOS M/M2 / 100D */
+            /* Currently settings_changed is only supprted for EOS M */
             if (is_DIGIC_5)
             {
                 if (settings_changed) return 1;
@@ -5908,7 +5908,7 @@ static int crop_rec_needs_lv_refresh()
 }
 
 
-/* variables for 650D / 700D / EOSM/M2 / 100D help to detect if settings changed */
+/* variables for EOS M help to detect if settings changed */
 static int old_ar_preset;
 static int old_crop_preset_index;
 static int old_fps_preset;
@@ -6392,7 +6392,7 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 #endif
     
     /* check if any of our settings are changed */
-    /* for 650D / 700D / EOSM/M2 / 100D */
+    /* for EOS M */
     if (check_if_settings_changed())
     {
 #ifdef CONFIG_EOSM
@@ -6442,7 +6442,7 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 
 
 
-    /* 650D / 700D / EOSM/M2 / 100D preferences */
+    /* EOS M preferences */
     if (is_DIGIC_5 && lv)
     {
         // all of our presets work in x5 mode because of preview, even none-cropped ones
@@ -7423,15 +7423,6 @@ static unsigned int crop_rec_init()
         }
     }
 
-    if (is_DIGIC_5)
-    {
-        /* hide 1080p preset for 650D / 700D / 100D (they don't need it) */
-        if (!is_EOSM)
-        {
-            crop_rec_menu[0].children[2].max = 0;
-            crop_preset_3x3_res_menu = 0;
-        }
-    }
 
     if (is_EOSM)
     {

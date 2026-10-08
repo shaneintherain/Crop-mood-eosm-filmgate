@@ -5219,7 +5219,7 @@ static unsigned int raw_rec_init()
         CartridgeCancel = (void *) 0xFFA7E7D8;
         more_hacks_are_supported = 1;
         
-        /* fixme: these are dummy values from 100D */
+        /* fixme: these are dummy values (carried over from the 100D) */
         default_width_1080p = 1808;
         default_height_1080p = 726;
         default_width_x5 = 2592;
