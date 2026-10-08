@@ -3569,6 +3569,35 @@ static int patch_active = 0;
 static volatile int eosm_lv_guard_pending = 1;
 static volatile int eosm_lv_guard_busy = 0;
 
+/* Shutter record also locks the shutter release (Canon's UI lock, shutter bit only), so a full
+ * press cannot take a photo.  Only the shutter bit is touched, and only when we set it. */
+static int shutter_rec_locked = 0;
+
+static void slim_shutter_rec_lock_update(void)
+{
+    if (!is_EOSM)
+        return;
+
+    int want = Shutter_rec && lv && is_movie_mode();
+
+    /* some other part of ML holds a full UI lock (e.g. buffer reallocation): leave it alone */
+    if ((icu_uilock & 0xFFFF & ~UILOCK_SHUTTER) != 0)
+        return;
+
+    if (want)
+    {
+        if (!(icu_uilock & UILOCK_SHUTTER))
+            gui_uilock(icu_uilock | UILOCK_SHUTTER);
+        shutter_rec_locked = 1;
+    }
+    else if (shutter_rec_locked && !RECORDING)
+    {
+        if (icu_uilock & UILOCK_SHUTTER)
+            gui_uilock(icu_uilock & ~UILOCK_SHUTTER);
+        shutter_rec_locked = 0;
+    }
+}
+
 /* EOS M Settings -> Shutter record.  The camera does not report a full shutter press to ML (it
  * just takes a photo), so the half-press is used.  Press starts recording, press again stops
  * it; the release is swallowed so Canon does not see half of the pair. */
@@ -3658,6 +3687,7 @@ int crop_rec_lv_transition_diag(char *buffer, int size)
 }
 static void eosm_lv_guard_request(void) {}
 static int slim_handle_shutter_record(unsigned int key) { (void) key; return 0; }
+static void slim_shutter_rec_lock_update(void) {}
 #endif
 
 static void install_patches()
@@ -4310,7 +4340,7 @@ static struct menu_entry slim_info_button_menu[] = {
         .edit_mode = EM_INLINE_ADJUST,
         .icon_type = IT_DICE,
         .help      = "Half-press the shutter button to start/stop recording (movie mode).",
-        .help2     = "Press only halfway: a full press still takes a photo. Replaces Shutter zoom.",
+        .help2     = "Press only halfway. Locks the shutter release so a full press takes no photo. Replaces Shutter zoom.",
     },
 };
 
@@ -6505,6 +6535,8 @@ static int lv_check_is_healthy(void)
 /* when closing ML menu, check whether we need to refresh the LiveView */
 static unsigned int crop_rec_polling_cbr(unsigned int unused)
 {
+    slim_shutter_rec_lock_update();
+
     
     /* touch/Movie-tab shortcuts inject Q+SET into an open menu — not used on slim. */
 #ifndef CONFIG_SLIM_MENUS
