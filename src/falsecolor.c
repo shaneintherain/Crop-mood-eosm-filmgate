@@ -63,20 +63,10 @@ void draw_false_downsampled( void )
 
     int off = get_y_skip_offset_for_overlays();
 
-    /* TEMPORARY DIAGNOSTIC (remove once HDMI false color is fixed): shows the
-     * geometry assumed for the HDMI output so it can be compared with the
-     * real image. */
-    extern int hdmi_code;
-    if (EXT_MONITOR_CONNECTED)
-    {
-        bmp_printf(FONT_SMALL, 10, 60, "H%d LV%dx%d fps%d res%d crop%d off%d y%d-%d half%d",
-            hdmi_code, vram_lv.width, vram_lv.height, video_mode_fps,
-            video_mode_resolution, video_mode_crop, off, os.y0, os.y_max, EXT_MONITOR_CONNECTED && hdmi_code >= 5 && vram_lv.height == 1080);
-    }
-
     /* EOS M, HDMI 1080: the picture only fills the first half of the assumed
-     * 1920x1080 buffer (measured on camera: false color stopped at the exact
+     * 1920x1080 buffer (on camera, false color stopped at the exact
      * half-way row). Read it at one line per BMP line instead of two. */
+    extern int hdmi_code;
     int lv_half = EXT_MONITOR_CONNECTED && hdmi_code >= 5 && vram_lv.height == 1080;
 
     for(int y = os.y0 + off; y < os.y_max - off; y += 2 )
