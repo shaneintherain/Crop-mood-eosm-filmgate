@@ -172,10 +172,13 @@ static void mlv_play_fit_left(char *left, const char *right)
  * (mlv_play_osd_* below) are untouched.  Only fixed Canon palette entries are used.
  * Everything is drawn with bmp_fill() rows, which clips to the screen by itself.
  * --------------------------------------------------------------------------------- */
-#define PB_NAVY     COLOR_PEN_NAVY
-#define PB_SKY      COLOR_PEN_SKY
-#define PB_TEXT     COLOR_CREAM
-#define PB_DIM      COLOR_FILM_DIM
+/* Canon's PLAY mode has its own colour table: the menu blues (navy/sky entries) come out
+ * pale gray there (seen on a real EOS M).  The basic black and white entries look the same
+ * in every mode, so the bar uses those: black pill, white text, white selection capsule. */
+#define PB_NAVY     COLOR_BLACK
+#define PB_SKY      COLOR_WHITE
+#define PB_TEXT     COLOR_WHITE
+#define PB_DIM      COLOR_WHITE
 #define PB_TRACK    2      /* extra pixels between letters */
 
 static int pb_isqrt(int v)
