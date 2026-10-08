@@ -166,6 +166,176 @@ static void mlv_play_fit_left(char *left, const char *right)
     }
 }
 
+/* ---------------------------------------------------------------------------------
+ * Playback look: dark rounded info card on top, rounded control bar at the bottom,
+ * sky-blue capsule on the selected button.  Drawing only - the controls themselves
+ * (mlv_play_osd_* below) are untouched.  Only fixed Canon palette entries are used.
+ * Everything is drawn with bmp_fill() rows, which clips to the screen by itself.
+ * --------------------------------------------------------------------------------- */
+#define PB_NAVY     COLOR_PEN_NAVY
+#define PB_SKY      COLOR_PEN_SKY
+#define PB_TEXT     COLOR_CREAM
+#define PB_DIM      COLOR_FILM_DIM
+#define PB_TRACK    2      /* extra pixels between letters */
+
+static int pb_isqrt(int v)
+{
+    int r = 0;
+    while ((r + 1) * (r + 1) <= v) r++;
+    return r;
+}
+
+/* filled rectangle with rounded corners, row by row */
+static void pb_round_rect(int x, int y, int w, int h, int r, int color)
+{
+    if (w <= 0 || h <= 0) return;
+    if (r > h / 2) r = h / 2;
+    if (r > w / 2) r = w / 2;
+
+    for (int j = 0; j < h; j++)
+    {
+        int inset = 0;
+        int dy2 = -1;                       /* twice the distance to the corner circle's centre row */
+
+        if (j < r)           dy2 = 2 * (r - j) - 1;
+        else if (j >= h - r) dy2 = 2 * (j - (h - r)) + 1;
+
+        if (dy2 >= 0)
+        {
+            inset = r - pb_isqrt((4 * r * r - dy2 * dy2) / 4);
+        }
+        bmp_fill(color, x + inset, y + j, w - 2 * inset, 1);
+    }
+}
+
+/* text with a little extra space between the letters */
+static int pb_text_width(const char *s)
+{
+    char c[2] = { 0, 0 };
+    int w = 0;
+
+    for (; *s; s++)
+    {
+        c[0] = *s;
+        w += bmp_string_width(FONT_MED, c) + PB_TRACK;
+    }
+    return w > 0 ? w - PB_TRACK : 0;
+}
+
+static void pb_text(int x, int y, const char *s, int fg, int bg)
+{
+    char c[2] = { 0, 0 };
+
+    for (; *s; s++)
+    {
+        c[0] = *s;
+        bmp_printf(FONT(FONT_MED, fg, bg), x, y, "%s", c);
+        x += bmp_string_width(FONT_MED, c) + PB_TRACK;
+    }
+}
+
+/* small shapes for the transport buttons; "s" is the half height */
+static void pb_triangle(int cx, int cy, int s, int dir, int color)
+{
+    int wdt = s + s / 2;
+    int x0 = cx - wdt / 2;
+
+    for (int i = 0; i <= wdt; i++)
+    {
+        int half = s * (wdt - i) / wdt;
+        int x = (dir > 0) ? x0 + i : x0 + wdt - i;
+        bmp_fill(color, x, cy - half, 1, 2 * half + 1);
+    }
+}
+
+enum { PB_TEXT_BUTTON = 0, PB_PREV, PB_PAUSE, PB_PLAY, PB_NEXT };
+
+static void pb_icon(int kind, int cx, int cy, int s, int color)
+{
+    switch (kind)
+    {
+        case PB_PREV:
+            pb_triangle(cx - s / 2 - 1, cy, s, -1, color);
+            pb_triangle(cx + s / 2 + 3, cy, s, -1, color);
+            break;
+        case PB_NEXT:
+            pb_triangle(cx - s / 2 - 3, cy, s, 1, color);
+            pb_triangle(cx + s / 2 + 1, cy, s, 1, color);
+            break;
+        case PB_PAUSE:
+            bmp_fill(color, cx - s * 2 / 3 - 1, cy - s, s / 2 + 2, 2 * s + 1);
+            bmp_fill(color, cx + s / 6 + 1,     cy - s, s / 2 + 2, 2 * s + 1);
+            break;
+        case PB_PLAY:
+            pb_triangle(cx, cy, s, 1, color);
+            break;
+    }
+}
+
+/* Turn the text of a control ("<<", "||", "fast", "Del", "[delete? 3s]") into what is drawn:
+ * a transport icon, or the word in capitals. */
+static int pb_button_label(const char *msg, char *out, int out_len)
+{
+    int n = 0;
+
+    out[0] = 0;
+
+    if (!strcmp(msg, "<<")) return PB_PREV;
+    if (!strcmp(msg, ">>")) return PB_NEXT;
+    if (!strcmp(msg, "||")) return PB_PAUSE;
+    if (!strcmp(msg, "|>")) return PB_PLAY;
+
+    if (!strcmp(msg, "Del"))
+    {
+        msg = "Delete";
+    }
+
+    for (; *msg && n < out_len - 1; msg++)
+    {
+        char c = *msg;
+        if (c == '[' || c == ']') continue;          /* "[delete? 3s]" -> "DELETE? 3S" */
+        if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+        out[n++] = c;
+    }
+    out[n] = 0;
+    return PB_TEXT_BUTTON;
+}
+
+/* info card at the top: date + lens on the first line, file + frame counter on the second.
+ * "clear" = repaint the card background too (otherwise only the text is refreshed). */
+static void mlv_play_draw_info(screen_msg_t *m, int clear)
+{
+    int fh = font_med.height;
+    int x0 = 14;
+    int x1 = os.x_max - 14;
+    int y0 = 10;
+    int ty1 = y0 + 9;
+    int ty2 = ty1 + fh + 3;
+    int card_h = (ty2 + fh + 9) - y0;
+
+    /* frame counter pill, as wide as the biggest counter of this clip ("1284/3601" -> "3601/3601") */
+    char widest[SCREEN_MSG_LEN];
+    const char *slash = strchr(m->botRight, '/');
+    const char *total = slash ? slash + 1 : m->botRight;
+    snprintf(widest, sizeof(widest), "%s/%s", total, total);
+    int pill_w = bmp_string_width(FONT_MED, widest) + 28;
+    int pill_x = x1 - 12 - pill_w;
+    int pill_y = ty2 - 3;
+    int pill_h = fh + 6;
+
+    if (clear)
+    {
+        bmp_fill(COLOR_EMPTY, 0, 0, 720, y0 + card_h + 4);
+        pb_round_rect(x0, y0, x1 - x0, card_h, 18, COLOR_BG);
+        pb_round_rect(pill_x, pill_y, pill_w, pill_h, pill_h / 2, PB_NAVY);
+    }
+
+    bmp_printf(FONT(FONT_MED, PB_DIM, COLOR_BG), x0 + 18, ty1, "%s", m->topLeft);
+    bmp_printf(FONT(FONT_MED, PB_DIM, COLOR_BG) | FONT_ALIGN_RIGHT, x1 - 18, ty1, "%s", m->topRight);
+    bmp_printf(FONT(FONT_MED, PB_TEXT, COLOR_BG), x0 + 18, ty2, "%s", m->botLeft);
+    bmp_printf(FONT(FONT_MED, PB_TEXT, PB_NAVY) | FONT_ALIGN_RIGHT, pill_x + pill_w - 14, ty2, "%s", m->botRight);
+}
+
 typedef struct 
 {
     uint32_t frameSize;
@@ -676,13 +846,19 @@ static uint32_t mlv_play_osd_draw()
     uint32_t border = 4;
     uint32_t y_offset = 28;
 
-    /* undraw last drawn OSD item */
-    static char osd_line[64] = "";
+    int fh = font_med.height;
+    int bar_h = fh + 28;                /* rounded bar */
+    int cap_h = bar_h - 14;             /* selection capsule */
 
-    uint32_t w = bmp_string_width(FONT_LARGE, osd_line);
-    uint32_t h = fontspec_height(FONT_LARGE);
-    bmp_fill(COLOR_EMPTY, mlv_play_osd_x - w/2 - border, mlv_play_osd_y - border, w + 2 * border, h + 2 * border);
-    
+    /* what was drawn last time, to undraw it */
+    static int last_x = 0, last_y = 0, last_w = 0, last_h = 0;
+
+    if (last_w > 0)
+    {
+        bmp_fill(COLOR_EMPTY, last_x, last_y, last_w, last_h);
+        last_w = 0;
+    }
+
     /* handle animation */
     switch(mlv_play_osd_state)
     {
@@ -702,7 +878,7 @@ static uint32_t mlv_play_osd_draw()
         
         case MLV_PLAY_MENU_FADEIN:
         {
-            int y_top = os.y_max - font_large.height - y_offset;
+            int y_top = os.y_max - bar_h - y_offset;
             mlv_play_osd_y = MAX(mlv_play_osd_y - border, y_top);
             if(mlv_play_osd_y <= y_top)
             {
@@ -724,36 +900,66 @@ static uint32_t mlv_play_osd_draw()
             break;
         }
     }
-    
-    /* draw a line with all OSD buttons */
-    char selected_item[64];
-    uint32_t selected_x = 0;
-    
-    strcpy(osd_line, "");
+
+    /* nothing to draw while the bar is below the screen */
+    if (mlv_play_osd_y >= os.y_max)
+    {
+        return redraw;
+    }
+
+    /* what to draw: a transport icon or a word for every button */
+    char label[COUNT(mlv_play_osd_items)][24];
+    int kind[COUNT(mlv_play_osd_items)];
+    int width[COUNT(mlv_play_osd_items)];
+    int gap = 6;
+    int pad = 20;
+    int icon_w = 58;
+    int total = 16 + gap * (COUNT(mlv_play_osd_items) - 1);
+
     for(uint32_t pos = 0; pos < COUNT(mlv_play_osd_items); pos++)
     {
         char msg[64];
         mlv_play_osd_items[pos](msg, sizeof(msg), 0);
-        
-        /* if this is the selected one, keep the position for redrawing highlighted */
-        if(pos == mlv_play_osd_item)
-        {
-            strcpy(selected_item, msg);
-            selected_x = bmp_string_width(FONT_LARGE, osd_line);
-        }
-        
-        strcat(osd_line, "  ");
-        strcat(osd_line, msg);
-        strcat(osd_line, "  ");
+        kind[pos] = pb_button_label(msg, label[pos], sizeof(label[pos]));
+        width[pos] = (kind[pos] == PB_TEXT_BUTTON) ? pb_text_width(label[pos]) + 2 * pad : icon_w;
+        total += width[pos];
     }
-    
-    w = bmp_string_width(FONT_LARGE, osd_line);
-    bmp_fill(COLOR_BG, mlv_play_osd_x - w/2 - border, mlv_play_osd_y - border, w + 2 * border, h + 2 * border);
-    bmp_printf(FONT(FONT_LARGE,COLOR_WHITE,COLOR_BG), mlv_play_osd_x - w/2, mlv_play_osd_y, osd_line);
 
-    /* draw selected item over with blue background */
-    bmp_printf(FONT(FONT_LARGE,COLOR_WHITE,COLOR_BLUE), mlv_play_osd_x - w/2 + selected_x, mlv_play_osd_y, "  %s  ", selected_item);
-    
+    int x = mlv_play_osd_x - total / 2;
+    int y = mlv_play_osd_y;
+
+    pb_round_rect(x, y, total, bar_h, bar_h / 2, PB_NAVY);
+    last_x = x; last_y = y; last_w = total; last_h = bar_h;
+
+    /* the content is drawn only once the bar is fully on screen */
+    if (y + bar_h <= os.y_max)
+    {
+        int cx = x + 8;
+
+        for(uint32_t pos = 0; pos < COUNT(mlv_play_osd_items); pos++)
+        {
+            int selected = (pos == mlv_play_osd_item);
+            int bg = selected ? PB_SKY : PB_NAVY;
+            int fg = selected ? PB_NAVY : PB_TEXT;
+
+            if (selected)
+            {
+                pb_round_rect(cx, y + 7, width[pos], cap_h, cap_h / 2, PB_SKY);
+            }
+
+            if (kind[pos] == PB_TEXT_BUTTON)
+            {
+                pb_text(cx + pad, y + (bar_h - fh) / 2, label[pos], fg, bg);
+            }
+            else
+            {
+                pb_icon(kind[pos], cx + width[pos] / 2, y + bar_h / 2, 10, fg);
+            }
+
+            cx += width[pos] + gap;
+        }
+    }
+
     return redraw;
 }
 
@@ -1578,11 +1784,7 @@ static void mlv_play_render_task(uint32_t priv)
             /* cheap redraw every time, sometimes do a more expensive clearing too */
             if(redraw_loop % 10)
             {
-                bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG), 0, 0, buffer->messages.topLeft);
-                bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG) | FONT_ALIGN_RIGHT, os.x_max, 0, buffer->messages.topRight);
-                bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG), 0, font_med.height, buffer->messages.botLeft);
-                bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG) | FONT_ALIGN_RIGHT, os.x_max, font_med.height, buffer->messages.botRight);
-                //bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG) | FONT_ALIGN_RIGHT, os.x_max, 2 * font_med.height, "pl: %d", mlv_playlist_entries);
+                mlv_play_draw_info(&buffer->messages, 0);
             }
             else
             {
@@ -1590,11 +1792,7 @@ static void mlv_play_render_task(uint32_t priv)
                 (
                     bmp_idle_copy(0,1);
                     bmp_draw_to_idle(1);
-                    bmp_fill(COLOR_BG, 0, 0, 720, 2 * font_med.height);
-                    bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG), 0, 0, buffer->messages.topLeft);
-                    bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG) | FONT_ALIGN_RIGHT, os.x_max, 0, buffer->messages.topRight);
-                    bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG), 0, font_med.height, buffer->messages.botLeft);
-                    bmp_printf(FONT(FONT_MED,COLOR_WHITE,COLOR_BG) | FONT_ALIGN_RIGHT, os.x_max, font_med.height, buffer->messages.botRight);
+                    mlv_play_draw_info(&buffer->messages, 1);
                     bmp_draw_to_idle(0);
                     bmp_idle_copy(1,0);
                 )
