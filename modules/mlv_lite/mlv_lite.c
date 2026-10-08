@@ -3591,6 +3591,13 @@ void init_mlv_chunk_headers(struct raw_info * raw_info)
         int fps = fps_get_current_x1000();
         file_hdr[thread].sourceFpsNom = fps ? fps : 1;
         file_hdr[thread].sourceFpsDenom = 1000;
+        if (fps >= 23973 && fps <= 23979)
+        {
+            /* 23.976: label it exactly as 24000/1001 instead of 23.973..23.979
+             * (the read-back above is truncated to 1/1000 fps) */
+            file_hdr[thread].sourceFpsNom = 24000;
+            file_hdr[thread].sourceFpsDenom = 1001;
+        }
     }
     
     memset(&rawi_hdr, 0, sizeof(mlv_rawi_hdr_t));
