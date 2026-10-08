@@ -138,6 +138,34 @@ typedef struct
     char botRight[SCREEN_MSG_LEN];
 } screen_msg_t;
 
+/* File name without the folder ("A:/DCIM/100CANON/M08-1805.MLV" -> "M08-1805.MLV"). */
+static const char *mlv_play_short_name(const char *path)
+{
+    const char *name = path;
+
+    for (const char *c = path; *c; c++)
+    {
+        if (*c == '/' || *c == '\\')
+        {
+            name = c + 1;
+        }
+    }
+    return name;
+}
+
+/* Clip the bottom-left text so it never runs into the frame counter on the right.
+ * Whatever does not fit is cut off at the end (the file name comes first, so it stays). */
+static void mlv_play_fit_left(char *left, const char *right)
+{
+    int avail = os.x_max - bmp_string_width(FONT_MED, (char *)right) - 24;
+    int len = strlen(left);
+
+    while (len > 4 && bmp_string_width(FONT_MED, left) > avail)
+    {
+        left[--len] = 0;
+    }
+}
+
 typedef struct 
 {
     uint32_t frameSize;
@@ -2087,8 +2115,9 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
                     snprintf(buffer->messages.topLeft, SCREEN_MSG_LEN, "%02d.%02d.%04d %02d:%02d:%02d", rtci_block.tm_mday, rtci_block.tm_mon + 1, 1900 + rtci_block.tm_year, rtci_block.tm_hour, rtci_block.tm_min, rtci_block.tm_sec);
                 }
                 
-                snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s: %dx%d %dbpp%s", filename, rawi_block.xRes, rawi_block.yRes, rawi_block.raw_info.bits_per_pixel, (main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92)?" LJ92":"");
+                snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s  %dx%d %dbpp%s", mlv_play_short_name(filename), rawi_block.xRes, rawi_block.yRes, rawi_block.raw_info.bits_per_pixel, (main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92)?" LJ92":"");
                 snprintf(buffer->messages.botRight, SCREEN_MSG_LEN, "%d/%d", vidf_block.frameNumber + 1, frame_count);
+                mlv_play_fit_left(buffer->messages.botLeft, buffer->messages.botRight);
                 
                 
                 if (mlv_play_exact_fps)
@@ -2322,8 +2351,9 @@ static void mlv_play_raw(char *filename, FILE **chunk_files, uint32_t chunk_coun
         snprintf(buffer->messages.topLeft, SCREEN_MSG_LEN, "");
         snprintf(buffer->messages.topRight, SCREEN_MSG_LEN, "");
             
-        snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s: %dx%d", filename, res_x, res_y);
+        snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s  %dx%d", mlv_play_short_name(filename), res_x, res_y);
         snprintf(buffer->messages.botRight, SCREEN_MSG_LEN, "%d/%d",  i+1, frame_count-1);
+        mlv_play_fit_left(buffer->messages.botLeft, buffer->messages.botRight);
         
         
         /* update dimensions */
