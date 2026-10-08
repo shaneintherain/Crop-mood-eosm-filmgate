@@ -4743,7 +4743,7 @@ static MENU_SELECT_FUNC(slim_crop_mode_select)
     slim_crop_sync_from_backend();
     int fmt = slim_film_sync();
     if (fmt < 0)
-        fmt = (delta < 0) ? SLIM_FILM_FORMATS - 1 : 0; /* leaving a legacy mode */
+        fmt = 0; /* leaving a legacy mode: always start at A35, whichever way was pressed */
     else
         fmt = MOD(fmt + (delta < 0 ? -1 : 1), SLIM_FILM_FORMATS);
     slim_film_apply(fmt);
@@ -5124,7 +5124,9 @@ int crop_rec_touch_adjust(int control, int delta)
             /* Direct Live View editor intentionally offers only 1x1/1x3/3x3.
              * Full-Res LV remains available in the regular Movie menu. */
             slim_crop_sync_from_backend();
-            slim_crop_mode_select(0, delta); /* Film Format */
+            /* Film Format: the on-screen down arrow steps to the next smaller film
+             * (A35 > A35-ANA > S16 > 16mm > S8 > 8mm), the up arrow steps back. */
+            slim_crop_mode_select(0, -delta);
             break;
         case 1:
             slim_crop_sync_from_backend();
