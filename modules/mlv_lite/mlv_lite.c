@@ -808,6 +808,29 @@ static int film_align_res_y(int rx, int ry, int max_y)
     return film_align_height(rx, ry, max_y, BPP, OUTPUT_COMPRESSION);
 }
 
+/* The Film Format frame (the black bars around it) only used to be re-evaluated when the raw
+ * buffer parameters changed or the ML menu was opened.  After boot the zoom state settles
+ * after the last raw update (x1 -> x5), so the bars stayed missing until a menu was opened and
+ * closed.  Re-evaluate whenever one of the inputs of refresh_cropmarks() changes.
+ * refresh_cropmarks() only sets the frame coordinates; the drawing is done elsewhere. */
+static void refresh_cropmarks_if_changed(void)
+{
+    static int last_sig = INT_MIN;
+    int sig = (lv ? 1 : 0)
+            | (lv_dispsize << 1)
+            | (crop_rec_film_format() << 6)
+            | (raw_video_enabled ? 1 << 12 : 0)
+            | ((is_LCD_Output() ? 1 : 0) << 13)
+            | ((is_480p_Output() ? 1 : 0) << 14);
+    sig ^= (res_x * 7 + res_y * 13 + skip_x * 17 + skip_y * 19) << 15;
+
+    if (sig != last_sig)
+    {
+        last_sig = sig;
+        refresh_cropmarks();
+    }
+}
+
 /* fixme: called from many tasks */
 static REQUIRES(LiveViewTask)
 void update_cropping_offsets()
@@ -2429,6 +2452,7 @@ unsigned int raw_rec_polling_cbr(unsigned int unused)
     if (RAW_IS_IDLE && !gui_menu_shown())
     {
         refresh_raw_settings(0);
+        refresh_cropmarks_if_changed();
     }
     
     /* update status messages */
@@ -4887,8 +4911,11 @@ unsigned int raw_rec_keypress_cbr(unsigned int key)
     if (!RAW_IS_IDLE && key == MODULE_KEY_PRESS_ZOOMIN)
         return 0;
 
-    /* start/stop recording with the LiveView key */
-    int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC);
+    /* start/stop recording with the LiveView key; on the EOS M the shutter release
+     * (full press) does the same.  Same preconditions as above: raw video on, movie mode,
+     * LiveView showing (no menu), and not in the x10 focus zoom. */
+    int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC ||
+                           (cam_eos_m && key == MODULE_KEY_PRESS_FULLSHUTTER && lv_dispsize != 10));
     
     if (rec_key_pressed)
     {
