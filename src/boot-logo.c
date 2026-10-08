@@ -5,6 +5,9 @@
 #include "lvinfo.h"
 #include "menu.h"
 #include "zebra.h"
+#include "raw.h"
+#include "propvalues.h"
+#include "state-object.h"
 
 #if 0 /* superseded by the color startup bitmap below */
 struct boot_logo_span { uint16_t y; uint16_t x; uint16_t width; };
@@ -1617,15 +1620,34 @@ static void boot_logo_release_canvas(void)
     bmp_draw_to_idle(0);
 }
 
+/* Shortly after boot the EOS M switches Live View between zoom x1 and x5 and Canon rebuilds its
+ * overlay layer each time, wiping what ML has drawn (the Film Format bars).  Keep the splash up
+ * until Live View has stayed the same for a moment.  Must be called on every pass of the loop. */
+static int boot_lv_settled(void)
+{
+    static int last_sig = -1;
+    static int t_change = 0;
+    int now = get_ms_clock();
+    int sig = (lv ? 1 : 0) | (lv_dispsize << 1) | (raw_lv_is_enabled() ? (1 << 12) : 0);
+    if (sig != last_sig)
+    {
+        last_sig = sig;
+        t_change = now;
+    }
+    return now - t_change >= 1000;
+}
+
 static void boot_logo_task(void *unused)
 {
     (void) unused;
 
     const int fallback_handoff_time = boot_logo_hide_time + 500;
+    const int settle_limit_time = boot_logo_hide_time + 4000;  /* never hold the splash longer than this */
     while (boot_logo_active)
     {
         int splash_time_done = get_ms_clock() >= boot_logo_hide_time;
-        int ml_display_ready = ml_started &&
+        int lv_settled = boot_lv_settled() || get_ms_clock() >= settle_limit_time;
+        int ml_display_ready = ml_started && lv_settled &&
             (liveview_display_idle() || get_ms_clock() >= fallback_handoff_time);
         if (splash_time_done && ml_display_ready) break;
 
@@ -1649,6 +1671,10 @@ static void boot_logo_task(void *unused)
         boot_logo_handoff_pending = 0;
         BMP_LOCK( boot_logo_release_canvas(); )
         boot_logo_active = 0;
+
+        /* Releasing the canvas wipes everything drawn during the splash (e.g. the Film Format
+         * bars); redraw like closing a menu does. */
+        redraw();
     }
 }
 

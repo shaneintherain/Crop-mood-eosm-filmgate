@@ -121,7 +121,8 @@ static int crop_preset_fps = 0;
  */
 CONFIG_INT("crop.button_SET",       SET_button, 1);
 static CONFIG_INT("crop.button_H-Shutter", Half_Shutter, 2);
-CONFIG_INT("crop.button_INFO",      INFO_button, 0);
+CONFIG_INT("crop.button_INFO",      INFO_button, 6);  /* 6 = Quick Panel (EOS M default) */
+static CONFIG_INT("crop.shutter_rec", Shutter_rec, 0); /* EOS M slim: 0=OFF, 1=half-press starts/stops recording */
 CONFIG_INT("crop.shutter_zoom", Shutter_zoom, 0); /* EOS M slim: 0=OFF, 1=hold x10, 2=sticky x10 */
 CONFIG_INT("crop.arrows_U_D",       Arrows_U_D, 3); /* ISO */
 CONFIG_INT("crop.more_hacks",       more_hacks, 1);
@@ -308,6 +309,7 @@ static void slim_zoom_from_x10(void)
 static int slim_handle_shutter_zoom(unsigned int key)
 {
     if (!Shutter_zoom || !is_EOSM) return 0;
+    if (Shutter_rec) return 0;   /* Shutter record owns the half-press */
     if (!lv || gui_menu_shown() || RECORDING) return 0;
     if (lv_disp_mode != 0) return 0;
 
@@ -401,7 +403,7 @@ static void crop_rec_adjust_iso(int sign)
 
 /* EOS M Settings → INFO Button:
  * 0=OFF, 1=Histogram, 2=Waveform, 3=Zebras, 4=False Color,
- * 5=Framing, 6=Quick Panel.
+ * 5=Framing, 6=Quick Panel, 7=Kill Global Draw (toggle).
  * Returns: 1 = handled (block Canon), -1 = pass to Canon, 0 = not our INFO mapping. */
 static int slim_handle_info_button(unsigned int key)
 {
@@ -463,6 +465,14 @@ static int slim_handle_info_button(unsigned int key)
             {
                 menu_quick_screen_open();
                 gui_open_menu();
+            }
+            return 1;
+
+        case 7: /* Kill Global Draw: same setting as Movie -> Kill Global Draw */
+            if (!RECORDING && lv && is_movie_mode() && !gui_menu_shown() && lv_disp_mode == 0)
+            {
+                int on = mlv_lite_toggle_kill_gd();
+                NotifyBox(2000, "Kill Global Draw: %s", on ? "ON" : "OFF");
             }
             return 1;
 
@@ -3567,6 +3577,7 @@ static int patch_active = 0;
 #define EOSM_LV_GUARD_CONTENT_SAMPLES 3
 static volatile int eosm_lv_guard_pending = 1;
 static volatile int eosm_lv_guard_busy = 0;
+
 static int eosm_lv_guard_started;
 static int eosm_lv_guard_state;
 static int eosm_lv_guard_stable_frames;
@@ -4239,8 +4250,8 @@ static struct menu_entry slim_info_button_menu[] = {
     {
         .name      = "INFO Button",
         .priv      = &INFO_button,
-        .max       = 6,
-        .choices   = CHOICES("OFF", "Histogram", "Waveform", "Zebras", "False Color", "Framing", "Quick Panel"),
+        .max       = 7,
+        .choices   = CHOICES("OFF", "Histogram", "Waveform", "Zebras", "False Color", "Framing", "Quick Panel", "Kill Global Draw"),
         .edit_mode = EM_INLINE_ADJUST,
         .update    = slim_info_button_update,
         .icon_type = IT_DICE,
@@ -4277,6 +4288,16 @@ static struct menu_entry slim_info_button_menu[] = {
         .icon_type = IT_DICE,
         .help      = "Half-shutter x10 zoom (same as SET). ON: hold to zoom; Sticky: tap to toggle.",
         .help2     = "Only in movie LV with ML overlays. Not active while recording.",
+    },
+    {
+        .name      = "Shutter record",
+        .priv      = &Shutter_rec,
+        .max       = 1,
+        .choices   = CHOICES("OFF", "Half-press"),
+        .edit_mode = EM_INLINE_ADJUST,
+        .icon_type = IT_DICE,
+        .help      = "Half-press the shutter button to start/stop recording (movie mode).",
+        .help2     = "Press only halfway: a full press still takes a photo. Replaces Shutter zoom.",
     },
 };
 
@@ -4383,6 +4404,11 @@ static int slim_film_active(void)
 }
 
 /* used by mlv_lite; reads the real crop mode, not the menu state */
+int crop_rec_shutter_record()
+{
+    return is_EOSM && Shutter_rec;
+}
+
 int crop_rec_film_format()
 {
     int fmt = slim_film_active();
@@ -5288,6 +5314,7 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
     (void *)&crop_rec_touch_get_value,
     (void *)&crop_rec_custom_adjust,
     (void *)&crop_rec_film_format,
+    (void *)&crop_rec_shutter_record,
     (void *)&crop_rec_lv_transition_busy,
     (void *)&crop_rec_lv_transition_diag,
 };
@@ -7298,6 +7325,15 @@ static LVINFO_UPDATE_FUNC(frame_info)
         int n = strlen(buffer);
         if (n > 5 && streq(buffer + n - 5, " Crop"))
             buffer[n - 5] = 0;
+
+        /* anamorphic frames ("2x 1.18:1", "1.33x 4:3"): add room on both sides so the text
+         * does not crowd the film name on its left or the bit depth on its right */
+        if (strstr(buffer, "x ") != NULL)
+        {
+            char tmp[16];
+            snprintf(tmp, sizeof(tmp), "%s", buffer);
+            snprintf(buffer, sizeof(buffer), "  %s  ", tmp);
+        }
     }
 }
 
@@ -7667,6 +7703,7 @@ MODULE_CONFIGS_START()
     MODULE_CONFIG(SET_button)
     MODULE_CONFIG(INFO_button)
     MODULE_CONFIG(Shutter_zoom)
+    MODULE_CONFIG(Shutter_rec)
     MODULE_CONFIG(tapdisp)
     MODULE_CONFIG(Arrows_L_R)
     MODULE_CONFIG(Arrows_U_D)

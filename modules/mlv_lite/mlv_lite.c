@@ -808,6 +808,89 @@ static int film_align_res_y(int rx, int ry, int max_y)
     return film_align_height(rx, ry, max_y, BPP, OUTPUT_COMPRESSION);
 }
 
+/* The Film Format frame (the black bars around it) only used to be re-evaluated when the raw
+ * buffer parameters changed or the ML menu was opened.  After boot the zoom state settles
+ * after the last raw update (x1 -> x5), so the bars stayed missing until a menu was opened and
+ * closed.  Re-evaluate whenever one of the inputs of refresh_cropmarks() changes.
+ * refresh_cropmarks() only sets the frame coordinates; the drawing is done elsewhere. */
+static void refresh_cropmarks_if_changed(void)
+{
+    static int last_sig = INT_MIN;
+    int sig = (lv ? 1 : 0)
+            | (lv_dispsize << 1)
+            | (crop_rec_film_format() << 6)
+            | (raw_video_enabled ? 1 << 12 : 0)
+            | ((is_LCD_Output() ? 1 : 0) << 13)
+            | ((is_480p_Output() ? 1 : 0) << 14);
+    sig ^= (res_x * 7 + res_y * 13 + skip_x * 17 + skip_y * 19) << 15;
+
+    if (sig != last_sig)
+    {
+        last_sig = sig;
+        refresh_cropmarks();
+    }
+}
+
+/* Safety net: the Film Format bars can be wiped by Canon after boot (zoom x1/x5 switching).
+ * Once Live View has been stable for a moment, check one pixel inside a bar; only if it is
+ * not there do the same full redraw that closing a menu does, once.  Opening any menu counts
+ * as done (its close redraws). */
+static int film_bars_missing(void)
+{
+    int x, y, w, h;
+    if (!film_frame_rect(&x, &y, &w, &h))
+        return 0;
+
+    if (x >= 8)
+        return bmp_getpixel(x / 2, y + h / 2) != COLOR_BLACK;
+    if (y >= 8)
+        return bmp_getpixel(x + w / 2, y / 2) != COLOR_BLACK;
+    return 0;   /* no bars to check */
+}
+
+static void film_frame_settle_redraw(void)
+{
+    static int done = 0;
+    static int t_start = 0;
+
+    if (gui_menu_shown())
+    {
+        done = 1;
+        t_start = 0;
+        return;
+    }
+
+    if (!lv || !film_frame_possible())
+    {
+        done = 0;
+        t_start = 0;
+        return;
+    }
+
+    if (done)
+        return;
+
+    if (!RAW_IS_IDLE || !liveview_display_idle())
+    {
+        t_start = 0;
+        return;
+    }
+
+    int now = get_ms_clock();
+    if (!t_start)
+    {
+        t_start = now;
+        return;
+    }
+
+    if (now - t_start > 1500)
+    {
+        done = 1;
+        if (film_bars_missing())
+            redraw();
+    }
+}
+
 /* fixme: called from many tasks */
 static REQUIRES(LiveViewTask)
 void update_cropping_offsets()
@@ -2429,7 +2512,9 @@ unsigned int raw_rec_polling_cbr(unsigned int unused)
     if (RAW_IS_IDLE && !gui_menu_shown())
     {
         refresh_raw_settings(0);
+        refresh_cropmarks_if_changed();
     }
+    film_frame_settle_redraw();
     
     /* update status messages */
     show_recording_status();
@@ -4887,8 +4972,15 @@ unsigned int raw_rec_keypress_cbr(unsigned int key)
     if (!RAW_IS_IDLE && key == MODULE_KEY_PRESS_ZOOMIN)
         return 0;
 
-    /* start/stop recording with the LiveView key */
-    int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC);
+    /* Settings -> Shutter record (EOS M): a half-press of the shutter button starts/stops
+     * recording, like the REC key (a full press is not reported to ML).  The release is
+     * swallowed so Canon does not see half of the pair. */
+    int shutter_rec = crop_rec_shutter_record();
+    if (shutter_rec && key == MODULE_KEY_UNPRESS_HALFSHUTTER)
+        return 0;
+
+    int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC ||
+                           (shutter_rec && key == MODULE_KEY_PRESS_HALFSHUTTER));
     
     if (rec_key_pressed)
     {
@@ -5030,6 +5122,12 @@ static int preview_dirty = 0;
 
 /* EOS M slim: INFO Button → framing (low-res correct framing, like Preview → Framing). */
 static int slim_info_framing_active = 0;
+
+int mlv_lite_toggle_kill_gd(void)
+{
+    kill_gd = !kill_gd;
+    return kill_gd;
+}
 
 void mlv_lite_info_framing_toggle(void)
 {
