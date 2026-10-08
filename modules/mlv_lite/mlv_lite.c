@@ -3859,6 +3859,8 @@ void raw_video_rec_task(uint32_t thread)
     int named_clip = 0;      /* set once this run has picked a new movie file name */
     int last_block_size = 0; /* for detecting early stops */
     int liveview_hacked = 0;
+    int lv_paused_early = 0;   /* Live View was already paused by the early-abort path */
+    int lv_pause_deferred = 0; /* normal stop: Live View is paused right before cleanup */
     int last_write_timestamp = 0;    /* last FIO_WriteFile call */        
     int last_processed_frame = 0;
     static int fps;
@@ -4289,6 +4291,7 @@ abort_and_check_early_stop:
 #ifndef CONFIG_EOSM
                 /* faster writing speed that way */
                 PauseLiveView();
+                lv_paused_early = 1;
 #endif
             }
 
@@ -4333,8 +4336,20 @@ abort_and_check_early_stop:
 #ifndef CONFIG_EOSM
     if (!RECORDING_H264 && thread == 0)
     {
-        /* faster writing speed that way */
-        PauseLiveView();
+        if (cam_eos_m && !lv_paused_early)
+        {
+            /* Normal stop on the EOS M: keep Live View running while the last
+             * frames are written (capture has already stopped), so the screen
+             * is not black for the whole write-out.  Canon still needs the
+             * usual pause/resume cycle to restore its exposure and button
+             * state, so that is done right before cleanup instead. */
+            lv_pause_deferred = 1;
+        }
+        else
+        {
+            /* faster writing speed that way */
+            PauseLiveView();
+        }
 
         /* PauseLiveView breaks UI locks - why? */
         gui_uilock(UILOCK_EVERYTHING);
@@ -4431,6 +4446,15 @@ abort_and_check_early_stop:
     }
 
 cleanup:
+#ifndef CONFIG_EOSM
+    if (lv_pause_deferred)
+    {
+        /* everything is written: do the pause that normally comes first */
+        lv_pause_deferred = 0;
+        PauseLiveView();
+        gui_uilock(UILOCK_EVERYTHING);
+    }
+#endif
     if (f) finish_chunk(f, thread);
     if (!written_total[thread])
     {
