@@ -63,25 +63,12 @@
 
 struct semaphore * gui_sem;
 
-/* TEST BUILD ONLY: last button codes seen near the shutter button (0x4C..0x5B), shown on
- * screen by shoot_task, to find out what the EOS M sends for a full shutter press. */
-int dbg_btn_ring[4] = { 0, 0, 0, 0 };
-
 // return 0 if you want to block this event
 static int handle_buttons(struct event * event)
 {
     ASSERT(event->type == 0)
 
     if (event->type != 0) return 1; // only handle events with type=0 (buttons)
-
-    if (event->param >= 0x4C && event->param <= 0x5B)
-    {
-        dbg_btn_ring[0] = dbg_btn_ring[1];
-        dbg_btn_ring[1] = dbg_btn_ring[2];
-        dbg_btn_ring[2] = dbg_btn_ring[3];
-        dbg_btn_ring[3] = event->param;
-    }
-
     if (handle_common_events_startup(event) == 0) return 0;
     extern int ml_started;
     if (!ml_started) return 1;

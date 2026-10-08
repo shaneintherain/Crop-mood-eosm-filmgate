@@ -831,10 +831,23 @@ static void refresh_cropmarks_if_changed(void)
     }
 }
 
-/* After boot the Film Format bars are not on screen until the ML menu has been opened and closed.
- * Closing the menu does a full screen redraw (redraw(): wipes the overlay layer, then re-draws the
- * cropmarks).  Do the same once, after Live View has been stable for a moment, so the bars show
- * up without opening a menu first.  Opening any menu counts as done (its close redraws). */
+/* Safety net: the Film Format bars can be wiped by Canon after boot (zoom x1/x5 switching).
+ * Once Live View has been stable for a moment, check one pixel inside a bar; only if it is
+ * not there do the same full redraw that closing a menu does, once.  Opening any menu counts
+ * as done (its close redraws). */
+static int film_bars_missing(void)
+{
+    int x, y, w, h;
+    if (!film_frame_rect(&x, &y, &w, &h))
+        return 0;
+
+    if (x >= 8)
+        return bmp_getpixel(x / 2, y + h / 2) != COLOR_BLACK;
+    if (y >= 8)
+        return bmp_getpixel(x + w / 2, y / 2) != COLOR_BLACK;
+    return 0;   /* no bars to check */
+}
+
 static void film_frame_settle_redraw(void)
 {
     static int done = 0;
@@ -873,7 +886,8 @@ static void film_frame_settle_redraw(void)
     if (now - t_start > 1500)
     {
         done = 1;
-        redraw();
+        if (film_bars_missing())
+            redraw();
     }
 }
 
@@ -4958,11 +4972,7 @@ unsigned int raw_rec_keypress_cbr(unsigned int key)
     if (!RAW_IS_IDLE && key == MODULE_KEY_PRESS_ZOOMIN)
         return 0;
 
-    /* start/stop recording with the LiveView key; on the EOS M the shutter release
-     * (full press) does the same.  Same preconditions as above: raw video on, movie mode,
-     * LiveView showing (no menu), and not in the x10 focus zoom. */
-    int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC ||
-                           (cam_eos_m && key == MODULE_KEY_PRESS_FULLSHUTTER && lv_dispsize != 10));
+    int rec_key_pressed = (key == MODULE_KEY_LV || key == MODULE_KEY_REC);
     
     if (rec_key_pressed)
     {
