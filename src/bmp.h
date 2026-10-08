@@ -79,13 +79,7 @@ inline uint8_t* bmp_vram_raw() { return bmp_vram_info[1].vram2; }
 #define BMP_HDMI_OFFSET 0
 
 /** Returns a pointer to the real BMP vram */
-#ifdef CONFIG_5DC
-inline uint8_t* bmp_vram_real() { return (uint8_t*) MEM(0x29328); }
-#elif defined(CONFIG_40D)
-inline uint8_t* bmp_vram_real() { return (uint8_t*) MEM(0x1E330); }
-#else
 error
-#endif
 
 extern int bmp_vram_idle_ptr;
 
@@ -101,7 +95,7 @@ inline uint8_t* BMP_VRAM_START(uint8_t* bmp_buf) { return bmp_buf; }
 
 #define SET_4BIT_PIXEL(p, x, color) *(char*)(p) = ((x) % 2) ? ((*(char*)(p) & 0x0F) | (D2V(color) << 4)) : ((*(char*)(p) & 0xF0) | (D2V(color) & 0x0F))
 
-#else // dryos
+#else
 
 #define BMP_W_PLUS 840
 #define BMP_W_MINUS -120
@@ -494,10 +488,6 @@ int bfnt_char_get_width(int c);
 #define ICON_FLASH_A 0xa29aee
 #define ICON_FLASH_B 0xa59aee
 
-#ifdef CONFIG_500D
-#undef ICON_VIDEOCAM
-#define ICON_VIDEOCAM ICON_FILM
-#endif
 
 #define ICON_ML_AUDIO -1
 #define ICON_ML_EXPO -2

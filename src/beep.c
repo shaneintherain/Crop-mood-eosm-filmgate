@@ -257,17 +257,11 @@ static void wav_play(char* filename)
     // => bit 2 = 16bit, bit 1 = stereo, bit 0 = 8bit
     MEM(0xC0920210) = (channels == 2 ? 2 : 0) | (bitspersample == 16 ? 4 : 1); // SetASIFDACMode*
     wav_ibuf = 0;
-#ifdef CONFIG_600D
-    PowerAudioOutput();
-    StartASIFDMADAC(data, N1, buf2, N2, asif_continue_cbr, 0);
-    audio_configure(1);
-#else
     PowerAudioOutput();
     audio_configure(1);
     SetAudioVolumeOut(COERCE(beep_volume, 1, ASIF_MAX_VOL));
     
     StartASIFDMADAC(data, N1, buf2, N2, asif_continue_cbr, 0);
-#endif
     return;
     
 wav_cleanup:
@@ -448,10 +442,6 @@ static void asif_rec_continue_cbr()
         file = NULL;
         audio_recording = 0;
         info_led_off();
-#ifdef CONFIG_6D
-		void StopASIFDMAADC();
-		StopASIFDMAADC(asif_rec_stop_cbr, 0);
-#endif
         return;
     }
     SetNextASIFADCBuffer(buf, WAV_BUF_SIZE);
@@ -473,7 +463,7 @@ static void wav_record(char* filename, int show_progress)
     audio_recording = 1;
     audio_recording_start_time = get_seconds_clock();
     
-#if defined(CONFIG_7D) || defined(CONFIG_6D) || defined(CONFIG_70D) || defined(CONFIG_EOSM)
+#if defined(CONFIG_EOSM)
     /* experimental for 7D now, has to be made generic */
 	/* Enable audio Device */
     void SoundDevActiveIn (uint32_t);
@@ -491,7 +481,7 @@ static void wav_record(char* filename, int show_progress)
         msleep(100);
         if (show_progress) record_show_progress();
     }
-#if defined(CONFIG_7D) || defined(CONFIG_6D) || defined(CONFIG_70D) || defined(CONFIG_EOSM)
+#if defined(CONFIG_EOSM)
     /* experimental for 7D now, has to be made generic */
 	/* Disable Audio */
     void SoundDevShutDownIn();
@@ -561,12 +551,6 @@ static void play_test_tone()
     if (!is_safe_to_beep()) return;
     if (audio_stop_rec_or_play()) return;
 
-#ifdef CONFIG_600D
-    if (AUDIO_MONITORING_HEADPHONES_CONNECTED){
-        NotifyBox(2000,"600D does not support\nPlay and monitoring together");
-        return;
-    }
-#endif
 
     beep_type = BEEP_LONG;
     give_semaphore(beep_sem);
@@ -586,12 +570,6 @@ void unsafe_beep()
     if (audio_recording) return;
     #endif
 
-#ifdef CONFIG_600D
-    if (AUDIO_MONITORING_HEADPHONES_CONNECTED){
-        NotifyBox(2000,"600D does not support\nPlay and monitoring together");
-        return;
-    }
-#endif
     beep_type = BEEP_SHORT;
     give_semaphore(beep_sem);
 }
@@ -859,12 +837,6 @@ static void wav_playback_do()
 static void playback_start(void* priv, int delta)
 {
     if (audio_stop_rec_or_play()) return;
-#ifdef CONFIG_600D
-    if (AUDIO_MONITORING_HEADPHONES_CONNECTED){
-        NotifyBox(2000,"600D does not support\nPlay and monitoring together");
-        return;
-    }
-#endif
     beep_type = BEEP_WAV;
     give_semaphore(beep_sem);
 }
@@ -1002,7 +974,6 @@ static MENU_UPDATE_FUNC(beep_update)
 
 static struct menu_entry beep_menus[] = {
 #ifdef FEATURE_BEEP
-#if !defined(CONFIG_7D)
     {
         .name = "Speaker Volume",
         .priv       = &beep_volume,
@@ -1011,7 +982,6 @@ static struct menu_entry beep_menus[] = {
         .icon_type = IT_PERCENT,
         .help = "Volume for ML beeps and WAV playback (1-5).",
     },
-#endif
     {
         .name = "Beep, test tones",
         .select = menu_open_submenu,
@@ -1095,21 +1065,6 @@ static struct menu_entry beep_menus[] = {
 
 
 #if 0 // wtf is that?! start recording at startup?!
-#ifdef CONFIG_600D
-void Load_ASIFDMAADC(){
-    uint8_t* buf1 = (uint8_t*)wav_buf[0];
-    uint8_t* buf2 = (uint8_t*)wav_buf[1];
-    if (!buf1) return;
-    if (!buf2) return;
-
-    audio_recording = 0;
-    SetSamplingRate(48000, 1);
-    MEM(0xC092011C) = 4; // SetASIFADCModeSingleINT16
-
-    wav_ibuf = 0;
-    StartASIFDMAADC(buf1, WAV_BUF_SIZE, buf2, WAV_BUF_SIZE, asif_rec_continue_cbr, 0);
-}
-#endif
 #endif
 
 static void beep_init()
@@ -1154,7 +1109,7 @@ void WAV_StopRecord()
     #endif
 }
 
-#else // beep not working, keep dummy stubs
+#else
 
 void unsafe_beep(){}
 void beep(){}

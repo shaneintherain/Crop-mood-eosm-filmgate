@@ -120,13 +120,6 @@ int get_expsim()
 {
     //bmp_printf(FONT_MED, 50, 50, "mov: %d expsim:%d lv_mov: %d", is_movie_mode(), _expsim, lv_movie_select);
     
-#if defined(CONFIG_7D)
-    /* 7D has expsim in video mode, but expsim is for photo mode only. so return 2 if in video mode */
-    if(is_movie_mode())
-    {
-        return 2;
-    }
-#endif
     if (_expsim == 3) return 0; /* on 5D3, this means "off" and 0 means "when pressing DOF" */
     return _expsim;
 }
@@ -144,11 +137,6 @@ void set_expsim( int x )
     {
         prop_request_change_wait(PROP_LIVE_VIEW_VIEWTYPE, &x, 4, 1000);
         
-        #ifdef CONFIG_5D2
-        // Canon bug: FPS is not updated when toggling photo->movie while LiveView is active
-        // No side effects in Canon firmware, since this is normally done in Canon menu (when LV is not running)
-        if (x == 2) video_refresh();
-        #endif
     }
 }
 
@@ -158,31 +146,13 @@ expsim_toggle( void * priv, int delta)
 {
     #ifdef CONFIG_EXPSIM_MOVIE
     int e = MOD(get_expsim() + delta, 3);
-    #else
+#else
     if (is_movie_mode()) return;
     int e = !get_expsim();
     #endif
 
     set_expsim(e);
     
-    #ifdef CONFIG_5D2
-    if (e == 2) // movie display, make sure movie recording is enabled
-    {
-        if (lv_movie_select != LVMS_ENABLE_MOVIE)
-        {
-            int x = LVMS_ENABLE_MOVIE;
-            prop_request_change(PROP_LV_MOVIE_SELECT, &x, 4);
-        }
-    }
-    else // photo display, disable movie recording
-    {
-        if (lv_movie_select == LVMS_ENABLE_MOVIE)
-        {
-            int x = 1;
-            prop_request_change(PROP_LV_MOVIE_SELECT, &x, 4);
-        }
-    }
-    #endif
 }
 
 static MENU_UPDATE_FUNC(expsim_display)
@@ -221,7 +191,7 @@ static MENU_UPDATE_FUNC(expsim_display)
 }
 #endif
 
-#else // no _expsim, use some dummy stubs
+#else
 void set_expsim(int expsim){};
 #endif
 
@@ -372,11 +342,7 @@ void clear_lv_afframe()
     afframe_countdown = 0;
 }
 
-#if defined(CONFIG_5D3) || defined(CONFIG_6D)
-static CONFIG_INT("play.quick.zoom", quickzoom, 0);
-#else
 static CONFIG_INT("play.quick.zoom", quickzoom, 2);
-#endif
 
 #define PLAY_ACTION_TRIGGER_WHEEL 0
 #define PLAY_ACTION_TRIGGER_LR 1
@@ -392,9 +358,6 @@ int timelapse_playback = 0;
 
 static void playback_set_wheel_action(int dir)
 {
-    #ifdef CONFIG_5DC
-    play_set_wheel_action = COERCE(play_set_wheel_action, 3, 4);
-    #endif
     #ifdef FEATURE_PLAY_EXPOSURE_FUSION
     if (play_set_wheel_action == 1) expfuse_preview_update(dir); else
     #endif
@@ -438,7 +401,7 @@ static void print_set_maindial_hint(int set)
             #ifdef CONFIG_TOUCHSCREEN
             #warning FIXME: dialog_redraw breaks touchscreen functionality in PLAY mode, why?! (issue #2901)
             bmp_idle_copy(1, 0);
-            #else
+#else
             redraw();
             #endif
         }
@@ -455,9 +418,6 @@ static void set_maindial_cleanup()
     expfuse_running = 0;
     #endif
 
-    #if defined(CONFIG_5DC)
-    expo_adjust_playback(0); // reset value
-    #endif
 }
 #endif
 
@@ -488,20 +448,18 @@ int handle_set_wheel_play(struct event * event)
       // (protect, rotate, rate etc..) so we better use Av button instead
       #ifdef CONFIG_100D
         if (event->param == BGMT_PRESS_AV)
-      #else
+#else
         if (event->param == BGMT_PRESS_SET)
       #endif
         {
             // for cameras where SET does not send an unpress event, pressing SET again should do the trick
             set_maindial_action_enabled = !set_maindial_action_enabled;
-            #if !defined(CONFIG_50D) && !defined(CONFIG_5DC)
             ASSERT(set_maindial_action_enabled); // most cameras are expected to send Unpress SET event (if they don't, one needs to fix the quick erase feature)
-            #endif
             print_set_maindial_hint(set_maindial_action_enabled);
         }
       #ifdef CONFIG_100D
         else if (event->param == BGMT_UNPRESS_AV)
-      #else
+#else
         else if (event->param == BGMT_UNPRESS_SET)
       #endif        
         {
@@ -531,7 +489,6 @@ int handle_set_wheel_play(struct event * event)
         }
     
         #ifdef FEATURE_QUICK_ERASE
-        #if !defined(CONFIG_5D3) && !defined(CONFIG_5DC) && !defined(CONFIG_50D) // 5D3: Canon has it; 5Dc/50D: no unpress SET event
         if (quick_delete)
         {
             if (event->param == BGMT_TRASH)
@@ -543,7 +500,6 @@ int handle_set_wheel_play(struct event * event)
                 return 0;
             }
         }
-        #endif
         #endif
     }
 
@@ -571,16 +527,6 @@ int handle_set_wheel_play(struct event * event)
     #endif
     
     #ifdef FEATURE_QUICK_ERASE
-    #if defined(CONFIG_5DC) || defined(CONFIG_50D) // SET does not send "unpress", so just move cursor on "erase" by default
-    if (quick_delete && PLAY_MODE)
-    {
-        if (event->param == BGMT_TRASH)
-        {
-            fake_simple_button(BGMT_WHEEL_DOWN);
-            return 1;
-        }
-    }
-    #endif
     #endif
 
     return 1;
@@ -620,9 +566,6 @@ void play_lv_key_step()
         NotifyBoxHide();
         fake_simple_button(BGMT_Q); // rate image
         fake_simple_button(BGMT_PRESS_DOWN);
-        #if defined(CONFIG_6D) // too fast
-        msleep(200);
-        #endif
     
         // for photos, we need to go down 2 steps
         // for movies, we only need 1 step
@@ -632,10 +575,8 @@ void play_lv_key_step()
 
         #ifdef BGMT_UNPRESS_UDLR
         fake_simple_button(BGMT_UNPRESS_UDLR);
-        #else
-        #ifndef CONFIG_6D // unpress produces another unwanted curser move
+#else
         fake_simple_button(BGMT_UNPRESS_DOWN);
-        #endif
         #endif
 
         // alter rating N times
@@ -673,23 +614,6 @@ void play_lv_key_step()
 #endif
 
 #ifdef FEATURE_LV_BUTTON_PROTECT
-#ifdef CONFIG_5D2
-static volatile int protect_running = 0;
-static void protect_image_task()
-{
-    protect_running = 1;
-    StartPlayProtectGuideApp();
-    fake_simple_button(BGMT_PRESS_SET);
-    fake_simple_button(BGMT_UNPRESS_SET);
-    msleep(100);
-    intptr_t h = get_current_dialog_handler();
-    if (h == (intptr_t)0xffb6aebc) // ?! null code here...
-    {
-        StopPlayProtectGuideApp();
-    }
-    protect_running = 0;
-}
-#endif
 #endif
 
 #if defined(FEATURE_LV_BUTTON_PROTECT) || defined(FEATURE_LV_BUTTON_RATE)
@@ -698,19 +622,6 @@ int handle_lv_play(struct event * event)
 {
     if (!play_lv_action) return 1;
 
-#ifdef CONFIG_5D2
-    if (event->param == BGMT_LV && PLAY_MODE)
-    {
-        if (protect_running) return 0;
-        
-        if (is_pure_play_photo_or_movie_mode())
-        {
-            protect_running = 1;
-            task_create("protect_task", 0x1e, 0x1000, protect_image_task, 0);
-            return 0;
-        }
-    }
-#else
     if (!rating_in_progress && PLAY_MODE && (event->param == BGMT_LV
         #ifdef FEATURE_LV_BUTTON_RATE_UPDOWN
         || ((event->param == BGMT_PRESS_UP || event->param == BGMT_PRESS_DOWN)
@@ -739,22 +650,13 @@ int handle_lv_play(struct event * event)
         if (play_lv_action == 1)
         {
            fake_simple_button(BGMT_Q); // toggle protect current image
-           #ifdef CONFIG_6D
-           fake_simple_button(BGMT_PRESS_DOWN);
-           msleep(100);
-           fake_simple_button(BGMT_PRESS_UP);
-           msleep(100);
            fake_simple_button(BGMT_WHEEL_DOWN);
-           #else
-           fake_simple_button(BGMT_WHEEL_DOWN);
-           #endif
            fake_simple_button(BGMT_Q);
         }
         #endif
         
         return 0;
     }
-#endif
     return 1;
 }
 #endif
@@ -822,12 +724,10 @@ int handle_fast_zoom_box(struct event * event)
     if (event->param == 
         #ifdef BGMT_JOY_CENTER
         BGMT_JOY_CENTER
-        #else
+#else
         BGMT_PRESS_SET
         #endif
-        #ifndef CONFIG_550D // 550D should always center focus box with SET (it doesn't do by default)
         && (focus_box_lv_jump || (RECORDING && is_manual_focus()))
-        #endif
         #ifdef FEATURE_LV_FOCUS_BOX_FAST
         && !arrow_pressed
         #endif
@@ -859,7 +759,7 @@ int handle_fast_zoom_box(struct event * event)
         else if (
             #ifdef BGMT_UNPRESS_UDLR
             event->param == BGMT_UNPRESS_UDLR ||
-            #else
+#else
             event->param == BGMT_UNPRESS_LEFT ||
             event->param == BGMT_UNPRESS_RIGHT ||
             event->param == BGMT_UNPRESS_UP ||
@@ -902,7 +802,7 @@ int handle_fast_zoom_in_play_mode(struct event * event)
         #ifdef IMGPLAY_ZOOM_POS_X
         #ifdef BGMT_JOY_CENTER
         else if (event->param == BGMT_JOY_CENTER && (int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR) > 3 && is_pure_play_photo_mode()) 
-        #else
+#else
         else if (event->param == BGMT_PRESS_SET && (int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR) > 3 && is_pure_play_photo_mode())
         #endif
         {
@@ -912,12 +812,8 @@ int handle_fast_zoom_in_play_mode(struct event * event)
                 IMGPLAY_ZOOM_POS_X = IMGPLAY_ZOOM_POS_X_CENTER;
                 IMGPLAY_ZOOM_POS_Y = IMGPLAY_ZOOM_POS_Y_CENTER;
                 MEM(IMGPLAY_ZOOM_LEVEL_ADDR) -= 1;
-                #ifdef CONFIG_5D3
-                fake_simple_button(BGMT_WHEEL_RIGHT);
-                #else
                 fake_simple_button(BGMT_PRESS_ZOOM_IN);
                 fake_simple_button(BGMT_UNPRESS_ZOOM_IN);
-                #endif
                 return 0;
             }
         }
@@ -1033,14 +929,6 @@ tweak_task( void* unused)
                 {
                     info_led_on();
                     quickzoom_pressed = 0;
-                    #ifdef CONFIG_5DC
-                        MEM(IMGPLAY_ZOOM_LEVEL_ADDR) = MAX((int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR), IMGPLAY_ZOOM_LEVEL_MAX - 1);
-                        MEM(IMGPLAY_ZOOM_LEVEL_ADDR + 4) = MAX((int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR + 4), IMGPLAY_ZOOM_LEVEL_MAX - 1);
-                        fake_simple_button(BGMT_PRESS_ZOOM_IN); 
-                        fake_simple_button(BGMT_PRESS_UP);
-                        fake_simple_button(BGMT_UNPRESS_UDLR);
-                        // goes a bit off-center, no big deal
-                    #else
                     for (int i = 0; i < 30; i++)
                     {
                         MEM(IMGPLAY_ZOOM_LEVEL_ADDR) = MAX((int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR), IMGPLAY_ZOOM_LEVEL_MAX - 1);
@@ -1051,7 +939,6 @@ tweak_task( void* unused)
                         msleep(20);
                     }
                     fake_simple_button(BGMT_UNPRESS_ZOOM_IN);
-                    #endif
                     msleep(800); // not sure how to tell when it's safe to start zooming out
                     info_led_off();
                 }
@@ -1069,10 +956,6 @@ tweak_task( void* unused)
                     msleep(300);
                     while (!quickzoom_unpressed && PLAY_MODE) 
                     { 
-                        #ifdef CONFIG_5DC
-                        (int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR) = MIN((int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR) + 3, IMGPLAY_ZOOM_LEVEL_MAX);
-                        (int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR + 4) = MIN((int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR + 4) + 3, IMGPLAY_ZOOM_LEVEL_MAX);
-                        #endif
                         fake_simple_button(BGMT_PRESS_ZOOM_IN);
                         msleep(50);
                     }
@@ -1085,10 +968,6 @@ tweak_task( void* unused)
                 msleep(300);
                 while (get_zoom_out_pressed() && PLAY_MODE) 
                 { 
-                    #ifdef CONFIG_5DC
-                    MEM(IMGPLAY_ZOOM_LEVEL_ADDR) = MAX((int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR) - 3, 0);
-                    MEM(IMGPLAY_ZOOM_LEVEL_ADDR + 4) = MAX((int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR + 4) - 3, 0);
-                    #endif
                     fake_simple_button(BGMT_PRESS_ZOOM_OUT);
                     msleep(50); 
                 }
@@ -1117,7 +996,6 @@ tweak_task( void* unused)
         }
 
         // faster focus box in playback
-        #ifndef CONFIG_5D3 // doesn't need this, it's already very fast
         if (arrow_pressed && is_pure_play_photo_mode() && quickzoom && (int32_t)MEM(IMGPLAY_ZOOM_LEVEL_ADDR) > 0)
         {
             msleep(200);
@@ -1130,7 +1008,6 @@ tweak_task( void* unused)
             }
             arrow_pressed = 0;
         }
-        #endif
         #endif
         
         #ifdef FEATURE_STICKY_DOF
@@ -1198,9 +1075,6 @@ CONFIG_INT("quick.review.allow.zoom", quick_review_allow_zoom, 0);
 
 #ifdef FEATURE_IMAGE_REVIEW_PLAY
 
-#ifdef CONFIG_5DC
-static int play_dirty = 0;
-#endif
 
 PROP_HANDLER(PROP_GUI_STATE)
 {
@@ -1212,9 +1086,6 @@ PROP_HANDLER(PROP_GUI_STATE)
         fake_simple_button(BGMT_PLAY);
     }
 
-#ifdef CONFIG_5DC
-    play_dirty = 2;
-#endif
 }
 
 #endif
@@ -1286,20 +1157,15 @@ CONFIG_INT("digital.zoom.shortcut", digital_zoom_shortcut, 1);
 
 static CONFIG_INT("arrows.mode", arrow_keys_mode, 0);
 static CONFIG_INT("arrows.set", arrow_keys_use_set, 1);
-#ifdef CONFIG_5D2
-    static CONFIG_INT("arrows.audio", arrow_keys_audio, 0);
-    static CONFIG_INT("arrows.iso_kelvin", arrow_keys_iso_kelvin, 0);
-#else
     #ifdef CONFIG_AUDIO_CONTROLS
         static CONFIG_INT("arrows.audio", arrow_keys_audio, 1);
-    #else
+#else
         static CONFIG_INT("arrows.audio", arrow_keys_audio_unused, 1);
         #ifdef FEATURE_ARROW_SHORTCUTS
             static int arrow_keys_audio = 0;
         #endif
     #endif
     static CONFIG_INT("arrows.iso_kelvin", arrow_keys_iso_kelvin, 1);
-#endif
 static CONFIG_INT("arrows.tv_av", arrow_keys_shutter_aperture, 0);
 static CONFIG_INT("arrows.bright_sat", arrow_keys_bright_sat, 0);
 
@@ -1359,26 +1225,7 @@ int handle_push_wb(struct event * event)
     if (!lv) return 1;
     if (gui_menu_shown()) return 1;
 
-    #ifdef CONFIG_5D2
-    extern thunk LiveViewWbApp_handler;
-    if (event->param == BGMT_PRESS_SET && (intptr_t)get_current_dialog_handler() == (intptr_t)&LiveViewWbApp_handler)
-    {
-        kelvin_n_gm_auto();
-        return 0;
-    }
-    #endif
 
-    #ifdef CONFIG_5D3
-    if (event->param == BGMT_RATE && liveview_display_idle())
-    {
-        // only do this if no arrow shortcut is enabled
-        if (!arrow_keys_audio && !arrow_keys_iso_kelvin && !arrow_keys_shutter_aperture && !arrow_keys_bright_sat)
-        {
-            kelvin_n_gm_auto();
-            return 0;
-        }
-    }
-    #endif
     return 1;
 }
 #endif
@@ -1410,87 +1257,13 @@ int handle_arrow_keys(struct event * event)
         return 1;
     }
     
-    #ifdef CONFIG_550D
-    static int flash_movie_pressed;
-    if (BGMT_FLASH_MOVIE)
-    {
-        flash_movie_pressed = BGMT_PRESS_FLASH_MOVIE;
-        if (flash_movie_pressed) arrow_key_mode_toggle();
-        return !flash_movie_pressed;
-    }
+
+
     
-    static int t_press = 0;
-    if (BGMT_PRESS_AV)
-    {
-        t_press = get_ms_clock();
-    }
-    if (BGMT_UNPRESS_AV)
-    {
-        int t_unpress = get_ms_clock();
-        
-        if (t_unpress - t_press < 400)
-            arrow_key_mode_toggle();
-    }
-    #endif
-
-    #ifdef CONFIG_600D
-    extern int disp_zoom_pressed;
-    if (event->param == BGMT_UNPRESS_DISP && !disp_zoom_pressed)
-    {
-        arrow_key_mode_toggle();
-        return 1;
-    }
-    #endif
-
-    #ifdef CONFIG_60D
-    static int metering_btn_pressed;
-    if (BGMT_METERING_LV)
-    {
-        metering_btn_pressed = BGMT_PRESS_METERING_LV;
-        if (metering_btn_pressed) arrow_key_mode_toggle();
-        return !metering_btn_pressed;
-    }
-    #endif
     
-    #ifdef CONFIG_70D
-    if (BGMT_PRESS_METERING_OR_AFAREA)
-    {
-        arrow_key_mode_toggle();
-        return 1;
-    }
-    #endif
-    
-    #ifdef CONFIG_50D
-    if (event->param == BGMT_FUNC)
-    {
-        arrow_key_mode_toggle();
-        return 0;
-    }
-    #endif
 
-    #if defined(CONFIG_5D2) || defined(CONFIG_7D)
-    if (event->param == BGMT_PICSTYLE)
-    {
-        arrow_key_mode_toggle();
-        return 0;
-    }
-    #endif
 
-    #ifdef CONFIG_5D3
-    if (event->param == BGMT_RATE)
-    {
-        arrow_key_mode_toggle();
-        return 0;
-    }
-    #endif
 
-    #ifdef CONFIG_6D
-    if (event->param == BGMT_AFPAT_UNPRESS)
-    {
-        arrow_key_mode_toggle();
-        return 0;
-    }
-    #endif
 
     if (arrow_keys_mode && liveview_display_idle() && !gui_menu_shown())
     {
@@ -1674,7 +1447,7 @@ void display_shortcut_key_hints_lv()
     #ifdef FEATURE_LCD_SENSOR_SHORTCUTS
     extern int lcd_release_running;
     int lcd = get_lcd_sensor_shortcuts() && display_sensor && DISPLAY_SENSOR_POWERED && !lcd_release_running;
-    #else
+#else
     int lcd = 0;
     #endif
     if (arrow_keys_shortcuts_active()) mode = arrow_keys_mode;
@@ -2021,7 +1794,7 @@ static struct menu_entry key_menus[] = {
                 .priv = &focus_box_lv_jump,
                 #ifdef FEATURE_LV_FOCUS_BOX_SNAP_TO_X5_RAW
                 .max = 5,
-                #else
+#else
                 .max = 4,
                 #endif
                 .icon_type = IT_DICE_OFF,
@@ -2058,11 +1831,7 @@ static struct menu_entry key_menus[] = {
         .update = arrow_key_check,
         .submenu_width = 650,
         .help = "Choose functions for arrows keys. Toggle w. " ARROW_MODE_TOGGLE_KEY ".",
-        #if defined(CONFIG_70D)
-        .depends_on = DEP_MOVIE_MODE,
-        #else
         .depends_on = DEP_LIVEVIEW,
-        #endif
         .children =  (struct menu_entry[]) {
             #ifdef CONFIG_AUDIO_CONTROLS
             {
@@ -2247,7 +2016,7 @@ int handle_upside_down(struct event * event)
         {
             #ifdef BGMT_UNPRESS_UDLR
             case BGMT_UNPRESS_UDLR:
-            #else
+#else
             case BGMT_UNPRESS_LEFT:
             case BGMT_UNPRESS_RIGHT:
             case BGMT_UNPRESS_UP:
@@ -2331,7 +2100,7 @@ struct menu_entry expo_tweak_menus[] = {
         .choices = (const char *[]) {"Photo, no ExpSim", "Photo, ExpSim", "Movie"},
         .icon_type = IT_DICE,
         .help = "Exposure simulation (LiveView display type).",
-        #else
+#else
         .name = "ExpSim",
         .max = 1,
         .help = "Exposure simulation.",
@@ -3224,13 +2993,6 @@ static int focus_peaking_grayscale_running()
 
 static int is_adjusting_wb()
 {
-    #if defined(CONFIG_5D2) || defined(CONFIG_5D3)
-    // these cameras have a transparent LiveView dialog for adjusting Kelvin white balance
-    // (maybe 7D too)
-    extern thunk LiveViewWbApp_handler;
-    if ((intptr_t)get_current_dialog_handler() == (intptr_t)&LiveViewWbApp_handler)
-        return 1;
-    #endif
 
     if (lv && gui_menu_shown() && menu_active_but_hidden() && is_menu_entry_selected("Expo", "WhiteBalance"))
         return 1;
@@ -3243,15 +3005,7 @@ static void preview_contrast_n_saturation_step()
 {
     if (ml_shutdown_requested) return;
     if (!DISPLAY_IS_ON) return;
-#ifdef CONFIG_5DC
-    if (!PLAY_OR_QR_MODE) return;
-    // can't check current saturation value => update saturation only twice per playback session
-    // actually this register looks quite safe to write, but... just in case
-    if (play_dirty) play_dirty--; else return;
-    msleep(100);
-#else
     if (!lv) return;
-#endif
 
 #ifdef FEATURE_DIGIC_FOCUS_PEAKING
     static int peaking_hs_last_press = 0;
@@ -3268,15 +3022,13 @@ static void preview_contrast_n_saturation_step()
 #ifdef FEATURE_LV_SATURATION
 
     int saturation_register = 0xC0F140c4;
-#ifndef CONFIG_5DC
     int current_saturation = (int) shamem_read(saturation_register);
 
     #ifdef FEATURE_LV_CRAZY_COLORS
     current_saturation &= 0xFF00FF;
-    #else
+#else
     current_saturation &= 0xFF;
     #endif
-#endif
 
     static int saturation_values[] = {0,0x40,0x80,0xC0,0xFF};
     int desired_saturation = saturation_values[PREVIEW_SATURATION_INDEX];
@@ -3296,15 +3048,10 @@ static void preview_contrast_n_saturation_step()
         desired_saturation |= 0x10000;
 #endif
 
-#ifdef CONFIG_5DC
-    EngDrvOut(saturation_register, desired_saturation | (desired_saturation<<8));
-    return; // contrast not working, freezes the camera
-#else
     if (current_saturation != desired_saturation)
     {
         EngDrvOutLV(saturation_register, desired_saturation | (desired_saturation<<8));
     }
-#endif
 
 #endif
 #ifdef FEATURE_LV_BRIGHTNESS_CONTRAST
@@ -3590,45 +3337,6 @@ static void grayscale_menus_step()
 
     prev_sig = sig;
 
-    #ifdef CONFIG_5D3_123
-    if (!lv)
-    {
-        static int dirty = 0;
-        if (get_yuv422_vram()->vram == 0)
-        {
-            /* 5D3-123 quirk: YUV422 RAM is not initialized until going to LiveView or Playback mode
-             * (and even there, you need a valid image first)
-             * Workaround: if YUV422 was not yet initialized by Canon, remove the transparency from color 0 (make it black).
-             * 
-             * Any other cameras requiring this? 
-             * Probably not, since the quirk is likely related to the dual monitor support.
-             * 6D shows artifacts in QEMU when running benchmarks
-             * or playing Arkanoid, but apparently clean when running on hardware.
-             * 700D and 1100D also have uninitialized buffer.
-             * 700D and 5D3 1.1.3 do not show any artifacts at startup; 5D3 1.2.3 does.
-             * 550D and 600D are OK.
-             * 
-             * Side effects: issue #2901.
-             * 
-             * Note: alter_bitmap_palette will not affect color 0, so it will not break this workaround (yet).
-             */
-            if (!dirty)
-            {
-                alter_bitmap_palette_entry(0, COLOR_BLACK, 256, 256);
-                dirty = 1;
-            }
-        }
-        else
-        {
-            /* undo our hack */
-            if (dirty)
-            {
-                alter_bitmap_palette_entry(0, 0, 256, 256);
-                dirty = 0;
-            }
-        }
-    }
-    #endif
 
     if (bmp_color_scheme || prev_b)
     {
@@ -3914,7 +3622,7 @@ static void FAST anamorphic_squeeze()
             if (!mv || (ya > os.y0 + os.off_169 && ya < os.y_max - os.off_169))
                 #ifdef CONFIG_DMA_MEMCPY
                     dma_memcpy(&dst_buf[LV(0,y)/4], &src_buf[LV(0,ya)/4], 720*2);
-                #else
+#else
                     memcpy(&dst_buf[LV(0,y)/4], &src_buf[LV(0,ya)/4], 720*2);
                 #endif
             else
@@ -4232,7 +3940,7 @@ void display_filter_get_buffers(uint32_t** src_buf, uint32_t** dst_buf)
     prev = current;
     *src_buf = buff;
     *dst_buf = CACHEABLE(display_filter_buffer);
-#else // just use some reasonable defaults that won't crash the camera
+#else
     *src_buf = CACHEABLE(YUV422_LV_BUFFER_1);
     *dst_buf = CACHEABLE(YUV422_LV_BUFFER_2);
 #endif
@@ -4269,13 +3977,6 @@ int display_filter_enabled()
     return fp ? 2 : 1;
 }
 
-#if defined(CONFIG_5D2) || defined(CONFIG_50D) || defined(CONFIG_7D)
-static int display_broken = 0;
-int display_broken_for_mz() 
-{
-    return display_broken;
-}
-#endif
 
 int display_filter_lv_vsync(int old_state, int x, int input, int z, int t)
 {
@@ -4289,69 +3990,7 @@ int display_filter_lv_vsync(int old_state, int x, int input, int z, int t)
         return CBR_RET_CONTINUE;
     }
 
-#if defined(CONFIG_5D2)
-    int sync = (MEM(x+0xe0) == YUV422_LV_BUFFER_1);
-    int hacked = ( MEM(0x44fc+0xBC) == MEM(0x44fc+0xc4) && MEM(0x44fc+0xc4) == MEM(x+0xe0));
-    display_broken = hacked;
-
-    if (!display_filter_valid_image) return CBR_RET_CONTINUE;
-    if (!display_filter_enabled()) { display_filter_valid_image = 0;  return CBR_RET_CONTINUE; }
-
-    if (display_filter_enabled())
-    {
-        if (sync || hacked)
-        {
-            MEM(0x44fc+0xBC) = 0;
-            YUV422_LV_BUFFER_DISPLAY_ADDR = YUV422_LV_BUFFER_2; // update buffer 1, display buffer 2
-            extern void EnableImagePhysicalScreenParameter();
-            EnableImagePhysicalScreenParameter();
-        }
-    }
-#elif defined(CONFIG_50D)
-//455C - Debug Flag
-//445C + A4 - Current LV or 0
-//455C + AC - Current Lv or 0
-//x + C8 = LV buffer.. print x, look around
-    int sync = (MEM(x+0xc8) == YUV422_LV_BUFFER_1);
-    int hacked = ( MEM(0x455c+0xA4) == MEM(0x455c+0xAC) && MEM(0x455c+0xAC) == MEM(x+0xc8));
-    display_broken = hacked;
-
-    if (!display_filter_valid_image) return CBR_RET_CONTINUE;
-    if (!display_filter_enabled()) { display_filter_valid_image = 0;  return CBR_RET_CONTINUE; }
-
-    if (display_filter_enabled())
-    {
-        if (sync || hacked)
-        {
-            MEM(0x455c+0xA4) = 0;
-            YUV422_LV_BUFFER_DISPLAY_ADDR = YUV422_LV_BUFFER_2; // update buffer 1, display buffer 2
-            extern void EnableImagePhysicalScreenParameter();
-            EnableImagePhysicalScreenParameter();
-        }
-    }
-#elif defined(CONFIG_7D)
-//4430 - Debug Flag
-//445C + E8 - Current LV or 0
-//455C + F0 - Current Lv or 0
-//x + F4 = LV buffer.. print x, look around
-    int sync = (MEM(x+0xF4) == YUV422_LV_BUFFER_1);
-    int hacked = ( MEM(0x4430+0xE8) == MEM(0x4430+0xF0) && MEM(0x4430+0xF0) == MEM(x+0xF4));
-    display_broken = hacked;
-
-    if (!display_filter_valid_image) return CBR_RET_CONTINUE;
-    if (!display_filter_enabled()) { display_filter_valid_image = 0;  return CBR_RET_CONTINUE; }
-
-    if (display_filter_enabled())
-    {
-        if (sync || hacked)
-        {
-            MEM(0x4430+0xE8) = 0;
-            YUV422_LV_BUFFER_DISPLAY_ADDR = YUV422_LV_BUFFER_2; // update buffer 1, display buffer 2
-            extern void EnableImagePhysicalScreenParameter();
-            EnableImagePhysicalScreenParameter();
-        }
-    }
-#elif defined(CONFIG_CAN_REDIRECT_DISPLAY_BUFFER_EASILY) // all new cameras should work with this method
+#if defined(CONFIG_CAN_REDIRECT_DISPLAY_BUFFER_EASILY) // all new cameras should work with this method
 
     if (!display_filter_buffer) return CBR_RET_CONTINUE;
     if (!display_filter_enabled())
@@ -4504,11 +4143,7 @@ void display_filter_step(int k)
 #endif
 
 #ifdef CONFIG_KILL_FLICKER
-#if defined(CONFIG_50D)
-CONFIG_INT("kill.canon.gui", kill_canon_gui_mode, 1);
-#else
 CONFIG_INT("kill.canon.gui", kill_canon_gui_mode, 0);
-#endif
 #endif
 
 extern int clearscreen;
@@ -4554,7 +4189,7 @@ static struct menu_entry display_menus[] = {
                 #ifdef FEATURE_LV_SATURATION
                 .max = 3,   /* to get raw values, set .max = 0x1000, .unit = UNIT_HEX and comment out .choices */
                 .edit_mode = EM_SHOW_LIVEVIEW,
-                #else
+#else
                 .max = 1,   /* the other options require saturation controls available */
                 #endif
                 .choices = (const char *[]) {"OFF", "Slightly sharper", "Edge image", "Edge + chroma"},
@@ -4736,7 +4371,7 @@ static struct menu_entry display_menus[] = {
                     .choices = CHOICES(
                         #ifdef CONFIG_4_3_SCREEN
                         "4:3 display,auto",
-                        #else
+#else
                         "3:2 display,t/b",
                         #endif
                         "16:10 HDMI,t/b",
@@ -4841,7 +4476,6 @@ static struct menu_entry display_menus[] = {
     #endif
 };
 
-#ifndef CONFIG_5DC
 static struct menu_entry play_menus[] = {
     #if defined(FEATURE_SET_MAINDIAL) || defined(FEATURE_IMAGE_REVIEW_PLAY) || defined(FEATURE_QUICK_ZOOM) || defined(FEATURE_REMEMBER_LAST_ZOOM_POS_5D3) || defined(FEATURE_LV_BUTTON_PROTECT) || defined(FEATURE_LV_BUTTON_RATE) || defined(FEATURE_QUICK_ERASE)
     {
@@ -4876,7 +4510,7 @@ static struct menu_entry play_menus[] = {
                         .help = "Use Av+MainDial together to perform selected action.",
                         .icon_type = IT_DICE,
                     },
-                    #else
+#else
                     {
                         .name = "Trigger key(s)",
                         .priv = &play_set_wheel_trigger,
@@ -4937,7 +4571,7 @@ static struct menu_entry play_menus[] = {
                 .max = 1,
                 .help = "You may use the LiveView button to protect images quickly.",
                 .icon_type = IT_BOOL,
-                #else
+#else
                 #error Hudson, we have a problem!
                 #endif
             },
@@ -4947,12 +4581,8 @@ static struct menu_entry play_menus[] = {
                 .name = "Quick Erase",
                 .priv = &quick_delete, 
                 .max = 1,
-                #ifdef CONFIG_50D // no unpress SET, use the 5Dc method
-                .help = "Delete files quickly with fewer keystrokes (be careful!!!)",
-                #else
                 .choices = (const char *[]) {"OFF", "SET+Erase"},
                 .help = "Delete files quickly with SET+Erase (be careful!!!)",
-                #endif
             },
             #endif
             MENU_EOL,
@@ -4961,61 +4591,6 @@ static struct menu_entry play_menus[] = {
     #endif
 };
 
-#else // CONFIG_5DC (todo: cleanup this mess)
-
-static MENU_UPDATE_FUNC(preview_saturation_display_5dc)
-{
-    extern int focus_peaking_grayscale;
-    if (focus_peaking_grayscale && is_focus_peaking_enabled())
-        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Focus peaking with grayscale preview is enabled.");
-}
-
-static struct menu_entry play_menus[] = {
-        {
-            .name = "Saturation",
-            .priv     = &preview_saturation,
-            .min = -1,
-            .max = 2,
-            .update = preview_saturation_display_5dc,
-            .choices = (const char *[]) {"0 (Grayscale)", "Normal", "High", "Very high"},
-            .help = "For preview only - adjust display saturation.",
-            .icon_type = IT_BOOL,
-        },
-        {
-            .name = "Image Review",
-            .priv = &quick_review_allow_zoom, 
-            .max = 1,
-            .choices = (const char *[]) {"QuickReview default", "CanonMnu:Hold->PLAY"},
-            .help = "When you set \"ImageReview: Hold\", it will go to Play mode.",
-            .icon_type = IT_BOOL,
-        },
-        {
-            .name = "Quick Zoom",
-            .priv = &quickzoom, 
-            .max = 2, // don't know how to move the image around
-            .choices = (const char *[]) {"OFF", "ON (fast zoom)"},
-            .help = "Faster zoom in Play mode, for pixel peeping :)",
-            //.essential = FOR_PHOTO,
-            .icon_type = IT_BOOL,
-        },
-        {
-            .name = "Quick Erase",
-            .priv = &quick_delete, 
-            .max = 1,
-            .help = "Delete files quickly with fewer keystrokes (be careful!!!)",
-        },
-        {
-            .name = "SET+MainDial",
-            .priv = &play_set_wheel_action, 
-            .min = 2,
-            .max = 3,
-            .choices = (const char *[]) {"Timelapse Play", "Exposure Adjust"},
-            .help = "What to do when you press SET and turn the scrollwheel.",
-            //.essential = FOR_PHOTO,
-            .icon_type = IT_BOOL,
-        },
-};
-#endif
 
 static void tweak_init()
 {

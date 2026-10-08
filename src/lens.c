@@ -60,11 +60,6 @@ static CONFIG_INT("movie.log", movie_log, 0);
 #ifdef CONFIG_FULLFRAME
 #define SENSORCROPFACTOR 10
 #define crop_info 0
-#elif defined(CONFIG_600D) || defined(CONFIG_70D)
-static PROP_INT(PROP_DIGITAL_ZOOM_RATIO, digital_zoom_ratio);
-#define DIGITAL_ZOOM ((is_movie_mode() && video_mode_crop && video_mode_resolution == 0) ? digital_zoom_ratio : 100)
-#define SENSORCROPFACTOR (16 * DIGITAL_ZOOM / 100)
-CONFIG_INT("crop.info", crop_info, 0);
 #else
 #define SENSORCROPFACTOR 16
 CONFIG_INT("crop.info", crop_info, 0);
@@ -794,10 +789,6 @@ void lens_wait_readytotakepic(int wait)
 static int mirror_locked = 0;
 int mlu_lock_mirror_if_needed() // called by lens_take_picture; returns 0 if success, 1 if camera took a picture instead of locking mirror
 {
-    #ifdef CONFIG_5DC
-    if (get_mlu()) set_mlu(0); // can't trigger shutter with MLU active, so just turn it off
-    return 0;
-    #endif
     
     if (drive_mode == DRIVE_SELFTIMER_2SEC || drive_mode == DRIVE_SELFTIMER_REMOTE || drive_mode == DRIVE_SELFTIMER_CONTINUOUS)
         return 0;
@@ -818,16 +809,7 @@ int mlu_lock_mirror_if_needed() // called by lens_take_picture; returns 0 if suc
         {
             int fn = get_shooting_card()->file_number;
             
-            #if defined(CONFIG_5D2) || defined(CONFIG_50D)
-            SW1(1,50);
-            SW2(1,250);
-            SW2(0,50);
-            SW1(0,50);
-            #elif defined(CONFIG_40D)
-            call("FA_Release");
-            #else
             call("Release");
-            #endif
             
             msleep(500);
             if (get_shooting_card()->file_number != fn) // Heh... camera took a picture instead. Cool.
@@ -965,40 +947,8 @@ lens_take_picture(
     if (took_pic) goto end;
 #endif
     
-    #if defined(CONFIG_5D2) || defined(CONFIG_50D)
-    if (get_mlu())
-    {
-        SW1(1,50);
-        SW2(1,250);
-        SW2(0,50);
-        SW1(0,50);
-    }
-    else
-    {
-        #ifdef CONFIG_5D2
-        int status = 0;
-        PtpDps_remote_release_SW1_SW2_worker(&status);
-        #else
-        call("Release");
-        #endif
-    }
-    #elif defined(CONFIG_5DC)
-    call("rssRelease");
-    #elif defined(CONFIG_40D)
-    call("FA_Release");
-    #else
     call("Release");
-    #endif
     
-    #if defined(CONFIG_7D)
-    /* on EOS 7D the code to trigger SW1/SW2 is buggy that the metering somehow locks up when exposure time is >1.x seconds.
-     * This causes the camera not to shut down when the card door is opened.
-     * There is a workaround: Just wait until shooting is possible again and then reset SW1.
-     * Then the camera will shut down clean.
-     */
-    lens_wait_readytotakepic(64);
-    SW1(0,0);
-    #endif
 
 end:;
 
@@ -1271,17 +1221,6 @@ PROP_HANDLER(PROP_LENS)
 {
     uint8_t* info = (uint8_t *) buf;
     
-    #ifdef CONFIG_5DC
-    lens_info.lens_exists = 0;
-    lens_info.raw_aperture_min = info[2];
-    lens_info.raw_aperture_max = info[3];
-    lens_info.lens_id = 0;
-    lens_info.lens_focal_min = 0;
-    lens_info.lens_focal_max = 0;
-    lens_info.lens_extender = 0;
-    lens_info.lens_version = 0;
-    lens_info.lens_capabilities = 0;
-    #else
     lens_info.lens_exists = info[0];
     lens_info.raw_aperture_min = info[1];
     lens_info.raw_aperture_max = info[2];
@@ -1313,7 +1252,6 @@ PROP_HANDLER(PROP_LENS)
         lens_info.lens_version = 0;
         lens_info.lens_capabilities = 0;
     }
-    #endif
     
     if (lens_info.raw_aperture < lens_info.raw_aperture_min || lens_info.raw_aperture > lens_info.raw_aperture_max)
     {
@@ -1479,9 +1417,6 @@ PROP_HANDLER( PROP_SHUTTER )
         #ifdef CONFIG_MOVIE_EXPO_OVERRIDE_DISABLE_SYNC_WITH_PROPS
         && !is_movie_mode()
         #endif
-        #ifdef CONFIG_6D
-        && !(buf[0] == FASTEST_SHUTTER_SPEED_RAW )
-        #endif
 
         )
     {
@@ -1590,7 +1525,6 @@ PROP_HANDLER( PROP_WB_KELVIN_LV )
     lens_info.kelvin = value;
 }
 
-#if !defined(CONFIG_5DC) && !defined(CONFIG_40D)
 static uint16_t custom_wb_gains[128];
 PROP_HANDLER(PROP_CUSTOM_WB)
 {
@@ -1601,7 +1535,6 @@ PROP_HANDLER(PROP_CUSTOM_WB)
     lens_info.WBGain_G = gains[18];
     lens_info.WBGain_B = gains[19];
 }
-#endif
 
 void lens_set_custom_wb_gains(int gain_R, int gain_G, int gain_B)
 {
@@ -2074,10 +2007,8 @@ static void
 lens_init( void* unused )
 {
     focus_done_sem = create_named_semaphore( "focus_sem", 1 );
-#ifndef CONFIG_5DC
 #ifndef CONFIG_SLIM_MENUS
     menu_add("Movie Tweaks", lens_menus, COUNT(lens_menus));
-#endif
 #endif
 }
 
@@ -3068,7 +2999,7 @@ static LVINFO_UPDATE_FUNC(batt_update)
 
     #ifdef CONFIG_BATTERY_INFO
     item->width = 70;
-    #else
+#else
     item->width = 20;
     #endif
     item->custom_drawing = 1;
@@ -3081,7 +3012,7 @@ static LVINFO_UPDATE_FUNC(batt_update)
 
         #ifdef CONFIG_BATTERY_INFO
         int bat = GetBatteryLevel();
-        #else
+#else
         int bat = battery_level_bars == 0 ? 5 : battery_level_bars == 1 ? 30 : 100;
         #endif
 

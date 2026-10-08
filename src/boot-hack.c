@@ -230,7 +230,7 @@ my_task_dispatch_hook(
     struct task * next_task = 
         #ifdef CONFIG_NEW_DRYOS_TASK_HOOKS
         next_task_new;
-        #else
+#else
         *(struct task **)(HIJACK_TASK_ADDR);
         #endif
 
@@ -570,13 +570,6 @@ static void my_big_init_task()
     msleep(100);
     ml_started = 1;
 
-#ifdef CONFIG_5D3
-    /* scan for the magic number 0xA5A5A5A5 that might have been
-     * written into ROM as a result of a null pointer bug */
-    msleep(1000);
-    void scan_A5A5();
-    scan_A5A5();
-#endif
 }
 
 /** Blocks execution until config is read */
@@ -601,10 +594,6 @@ static int my_assert_handler(char* msg, char* file, int line, int arg4)
     uint32_t lr = read_lr();
 
     /* prevent Canon settings from being saved at shutdown */
-#ifdef CONFIG_5D3
-    extern int terminateShutdown_save_settings;
-    terminateShutdown_save_settings = 0;
-#endif
 
     int len = snprintf(assert_msg, sizeof(assert_msg), 
         "ASSERT: %s\n"
@@ -622,10 +611,6 @@ static int my_assert_handler(char* msg, char* file, int line, int arg4)
 void ml_assert_handler(char* msg, char* file, int line, const char* func)
 {
     /* prevent Canon settings from being saved at shutdown */
-#ifdef CONFIG_5D3
-    extern int terminateShutdown_save_settings;
-    terminateShutdown_save_settings = 0;
-#endif
 
     int len = snprintf(assert_msg, sizeof(assert_msg), 
         "ML ASSERT:\n%s\n"
@@ -706,16 +691,12 @@ init_task_func init_task_patched(int a, int b, int c, int d)
         while(1);                                       /* refuse to boot */
     }
 
-    #if defined(CONFIG_6D) || defined(CONFIG_100D) || defined(CONFIG_70D)
+#if defined(CONFIG_100D)
     /* R0: 0x44C000 (start address, easier to patch, change to 0x4E0000 => reserve 592K for ML) */
     /* R1: 0xD3C000 [6D,70D] / 0xC3C000 [100D] (end address, unchanged) */
     addr_AllocMem_end[1] = MOV_R0_0x4E0000_INSTR;
     ml_reserved_mem = 0x4E0000 - RESTARTSTART;
-    #elif defined(CONFIG_550D) || defined(CONFIG_600D)
-    // change end limit from 0xd00000 to 0xc70000 => reserve 576K for ML
-    *addr_AllocMem_end = MOV_R1_0xC70000_INSTR;
-    ml_reserved_mem = 0xD00000 - RESTARTSTART;
-    #else
+#else
     // change end limit from 0xd00000 to 0xc80000 => reserve 512K for ML
     *addr_AllocMem_end = MOV_R1_0xC80000_INSTR;
     ml_reserved_mem = 0xD00000 - RESTARTSTART;
@@ -802,7 +783,7 @@ my_init_task(int a, int b, int c, int d)
 
     qprintf("[BOOT] reserving memory from RscMgr: %X -> %X.\n", orig_length, new_length);
     
-#else  
+#else
     uint32_t orig_instr = MEM(HIJACK_CACHE_HACK_BSS_END_ADDR);
     uint32_t new_instr = HIJACK_CACHE_HACK_BSS_END_INSTR;  
     /* get and check the reserved memory size for magic lantern to prevent invalid setups to crash camera */

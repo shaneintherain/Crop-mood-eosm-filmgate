@@ -129,14 +129,14 @@ features.html: FORCE
 # that's why "make clean" commands are used before AND after the analysis
 tasks:
 	python -m doctest build_tools/check_tasks.py
-	make -C platform/5D3.113/ clean
-	make -C platform/5D3.113/ PREPRO=y PYCPARSER=y
+	make -C platform/EOSM.202/ clean
+	make -C platform/EOSM.202/ PREPRO=y PYCPARSER=y
 	make -i -C modules/ clean
 	make -i -C modules/ PREPRO=y PYCPARSER=y
 	make -i -C modules/lua clean
-	cd platform/5D3.113; python ../../build_tools/check_tasks.py *.i ../../modules/*/*.i
+	cd platform/EOSM.202; python ../../build_tools/check_tasks.py *.i ../../modules/*/*.i
 	make -i -C modules/ clean
-	make -C platform/5D3.113 clean
+	make -C platform/EOSM.202 clean
 
 tasks-clang:
 	clang -fsyntax-only -Wthread-safety src/mutex-test.c

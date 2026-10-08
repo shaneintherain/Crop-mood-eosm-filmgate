@@ -50,9 +50,6 @@ global_property_handler(
     /* Canon stub */
     extern void* _prop_cleanup(void* token, int property);
     
-#ifdef CONFIG_5DC
-    if (property == 0x80010001) return (void*)_prop_cleanup(global_token, property);
-#endif
 
     for (int entry = 0; entry < actual_num_handlers; entry++)
     {
@@ -304,11 +301,6 @@ void prop_request_change(unsigned property, const void* addr, size_t len)
 {
 #ifdef CONFIG_PROP_REQUEST_CHANGE
 
-	#if defined(CONFIG_40D)
-	if (property != PROP_AFPOINT) {
-		return;
-	}
-	#endif
 
     #if defined(CONFIG_DIGIC_V) && defined(CONFIG_FULLFRAME)
     if (property == PROP_VIDEO_MODE) // corrupted video headers on 5D3
@@ -329,10 +321,8 @@ void prop_request_change(unsigned property, const void* addr, size_t len)
 
     if (property == PROP_BATTERY_REPORT && len == 1) goto ok; // exception: this call is correct for polling battery level
 
-    #ifndef CONFIG_5DC
     if (property == PROP_REMOTE_SW1 || property == PROP_REMOTE_SW2)
         ASSERT(len <= 4); // some cameras have len=2, others 4; we pass a single integer as param, so max len is 4
-    #endif
 
     if (correct_len != (int)len)
     {

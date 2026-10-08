@@ -45,7 +45,6 @@ static void stateobj_install_hook(struct state_object * stateobj, int input, int
 */
 
 static volatile int vsync_counter = 0;
-#ifndef CONFIG_7D_MASTER
 /* waits for N LiveView frames */
 int wait_lv_frames(int num_frames)
 {
@@ -71,7 +70,6 @@ int wait_lv_frames(int num_frames)
     }
     return 1;
 }
-#endif
 
 extern void digic_iso_step();
 
@@ -92,7 +90,7 @@ static void FAST vsync_func() // called once per frame.. in theory :)
     hdr_step();
     #endif
 
-    #if !defined(CONFIG_DIGIC_V) && !defined(CONFIG_7D)
+#if !defined(CONFIG_DIGIC_V)
     vignetting_correction_apply_regs();
     #endif
 
@@ -115,10 +113,6 @@ static void FAST vsync_func() // called once per frame.. in theory :)
     #endif
 }
 
-#ifdef CONFIG_550D
-int display_is_on_550D = 0;
-int get_display_is_on_550D() { return display_is_on_550D; }
-#endif
 
 #ifdef FEATURE_SHOW_STATE_FPS
 #define num_states 4
@@ -136,29 +130,12 @@ static int FAST stateobj_lv_spy(struct state_object * self, int x, int input, in
         state_matrix[old_state][input]++;
     }
 #endif
-#ifdef CONFIG_550D
-    if (self == DISPLAY_STATE && old_state != 0 && input == 0) // TurnOffDisplay_action
-        display_is_on_550D = 0;
-#endif
 
 // sync ML overlay tools (especially Magic Zoom) with LiveView
 // this is tricky...
 #if defined(CONFIG_DIGIC_V)
     if (self == DISPLAY_STATE && (input == INPUT_ENABLE_IMAGE_PHYSICAL_SCREEN_PARAMETER))
         _lv_vsync_signal();
-#elif defined(CONFIG_5D2)
-    if (self == LV_STATE)//&& old_state == 4)
-    {
-        //~ _lv_vsync_signal();
-    }
-#elif defined(CONFIG_60D)
-    if (self == EVF_STATE && input == 5 && old_state == 5) // evfReadOutDoneInterrupt
-        _lv_vsync_signal();
-#elif defined(CONFIG_600D)
-    if (self == EVF_STATE && old_state == 5) {  
-		//600D Goes 3 - 4 - 5 5 and 3 ever 1/2 frame
-        _lv_vsync_signal();
-	}
 #endif
     // sync display filters (for these, we need to redirect display buffers
     #ifdef DISPLAY_STATE
@@ -180,50 +157,23 @@ static int FAST stateobj_lv_spy(struct state_object * self, int x, int input, in
     #endif
     #endif
     
-#if defined(CONFIG_5D2) || defined(CONFIG_50D)
-    if (self == LV_STATE && old_state == 2 && input == 2) // lvVdInterrupt
-    {
-        display_filter_lv_vsync(old_state, x, input, z, t);
-    }
-#endif
 
     int ans = StateTransition(self, x, input, z, t);
 
-#ifdef CONFIG_550D
-    if (self == DISPLAY_STATE)
-        display_is_on_550D = (self->current_state == 1);
-#endif
 
 
 // sync digic functions (like overriding ISO or image effects)
 
-    #if defined(CONFIG_5D2) || defined(CONFIG_50D) || defined(CONFIG_500D)
-    if (self == LV_STATE && input==4 && old_state==4) // AJ_ResetPSave_n_WB_n_LVREC_MVR_EV_EXPOSURESTARTED => perfect sync for digic on 5D2 :)
-    #elif defined(CONFIG_550D)
-    if (self == LV_STATE && input==5 && old_state == 5) // SYNC_GetEngineResource => perfect sync for digic :)
-    #elif defined(CONFIG_EVF_STATE_SYNC)
+#if defined(CONFIG_EVF_STATE_SYNC)
     if (self == EVF_STATE && input == 5 && old_state == 5) // evfReadOutDoneInterrupt => perfect sync for digic :)
-    #else
+#else
     if (0)
     #endif
     {
         vsync_func();
     }
     
-    #if defined(CONFIG_7D_MASTER) || defined(CONFIG_7D)
-    if (self == LV_STATE && input==3 && old_state == 3) {
-        extern void vignetting_correction_apply_lvmgr(int);
-        vignetting_correction_apply_lvmgr(x);
-    }
-    #endif
     
-    #if !defined(CONFIG_7D_MASTER) && defined(CONFIG_7D)
-    if (self == LV_STATE && input==5 && old_state == 5)       
-    { 
-        display_filter_lv_vsync(old_state, x, input, z, t);
-        vsync_func();
-    }
-    #endif
     #ifdef EVF_STATE
     if (self == EVF_STATE && input == 4 && old_state == 5) // evfSetParamInterrupt
     {
@@ -240,16 +190,6 @@ static int FAST stateobj_lv_spy(struct state_object * self, int x, int input, in
     return ans;
 }
 
-#ifdef CONFIG_5DC
-static int stateobj_em_spy(struct state_object * self, int x, int input, int z, int t)
-{
-    int ans = StateTransition(self, x, input, z, t);
-
-    if (z == 0x0) { fake_simple_button(BGMT_PRESS_HALFSHUTTER); }
-    if (z == 0xB) { fake_simple_button(BGMT_UNPRESS_HALFSHUTTER); }
-    return ans;
-}
-#endif
 
 static int stateobj_start_spy(struct state_object * stateobj, void* spy)
 {
@@ -261,9 +201,7 @@ static int stateobj_start_spy(struct state_object * stateobj, void* spy)
     // double check if all states use the same transition function (they do, in theory)
     else if ((void*)StateTransition != (void*)stateobj->StateTransition_maybe)
     {
-        #ifndef CONFIG_7D_MASTER
         beep();
-        #endif
         return 1;
     }
     
@@ -288,9 +226,6 @@ static void state_init(void* unused)
         stateobj_start_spy(EMState, stateobj_em_spy);
     #endif
 
-    #ifdef CONFIG_550D
-    display_is_on_550D = (DISPLAY_STATEOBJ->current_state != 0);
-    #endif
 }
 
 INIT_FUNC("state_init", state_init);

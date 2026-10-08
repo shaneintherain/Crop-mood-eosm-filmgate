@@ -45,43 +45,6 @@ void mvrSetDefQScale(int16_t *);  // when recording, only change qscale by 1 at 
 // otherwise ther appears a nice error message which shows the shutter count [quote AlinS] :)
 
 
-#if defined(CONFIG_7D)
-#define ADDR_mvrConfig       0x8A14
-
-uint8_t *bulk_transfer_buf = NULL;
-uint32_t BulkOutIPCTransfer(int type, uint8_t *buffer, int length, uint32_t master_addr, void (*cb)(uint32_t, uint32_t, uint32_t), uint32_t cb_parm);
-uint32_t BulkInIPCTransfer(int type, uint8_t *buffer, int length, uint32_t master_addr, void (*cb)(uint32_t, uint32_t, uint32_t), uint32_t cb_parm);
-
-void bitrate_bulk_cb(uint32_t parm, uint32_t address, uint32_t length)
-{
-    *(uint32_t*)parm = 0;
-}
-
-void bitrate_read_mvr_config()
-{
-    volatile uint32_t wait = 1;
-    
-    BulkInIPCTransfer(0, bulk_transfer_buf, sizeof(mvr_config), ADDR_mvrConfig, &bitrate_bulk_cb, (uint32_t)&wait);
-    while(wait)
-    {
-        msleep(10);
-    }
-    memcpy(&mvr_config, bulk_transfer_buf, sizeof(mvr_config));
-}
-
-void bitrate_write_mvr_config()
-{
-    volatile uint32_t wait = 1;
-    
-    memcpy(bulk_transfer_buf, &mvr_config, sizeof(mvr_config));
-    BulkOutIPCTransfer(0, bulk_transfer_buf, sizeof(mvr_config), ADDR_mvrConfig, &bitrate_bulk_cb, (uint32_t)&wait);
-    while(wait)
-    {
-        msleep(10);
-    }
-}
-
-#endif
 
 #ifdef FEATURE_NITRATE
 static struct mvr_config mvr_config_copy;
@@ -89,12 +52,6 @@ static struct mvr_config mvr_config_copy;
 
 static void cbr_init()
 {
-#if defined(CONFIG_7D)
-    /* we must do all transfers via uncached memory. prepare that buffer */
-    bulk_transfer_buf = fio_malloc(0x1000);
-    /* now load master's mvr_config into local */
-    bitrate_read_mvr_config();
-#endif
 
 #ifdef FEATURE_NITRATE
     memcpy(&mvr_config_copy, &mvr_config, sizeof(mvr_config_copy));
@@ -107,63 +64,13 @@ static void vbr_fix(uint16_t param)
     if (!is_movie_mode()) return; 
     if (RECORDING) return; // err70 if you do this while recording
 
-#if defined(CONFIG_7D)
-    bitrate_read_mvr_config();
-    mvr_config.qscale_mode = param;
-    bitrate_write_mvr_config();
-#else
     mvrFixQScale(&param);
-#endif
 
 }
 
 // may be dangerous if mvr_config and numbers are incorrect
 static void opt_set(int num, int den)
 {
-#if defined(CONFIG_7D)
-    uint32_t combo = 0;
-    uint32_t entry = 0;
-
-    for (combo = 0; combo < MOV_RES_AND_FPS_COMBINATIONS; combo++)
-    {
-        for (entry = 0; entry < MOV_OPT_NUM_PARAMS; entry++)
-        {
-            /* calc the offset from mvr_config */
-            uint32_t word_offset = MOV_OPT_OFFSET + combo * MOV_OPT_STEP + entry;
-
-            /* get original and current value pointer */
-            uint32_t* opt0 = (uint32_t*) &(mvr_config_copy) + word_offset;
-            uint32_t* opt = (uint32_t*) &(mvr_config) + word_offset;
-            
-            if (*opt0 < 10000)
-            {
-                bmp_printf(FONT_LARGE, 0, 50, "opt_set: err %d %d %d ", combo, entry, *opt0); 
-                return; 
-            }
-            (*opt) = (*opt0) * num / den;
-        }
-        for (entry = 0; entry < MOV_GOP_OPT_NUM_PARAMS; entry++)
-        {
-            /* calc the offset from mvr_config */
-            uint32_t word_offset = MOV_GOP_OFFSET + combo * MOV_OPT_STEP + entry;
-
-            /* get original and current value pointer */
-            uint32_t* opt0 = (uint32_t*) &(mvr_config_copy) + word_offset;
-            uint32_t* opt = (uint32_t*) &(mvr_config) + word_offset;
-            
-            if (*opt0 < 10000)
-            {
-                bmp_printf(FONT_LARGE, 0, 50, "gop_set: err %d %d %d ", combo, entry, *opt0); 
-                return; 
-            }
-            (*opt) = (*opt0) * num / den;
-        }
-    }
-
-    /* write mvr_config to master */
-    bitrate_write_mvr_config();
-    return;
-#endif
 
 #ifdef FEATURE_NITRATE
     int i, j;
@@ -171,14 +78,7 @@ static void opt_set(int num, int den)
 
     for (i = 0; i < MOV_RES_AND_FPS_COMBINATIONS; i++) // 7 combinations of resolution / fps
     {
-#ifdef CONFIG_500D
-#define fullhd_30fps_opt_size_I fullhd_20fps_opt_size_I
-#define fullhd_30fps_gop_opt_0 fullhd_20fps_gop_opt_0
-#endif
 
-#ifdef CONFIG_5D2
-#define fullhd_30fps_opt_size_I v1920_30fps_opt_size_I
-#endif
         for (j = 0; j < MOV_OPT_NUM_PARAMS; j++)
         {
             int* opt0 = (int*) &(mvr_config_copy.fullhd_30fps_opt_size_I) + i * MOV_OPT_STEP + j;
@@ -224,14 +124,8 @@ static void bitrate_set()
         vbr_fix(1);
         opt_set(1,1);
         
-#if defined(CONFIG_7D)
-        bitrate_read_mvr_config();
-        mvr_config.def_q_scale = qscale;
-        bitrate_write_mvr_config();
-#else
         int16_t q = qscale;
         mvrSetDefQScale(&q);
-#endif        
     }
     bitrate_dirty = 1;
 }
@@ -350,9 +244,6 @@ void time_indicator_show()
 
     lvinfo_display(1,0); //force it to update, else stays frozen until other item updates eg. fps
    
-#if defined(CONFIG_7D)
-    bitrate_read_mvr_config();
-#endif
 
     //~ bmp_printf(FONT_MED, 0, 300, "%d %d %d %d ", movie_elapsed_time_01s, movie_elapsed_ticks, rec_time_card, rec_time_4gb);
 

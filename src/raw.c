@@ -123,30 +123,9 @@ static int (*dual_iso_get_dr_improvement)() = MODULE_FUNCTION(dual_iso_get_dr_im
  * dump_file(filename, raw_buffer, 7*something...)
  */
 
-#ifdef CONFIG_60D
-#define DEFAULT_RAW_BUFFER MEM(MEM(0x5028))
-#define DEFAULT_RAW_BUFFER_SIZE (0x49F00000 - 0x48332200)   /* ~28MB, really? */
-#endif
 
-#ifdef CONFIG_600D
-#define DEFAULT_RAW_BUFFER MEM(MEM(0x51FC))
-#endif
 
-#ifdef CONFIG_5D3_113
-/* MEM(0x2600C + 0x2c) = 0x4B152000; appears free until 0x4CE00000 */
-#define DEFAULT_RAW_BUFFER MEM(0x2600C + 0x2c)
-#define DEFAULT_RAW_BUFFER_SIZE (0x4CDF0000 - 0x4B152000)
-#endif
 
-#ifdef CONFIG_5D3_123
-/* MEM(0x25f1c + 0x34) (0x4d31a000) is used near 0x4d600000 in photo mode
- * that's probably just because the memory layout changes
- * next buffer is at 0x4ee00000; can we assume it can be safely reused by us?
- * (Free Memory dialog, memory map with CONFIG_MARK_UNUSED_MEMORY_AT_STARTUP)
- */
-#define DEFAULT_RAW_BUFFER MEM(0x25f1c + 0x34)
-#define DEFAULT_RAW_BUFFER_SIZE (0x4e000000 - 0x4d31a000)
-#endif
 
 #ifdef CONFIG_650D
 #define DEFAULT_RAW_BUFFER MEM(0x25B00 + 0x3C)
@@ -163,25 +142,13 @@ static int (*dual_iso_get_dr_improvement)() = MODULE_FUNCTION(dual_iso_get_dr_im
 #define DEFAULT_RAW_BUFFER_SIZE (0x47F00000 - 0x46798080)
 #endif
 
-#ifdef CONFIG_6D
-#define DEFAULT_RAW_BUFFER MEM(0x76d6c + 0x2C)
-#define DEFAULT_RAW_BUFFER_SIZE (0x4CFF0000 - 0x4B328000)
-#endif
 
-#ifdef CONFIG_70D
-#define DEFAULT_RAW_BUFFER MEM(0x7CFEC + 0x30)
-#define DEFAULT_RAW_BUFFER_SIZE (0x4CFF0000 - 0x4B328000)
-#endif
 
 #ifdef CONFIG_100D
 #define DEFAULT_RAW_BUFFER MEM(0x6733C + 0x40)
 #define DEFAULT_RAW_BUFFER_SIZE (0x46CC0000 - 0x46798100)
 #endif
 
-#ifdef CONFIG_1100D
-#define DEFAULT_RAW_BUFFER MEM(MEM(0x4C64))     /* how much do we have allocated? */
-#define DEFAULT_RAW_BUFFER_SIZE 8*1024*1024     /* is this really overwritten by other code? needs some investigation */
-#endif
 
 #ifndef DEFAULT_RAW_BUFFER_SIZE
 /* todo: figure out how much Canon code allocates for their LV RAW buffer - how? */
@@ -196,22 +163,16 @@ static int (*dual_iso_get_dr_improvement)() = MODULE_FUNCTION(dual_iso_get_dr_im
 #define RAW_LV_BUFFER_ALLOC_SIZE (SRM_BUFFER_SIZE - 0x1000)
 
 
-#else // "Traditional" RAW LV buffer detection (no CONFIG_EDMAC_RAW_SLURP)
+#else
 
 /**
  * LiveView raw buffer address
  * To find it, call("lv_save_raw") and look for an EDMAC channel that becomes active (Debug menu)
  **/
 
-#if defined(CONFIG_5D2) || defined(CONFIG_50D)
-#define RAW_LV_EDMAC 0xC0F04508
-#endif
 
-#if defined(CONFIG_500D) || defined(CONFIG_550D) || defined(CONFIG_7D)
-#define RAW_LV_EDMAC 0xC0F26008
-#endif
 
-#if defined(CONFIG_DIGIC_V) || defined(CONFIG_600D) || defined(CONFIG_60D)
+#if defined(CONFIG_DIGIC_V)
 /* probably all new cameras use this address */
 #define RAW_LV_EDMAC 0xC0F26208
 #endif
@@ -234,11 +195,8 @@ static int (*dual_iso_get_dr_improvement)() = MODULE_FUNCTION(dual_iso_get_dr_im
  * and http://a1ex.bitbucket.org/ML/states/ for state diagrams.
  */
 
-#if defined(CONFIG_5D2) || defined(CONFIG_50D) || defined(CONFIG_60D) || defined(CONFIG_550D) || defined(CONFIG_500D) || defined(CONFIG_600D) || defined(CONFIG_1100D) || defined(CONFIG_7D)
-#define RAW_PHOTO_EDMAC 0xc0f04208
-#endif
 
-#if defined(CONFIG_5D3) || defined(CONFIG_700D) || defined(CONFIG_6D) || defined(CONFIG_EOSM) || defined(CONFIG_650D) || defined(CONFIG_70D) || defined(CONFIG_100D)
+#if defined(CONFIG_700D) || defined(CONFIG_EOSM) || defined(CONFIG_650D) || defined(CONFIG_100D)
 #define RAW_PHOTO_EDMAC 0xc0f04008
 #endif
 
@@ -324,86 +282,14 @@ static int get_default_white_level()
  * It will also work with the values from some other camera, but colors may be a little off.
  **/
 
-#ifdef CONFIG_5D2
-    //~ { "Canon EOS 5D Mark II", 0, 0x3cf0,
-    //~ { 4716,603,-830,-7798,15474,2480,-1496,1937,6651 } },
-    #define CAM_COLORMATRIX1                       \
-     4716, 10000,      603, 10000,    -830, 10000, \
-    -7798, 10000,    15474, 10000,    2480, 10000, \
-    -1496, 10000,     1937, 10000,    6651, 10000
-#endif
 
-#ifdef CONFIG_5D3
-    //~ { "Canon EOS 5D Mark III", 0, 0x3c80,
-    //~ { 6722,-635,-963,-4287,12460,2028,-908,2162,5668 } },
-    #define CAM_COLORMATRIX1                       \
-     6722, 10000,     -635, 10000,    -963, 10000, \
-    -4287, 10000,    12460, 10000,    2028, 10000, \
-     -908, 10000,     2162, 10000,    5668, 10000
-#endif
 
-#ifdef CONFIG_550D
-   //~ { "Canon EOS 550D", 0, 0x3dd7,
-   //~	{  6941,-1164,-857,-3825,11597,2534,-416,1540,6039 } },
-    #define CAM_COLORMATRIX1                        \
-      6461, 10000,     -1164, 10000,    -857, 10000,\
-     -3825, 10000,     11597, 10000,    2534, 10000,\
-      -416, 10000,      1540, 10000,    6039, 10000
-#endif
 
-#ifdef CONFIG_6D
-    //~ { "Canon EOS 6D", 0, 0,
-    //~ { 7034,-804,-1014,-4420,12564,2058,-851,1994,5758 } },
-    #define CAM_COLORMATRIX1                       \
-     7034, 10000,     -804, 10000,    -1014, 10000,\
-    -4420, 10000,    12564, 10000,    2058, 10000, \
-     -851, 10000,     1994, 10000,    5758, 10000
-#endif
 
-#ifdef CONFIG_500D
-    //~ { "Canon EOS 500D", 0, 0x3479,
-    //~ { 4763,712,-646,-6821,14399,2640,-1921,3276,6561 } },
-    #define CAM_COLORMATRIX1                       \
-     4763, 10000,      712, 10000,    -646, 10000, \
-    -6821, 10000,    14399, 10000,    2640, 10000, \
-    -1921, 10000,     3276, 10000,    6561, 10000
-#endif
 
-#ifdef CONFIG_600D
-	//~ { "Canon EOS 600D", 0, 0x3510,
-	//~ { 6461,-907,-882,-4300,12184,2378,-819,1944,5931 } },
-    #define CAM_COLORMATRIX1                       \
-      6461, 10000,     -907, 10000,    -882, 10000,\
-    -4300, 10000,    12184, 10000,    2378, 10000, \
-     -819, 10000,     1944, 10000,    5931, 10000
-#endif
 
-#ifdef CONFIG_1100D
-    //~  { "Canon EOS 1100D", 0, 0x3510,
-    //~  { 6444,-904,-893,-4563,12308,2535,-903,2016,6728 } },
-    #define CAM_COLORMATRIX1                       \
-      6444, 10000,     -904, 10000,    -893, 10000,\
-    -4563, 10000,    12308, 10000,    2535, 10000, \
-     -903, 10000,     2016, 10000,    6728, 10000
-#endif
 
-#ifdef CONFIG_60D
-        //~ { "Canon EOS 60D", 0, 0x2ff7,
-        //~ {  6719,-994,-925,-4408,12426,2211,-887,2129,6051 } },
-    #define CAM_COLORMATRIX1                       \
-      6719, 10000,     -994, 10000,    -925, 10000,\
-    -4408, 10000,    12426, 10000,    2211, 10000, \
-     -887, 10000,     2129, 10000,    6051, 10000
-#endif
 
-#ifdef CONFIG_50D // these values are in ufraw-0.19.2
-    //~{ "Canon EOS 50D", 0, 0x3d93,
-	//~{ 4920,616,-593,-6493,13964,2784,-1774,3178,7005 } }, 
-    #define CAM_COLORMATRIX1                       \
-     4920, 10000,      616, 10000,    -593, 10000, \
-    -6493, 10000,    12964, 10000,    2784, 10000, \
-    -1774, 10000,     3178, 10000,    7005, 10000
-#endif
 	
 #if defined(CONFIG_650D) || defined(CONFIG_EOSM) || defined(CONFIG_700D) || defined(CONFIG_100D) // Same sensor
     //~ { "Canon EOS 650D", 0, 0x354d,
@@ -415,23 +301,7 @@ static int get_default_white_level()
      -975, 10000,     2039, 10000,    6148, 10000
 #endif
 
-#ifdef CONFIG_7D
-    //~ { "Canon EOS 7D", 0, 0x3510,
-    //~ { 6844,-996,-856,-3876,11761,2396,-593,1772,6198 } },
-    #define CAM_COLORMATRIX1                     \
-     6844, 10000,     -996, 10000,    -856, 10000,\
-    -3876, 10000,    11761, 10000,    2396, 10000, \
-     -593, 10000,     1772, 10000,    6198, 10000
-#endif
 
-#ifdef CONFIG_70D
-    //~ { "Canon EOS 70D", 0, 0x3bc7,
-    //~ { 7034,-804,-1014,-4420,12564,2058,-851,1994,5758 } },
-    #define CAM_COLORMATRIX1                     \
-     7034, 10000,     -804, 10000,    -1014, 10000,\
-    -4420, 10000,    12564, 10000,    2058, 10000, \
-     -851, 10000,     1994, 10000,    5758, 10000
-#endif
 
 struct raw_info GUARDED_BY(raw_sem) raw_info = {
     .api_version = 1,
@@ -447,7 +317,7 @@ struct raw_info GUARDED_BY(raw_sem) raw_info = {
 struct raw_capture_info raw_capture_info = {
     #ifdef CONFIG_FULLFRAME
     .sensor_crop = 100,         /* 1.0 */
-    #else
+#else
     .sensor_crop = 162,         /* 1.62x (APS-C) */
     #endif
     .binning_x   = 1,
@@ -473,34 +343,12 @@ PROP_HANDLER(PROP_LV_AFFRAME)
  * This is only used in photo LiveView, where we can't compute it
  */
 
-#ifdef CONFIG_5D3
-static int dynamic_ranges[] = {1097, 1087, 1069, 1041, 994, 923, 830, 748, 648, 552, 464};
-#endif
 
-#ifdef CONFIG_5D2
-static int dynamic_ranges[] = {1116, 1112, 1092, 1066, 1005, 909, 813, 711, 567};
-#endif
 
-#ifdef CONFIG_6D
-static int dynamic_ranges[] = {1143, 1139, 1122, 1087, 1044, 976, 894, 797, 683, 624, 505};
-#endif
 
-#ifdef CONFIG_500D
-static int dynamic_ranges[] = {1104, 1094, 1066, 1007, 933, 848, 737, 625};
-#endif
 
-#ifdef CONFIG_550D
-//static int dynamic_ranges[] = {1157, 1154, 1121, 1070, 979, 906, 805, 707}; I took the values Greg recommended
-static int dynamic_ranges[] = {1095, 1092, 1059, 1008, 917, 844, 744, 645};
-#endif
 
-#ifdef CONFIG_600D
-static int dynamic_ranges[] = {1146, 1139, 1116, 1061, 980, 898, 806, 728};
-#endif
 
-#ifdef CONFIG_1100D
-static int dynamic_ranges[] = {1099, 1098, 1082, 1025, 965, 877, 784}; // No ISO 12800 available
-#endif
 
 #ifdef CONFIG_650D
 static int dynamic_ranges[] = {1062, 1047, 1021, 963,  888, 804, 695, 623, 548};
@@ -514,25 +362,13 @@ static int dynamic_ranges[] = {1058, 1053, 1032, 967,  893, 807, 704, 618, 510};
 static int dynamic_ranges[] = {1067, 1061, 1038, 972, 894, 802, 707, 625, 510};
 #endif
 
-#ifdef CONFIG_60D
-static int dynamic_ranges[] = {1091, 1072, 1055, 999, 910, 824, 736, 662};
-#endif
 
-#ifdef CONFIG_50D
-static int dynamic_ranges[] = {1100, 1094, 1060, 1005, 919, 826, 726, 633};
-#endif
 
 #ifdef CONFIG_EOSM
 static int dynamic_ranges[] = {1060, 1063, 1037, 982, 901, 831, 718, 622, 536};
 #endif
 
-#ifdef CONFIG_7D
-static int dynamic_ranges[] = {1112, 1108, 1076, 1010, 902, 826, 709, 622};
-#endif
 
-#ifdef CONFIG_70D
-static int dynamic_ranges[] = {1091, 1070, 1046, 986, 915, 837, 746, 655, 555};
-#endif
 
 static int autodetect_black_level(int* black_mean, int* black_stdev);
 static int compute_dynamic_range(int black_mean, int black_stdev, int white_level);
@@ -574,20 +410,16 @@ static int raw_lv_get_resolution(int* width, int* height)
   #ifdef CONFIG_DIGIC_V
     uint32_t top_left  = shamem_read(0xC0F06800);
     uint32_t bot_right = shamem_read(0xC0F06804);
-  #else
+#else
     uint32_t top_left  = shamem_read(0xC0F06084);
     uint32_t bot_right = shamem_read(0xC0F06088);
   #endif
 
     /* this factor probably refers to parallel readout of sensor columns (just a guess) */
     /* can be found in ROM dumps by looking for 0xC0F06088 or 0xC0F06804 and doing the math */
-  #if defined(CONFIG_5D3) || defined(CONFIG_70D)
-    const int column_factor = 8;
-  #elif defined(CONFIG_500D)
-    const int column_factor = 1;
-  #elif defined(CONFIG_DIGIC_V) /* checked 6D, 650D, 700D, M, 100D */
+#if defined(CONFIG_DIGIC_V) /* checked 6D, 650D, 700D, M, 100D */
     const int column_factor = 4;
-  #else /* most DIGIC 4; checked 60D, 600D, 550D, 5D2, 50D, 7D, 1100D, 1200D, 1300D */
+#else
     const int column_factor = 2;
   #endif
 
@@ -832,53 +664,13 @@ int raw_update_params_work()
          * 
          * Try to use even offsets only, otherwise the colors will be screwed up.
          */
-        #ifdef CONFIG_5D2
-        skip_top        = zoom ?   52 : 18;
-        skip_left       = 160;
-        #endif
         
-        #ifdef CONFIG_5D3
-        skip_top        = zoom ?   60 : mv720 ?  20 :   28;
-        skip_left       = 146;
-        skip_right      = 2;
-        #endif
 
-        #ifdef CONFIG_6D
-        /* same skip offsets in 1080p and 720p; top/left bar is the same in x5 zoom as well */
-        skip_top        = 28;
-        skip_left       = 80;
-        skip_right      = zoom ? 0  : 10;
-        #endif
 
-        #ifdef CONFIG_500D
-        #warning FIXME: are these values correct for 1080p or 720p? (which of them?)
-        skip_top    = 24;
-        skip_left   = zoom ? 64 : 74;
-        #endif
 
-        #if defined(CONFIG_550D) || defined(CONFIG_600D)
-        #warning FIXME: are these values correct for 720p and crop modes?
-        skip_top    = 26;
-        skip_left   = zoom ? 0 : 152;
-        skip_right  = zoom ? 0 : 2;
-        #endif
 
-        #ifdef CONFIG_1100D
-        skip_top = 16;
-        skip_left = zoom ? 72 : 68;
-        #endif
 
-        #ifdef CONFIG_60D
-        skip_top    = 26;
-        skip_left   = zoom ? 0 : mv640crop ? 150 : 152;
-        skip_right  = zoom ? 0 : mv640crop ? 0 : 2;
-        #endif
 
-        #ifdef CONFIG_50D
-        skip_top    =  26;
-        skip_left   =  zoom ? 64: 74;
-        skip_right  = 0;
-        #endif
 
         #if defined(CONFIG_EOSM) || defined(CONFIG_700D) || defined(CONFIG_650D) || defined(CONFIG_100D)
         skip_top    = 28;
@@ -888,7 +680,7 @@ int raw_update_params_work()
         /* 720p: H=727-1, last valid line at y=723, 2 white lines at bottom */
         /* VRAM dumps, please: http://www.magiclantern.fm/forum/index.php?topic=12375.0 */
         skip_bottom = zoom ? 0 : mv1080crop ? 0 : mv720 ? 2 : 0;
-        #else
+#else
         /* 720p: H=726+1, last valid line at y=723, 3 white lines at bottom */
         /* 1080p: H=1189+1, 2 white lines at bottom */
         /* x5 zoom: H=1107+1, no bad lines at bottom; 1108-28=1080 */
@@ -897,17 +689,7 @@ int raw_update_params_work()
         #endif
         #endif
 
-        #ifdef CONFIG_7D
-        #warning FIXME: are these values correct for 720p and crop modes?
-        skip_top    = 26;
-        skip_left   = zoom ? 0 : 256;
-        #endif
 
-        #if defined(CONFIG_70D)
-        skip_top    = 28;
-        skip_left   = 144; // 146 could work, too
-        skip_right  = zoom ? 0 : 8;
-        #endif
 
         dbg_printf("LV raw buffer: %x (%dx%d)\n", raw_info.buffer, width, height);
         dbg_printf("Skip left:%d right:%d top:%d bottom:%d\n", skip_left, skip_right, skip_top, skip_bottom);
@@ -956,63 +738,19 @@ int raw_update_params_work()
          * Use even offsets only, otherwise the colors will be screwed up.
          */
         
-        #ifdef CONFIG_5D2
-        skip_left = 160;
-        skip_top = 52;
-        #endif
 
-        #ifdef CONFIG_5D3
-        skip_left = 138;    /* this gives a tight fit */
-        skip_right = 2;
-        skip_top = 80;      /* matches dcraw */
-        #endif
 
-        #ifdef CONFIG_500D
-        skip_left = 62;
-        skip_top = 24;
-        /* skip one line */
-        raw_info.buffer += width * 14/8;
-        height--;
-        #endif
 
-        #if defined(CONFIG_550D) || defined(CONFIG_60D) || defined(CONFIG_600D)
-        skip_left = 142;
-        skip_top = 52;
-        #endif
 
-        #ifdef CONFIG_1100D
-        skip_top = 16;
-        skip_left = 62;
-        raw_info.buffer += width * 14/8;
-        height--;
-        #endif
 
-        #ifdef CONFIG_6D
-        skip_left = 72;
-        skip_right = 0;
-        skip_top = 52;
-        #endif
       
-        #if defined(CONFIG_50D)
-        skip_left = 64;
-        skip_top = 54;
-        #endif 
 
         #if defined(CONFIG_650D) || defined(CONFIG_EOSM) || defined(CONFIG_700D) || defined(CONFIG_100D)
         skip_left = 72;
         skip_top = 52;
         #endif
 
-        #ifdef CONFIG_7D /* very similar to 5D2 */
-        skip_left = 158;
-        skip_top = 50;
-        #endif
 
-        #ifdef CONFIG_70D
-        skip_left = 142;        
-        skip_top = 52;
-        skip_right = 8;
-        #endif
 
         dbg_printf("Photo raw buffer: %x (%dx%d)\n", raw_info.buffer, width, height);
         dbg_printf("Skip left:%d right:%d top:%d bottom:%d\n", skip_left, skip_right, skip_top, skip_bottom);
@@ -1052,9 +790,7 @@ int raw_update_params_work()
     else if (!crop_rec_is_enabled())
     {
         raw_capture_info.binning_x  = 3; raw_capture_info.skipping_x = 0;
-#ifdef CONFIG_5D3
-        raw_capture_info.skipping_y = 0; raw_capture_info.binning_y  = mv720 ? 5 : 3;
-#elif CONFIG_EOSM
+#if CONFIG_EOSM
         raw_capture_info.binning_y  = 1; raw_capture_info.skipping_y = (mv720 || !RECORDING_H264) ? 4 : 2;
 #else
         raw_capture_info.binning_y  = 1; raw_capture_info.skipping_y = mv720 ? 4 : 2;
@@ -1957,7 +1693,7 @@ void FAST raw_lv_redirect_edmac(void* ptr)
 {
     #ifdef CONFIG_EDMAC_RAW_SLURP
     redirected_raw_buffer = (void*) CACHEABLE(ptr);
-    #else
+#else
     MEM(RAW_LV_EDMAC) = (intptr_t) CACHEABLE(ptr);
     #endif
 }
@@ -2389,18 +2125,6 @@ void raw_lv_update()
         raw_lv_disable();
         msleep(50);
 
-        #if defined(CONFIG_5D2) || defined(CONFIG_50D) || defined(CONFIG_500D)
-        #ifdef PINK_FIX_TEST
-        msleep(1000);
-        beep();         /* second beep: changing raw type to something that isn't pink (this will be reset as soon as you enable raw back) */
-        #endif
-        /* fix pink preview in zoom */
-        if (lv && lv_dispsize > 1 && DISPLAY_IS_ON)
-        {
-            /* todo: enqueue it in a vsync hook? */
-            EngDrvOutLV(0xc0f08114, 0);
-        }
-        #endif
     }
 }
 

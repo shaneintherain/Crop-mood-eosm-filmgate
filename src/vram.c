@@ -268,64 +268,11 @@ void _update_vram_params()
     // LV buffer (used for display)
     // these buffer sizes include any black bars
 
-#if defined(CONFIG_5DC)
-    vram_lv.width = 540;
-    vram_lv.height = 426;
-    vram_lv.pitch = vram_lv.width * 2;
-    os.x0 = 0; os.y0 = 26;
-    os.x_ex = 720;
-    os.y_ex = 480-52;
-    os.x_max = os.x0 + os.x_ex;
-    os.y_max = os.y0 + os.y_ex;
-    os.off_43 = 0;
-    os.off_169 = 0;
-    os.off_1610 = 0;
-#elif defined(CONFIG_40D)
-    //~ vram_lv.width = 720; // we only know the HD buffer for now... let's try to pretend it can be used as LV :)
-    //~ vram_lv.height = 480;
-    // we only know the HD buffer for now... let's try to pretend it can be used as LV :)
-    vram_lv.width = 768; // real width is 1024 in yuv411, but ML code assumes yuv422
-    vram_lv.height = 680;
-    vram_lv.pitch = vram_lv.width * 2;    
-    os.x0 = 0;
-    //~ os.y0 = 0;
-    os.y0 = lv ? 0 : 48; 
-    os.x_ex = 720;
-    //~ os.y_ex = 480;
-    os.y_ex = 480 - os.y0;    
-    os.x_max = os.x0 + os.x_ex;
-    os.y_max = os.y0 + os.y_ex;
-    os.off_43 = 0;
-    os.off_169 = 0;
-    os.off_1610 = 0;     
-    //~ os.off_169 = (os.y_ex - os.y_ex * 4/3 * 9/16) / 2;
-    //~ os.off_1610 = (os.y_ex - os.y_ex * 4/3 * 10/16) / 2;
-       
-#else
-    #ifdef CONFIG_1100D
-        vram_lv.width  = 720;
-        vram_lv.height = 240;
-    #else
         vram_lv.width  = hdmi_code >= 5 ? (is_movie_mode() && video_mode_resolution > 0 && video_mode_crop ? 960 : 1920) : EXT_MONITOR_RCA ? 540 : 720;
         vram_lv.height = hdmi_code >= 5 ? (is_movie_mode() && video_mode_fps > 30                          ? 540 : 1080) : EXT_MONITOR_RCA ? (video_system_pal ? 572 : 480) : 480;
-    #endif
     vram_lv.pitch = vram_lv.width * 2;
-#endif
 
 
-#ifdef CONFIG_5DC
-    bm2lv.sx = 1024 * vram_lv.width / 720;
-    bm2lv.sy = 1024 * vram_lv.height / (480-52);
-    bm2lv.tx = 0;
-    bm2lv.ty = -26;
-#elif CONFIG_40D
-    bm2lv.sx = 1024 * vram_lv.width / 720;
-    bm2lv.sy = 1024 * vram_lv.height / 480;
-    //~ bm2lv.sy = 1024 * vram_lv.height / (480-48);    
-    bm2lv.tx = 0;
-    bm2lv.ty = 0;
-    //~ bm2lv.ty = (PLAY_MODE || QR_MODE)? -48 : 0;     
-#else
     // bmp to lv transformation
     // LCD: (0,0) -> (0,0)
     // HDMI: (-120,-30) -> (0,0) and scaling factor is 2
@@ -333,7 +280,6 @@ void _update_vram_params()
     bm2lv.ty = hdmi_code >= 5 ? (video_mode_resolution>0 ? 30 : 60) : 0;
     bm2lv.sx = hdmi_code >= 5 ? 2048 : EXT_MONITOR_RCA ? 768 : 1024;
     bm2lv.sy = 1024 * vram_lv.height / (hdmi_code >= 5 ? 540 : 480); // no black bars at top or bottom
-#endif
     
     //~ lv_ratio_num = hdmi_code >= 5 ? 16 : 3;
     //~ lv_ratio_den = hdmi_code >= 5 ?  9 : 2;
@@ -342,18 +288,6 @@ void _update_vram_params()
     //~ hd_ratio_num = recording ? (video_mode_resolution < 2 ? 16 : 4) : 3;
     //~ hd_ratio_den = recording ? (video_mode_resolution < 2 ?  9 : 3) : 2;
 
-#if defined(CONFIG_40D)
-    vram_hd.width = vram_lv.width;
-    vram_hd.height = vram_lv.height;
-    vram_hd.pitch = vram_lv.pitch;
-    //~ vram_hd.width = 1024;
-    //~ vram_hd.height = 680;
-    //~ vram_hd.pitch = vram_hd.width * 2;
-#elif defined(CONFIG_5DC)
-    vram_hd.width = 1872;
-    vram_hd.height = 1664;
-    vram_hd.pitch = vram_lv.pitch;
-#else
     vram_hd.pitch = hd_size & 0xFFFF;
     vram_hd.width = vram_hd.pitch / 2;
     vram_hd.height = ((hd_size >> 16) & 0xFFFF)
@@ -361,19 +295,12 @@ void _update_vram_params()
         + 1
         #endif
         ;
-#endif
 
     // gray bars for 16:9 or 4:3
-    #if defined(CONFIG_600D)
-    int bar_x = is_movie_mode() && video_mode_resolution >= 2 ? os.off_43 : 0;
-    int bar_y = is_movie_mode() && video_mode_resolution <= 1 ? os.off_169 : 0;
-    #elif defined(CONFIG_1100D) || defined(CONFIG_DIGIC_V)
+#if defined(CONFIG_DIGIC_V)
     int bar_x = 0;
     int bar_y = is_movie_mode() && video_mode_resolution == 1 ? os.off_169 : 0;
-    #elif defined(CONFIG_500D) || defined(CONFIG_7D) //TODO: 650D/6D/EOSM used to have this one enabled too...which one is correct?
-    int bar_x = 0;
-    int bar_y = 0;
-    #else
+#else
     int bar_x = RECORDING && video_mode_resolution >= 2 ? os.off_43 : 0;
     int bar_y = RECORDING && video_mode_resolution <= 1 ? os.off_169 : 0;
     #endif
@@ -450,9 +377,6 @@ void yuv422_buffer_check()
 static inline void * get_yuv422buffer(int offset)
 {
     /* 5D3 1.2.3 has quad-buffered LV, so the old switch can't work */
-    #if defined(CONFIG_1100D) || defined(CONFIG_6D) || defined(CONFIG_5D3_123)
-    return (void*)CACHEABLE(YUV422_LV_BUFFER_DISPLAY_ADDR); // Good enough
-    #else
     
     if (YUV422_LV_BUFFER_DISPLAY_ADDR == 0)
     {
@@ -481,7 +405,6 @@ static inline void * get_yuv422buffer(int offset)
         case 5:
            return (void*)CACHEABLE(YUV422_LV_BUFFER_3);
     }
-    #endif
 }
 
 
@@ -513,9 +436,6 @@ static void* get_fastrefresh_422_other_buf()
     return get_yuv422buffer(fastrefresh_direction ? 2 : 1);
 }
 
-#ifdef CONFIG_500D
-int first_video_clip = 1;
-#endif
 
 
 struct vram_info * get_yuv422_vram()
@@ -540,16 +460,6 @@ struct vram_info * get_yuv422_vram()
     }
     #endif
 
-    #ifdef CONFIG_500D // workaround for issue 1108 - zebras flicker on first clip
-    
-    if (lv && !is_movie_mode()) first_video_clip = 0; // starting in photo mode is OK
-    
-    if (first_video_clip)
-    {
-        vram_lv.vram = CACHEABLE(get_lcd_422_buf());
-        return &vram_lv;
-    }
-    #endif
 
     extern int lv_paused;
     if (gui_state == GUISTATE_PLAYMENU || lv_paused || QR_MODE)
@@ -605,11 +515,6 @@ PROP_HANDLER(PROP_MVR_REC_START)
 {
     vram_params_set_dirty();
     
-    #ifdef CONFIG_500D
-    static int prev;
-    if (prev && !buf[0]) first_video_clip = 0;
-    prev = buf[0];
-    #endif
 }
 
 PROP_HANDLER(PROP_SHOOTING_TYPE)

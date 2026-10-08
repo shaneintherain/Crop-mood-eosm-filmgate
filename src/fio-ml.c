@@ -74,90 +74,12 @@ static CONFIG_INT("card.test", card_test_enabled, 1);
 static CONFIG_INT("card.force_type", card_force_type, 0);
 
 #ifndef CONFIG_INSTALLER
-#ifdef CONFIG_5D3
-static void card_test(struct card_info * card)
-{
-    // some cards have timing issues on 5D3
-    // ML will test for this bug at startup, and refuse to run on cards that can cause trouble
-    // http://www.magiclantern.fm/forum/index.php?topic=2528.0
-
-    char drive_path[4];
-    snprintf(drive_path, sizeof(drive_path), "%s:/", card->drive_letter);
-    
-    if (!cf_card_workaround)
-    {
-        /* save the config with workaround enabled now, because if the test fails, we may no longer able to save it */
-        cf_card_workaround = 1;
-        config_save();
-        cf_card_workaround = 0;
-    }
-
-    if (is_dir(drive_path))
-    {
-        char testFile[] = "X:/test.dat";
-        snprintf(testFile, sizeof(testFile), "%s:/test.dat", card->drive_letter);
-        FILE* f = FIO_CreateFile(testFile);
-        int fail = 0;
-        for (int i = 0; i < 100; i++)
-        {
-            bmp_fill(COLOR_BLACK, 0, 0, 400, 38);
-            char msg[50];
-            snprintf(msg, sizeof(msg), "%s card test (%d%%)...", card->type, i+1);
-            bmp_printf(FONT_CANON, 0, 0, msg);
-            int r = FIO_WriteFile(f, (void*)YUV422_LV_BUFFER_1, 1025);
-            if (r != 1025) { fail = 1; break; }
-        }
-        FIO_CloseFile(f);
-        FIO_RemoveFile(testFile);
-        bmp_fill(COLOR_BLACK, 0, 0, 400, 38);
-        
-        if (fail) // fsck!
-        {
-            int warning_enabling_workaround = (cf_card_workaround==0 && card->drive_letter[0] == 'A');
-            while(1)
-            {
-                bmp_fill(COLOR_BLACK, 0, 0, 550, 80);
-                if (warning_enabling_workaround)
-                {
-                    bmp_printf(FONT_CANON, 0,  0, "CF test fail, enabling workaround.");
-                    bmp_printf(FONT_CANON, 0, 40, "Restart the camera to try again.");
-                    cf_card_workaround = 1;
-                }
-                else
-                {
-                    bmp_printf(FONT_CANON, 0,  0, "%s card test failed!", card->type);
-                    bmp_printf(FONT_CANON, 0, 40, "Do not use this card on 5D3!");
-                }
-                beep();
-                info_led_blink(1, 1000, 1000);
-            }
-        }
-        
-        if (!cf_card_workaround)
-        {
-            /* test OK, save config once again to make sure we won't end up with the compatibility flag enabled by mistake */
-            /* (might happen on a crash, or if you take the battery out) */
-            config_save();
-        }
-    }
-}
-#endif
 
 /** 
  * Called from debug_init_stuff
  */
 void _card_tweaks()
 {
-#ifdef CONFIG_5D3
-    if (card_test_enabled)
-    {
-        if (available_cards[CARD_A].free_space_raw > 10) card_test(&available_cards[CARD_A]);
-        if (available_cards[CARD_B].free_space_raw > 10) card_test(&available_cards[CARD_B]);
-        
-        /* if it reaches this point, the cards are OK */
-        card_test_enabled = 0;
-    }
-#endif
     
 #ifdef CONFIG_DUAL_SLOT
     /* on startup enforce selected card.
@@ -177,19 +99,6 @@ void _card_tweaks()
 }
 #endif  /* CONFIG_INSTALLER */
 
-#ifdef CONFIG_5D3
-static MENU_SELECT_FUNC(card_test_toggle)
-{
-    card_test_enabled = !card_test_enabled;
-}
-
-static MENU_UPDATE_FUNC(card_test_update)
-{
-    MENU_SET_VALUE(card_test_enabled ? "ON" : "OFF");
-    MENU_SET_ICON(MNI_BOOL(card_test_enabled), 0);
-    MENU_SET_ENABLED(card_test_enabled);
-}
-#endif
 
 static void startup_warning(char* msg)
 {
@@ -783,22 +692,6 @@ struct menu_entry card_menus[] = {
                 .update = &card_info_display,
                 .help = "CF card info: make and model."
             },*/
-#ifdef CONFIG_5D3
-            {
-                .name = "Card test at startup", 
-                //~ .priv = &card_test_enabled, /* don't use priv, so it doesn't get displayed in the modified settings menu */
-                .select = card_test_toggle,
-                .update = card_test_update,
-                .help = "File write test. Some cards may have compatibility issues.",
-            },
-            {
-                .name = "CF card workaround",
-                .priv = &cf_card_workaround,
-                .max = 1,
-                .help = "Slows down the CF write speed to let you use certain cards.",
-                .help2 = "(e.g. Kingston 16GB 266x is known to require this)"
-            },
-#endif
             {
                 .name = "Preferred card", 
                 .priv = &card_force_type,

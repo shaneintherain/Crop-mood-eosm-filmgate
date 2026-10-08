@@ -146,11 +146,7 @@ void ml_assert_handler(char* msg, char* file, int line, const char* func);
 
 int rand (void);
 
-#if !defined(CONFIG_7D_MASTER)
 #define ASSERT(x) { if (!(x)) { ml_assert_handler(#x, __FILE__, __LINE__, __func__); }}
-#else
-#define ASSERT(x) do{}while(0)
-#endif
 //~ #define ASSERT(x) {}
 
 #define STR_APPEND(orig,fmt,...) do { int _len = strlen(orig); snprintf(orig + _len, sizeof(orig) - _len, fmt, ## __VA_ARGS__); } while(0)
@@ -252,22 +248,11 @@ void EngDrvOutLV(uint32_t reg, uint32_t value);   /* ML wrapper for LiveView-onl
 void _engio_write(uint32_t* reg_list);    /* Canon stub */
 void engio_write(uint32_t* reg_list);     /* ML wrapper */
 
-#ifdef CONFIG_550D
-/** 550D hack for DISPLAY_IS_ON */
-extern int get_display_is_on_550D();
-#endif
 
 #ifdef CONFIG_LCD_SENSOR
 void DispSensorStart();
 #endif
 
-#ifdef CONFIG_5D2
-void StartPlayProtectGuideApp();
-void StopPlayProtectGuideApp();
-void PtpDps_remote_release_SW1_SW2_worker();
-void Gui_SetSoundRecord( int );
-void GUI_SetLvMode( int );
-#endif
 
 int SoundDevActiveIn( uint32_t );
 

@@ -147,11 +147,7 @@ static struct mem_allocator allocators[] = {
         .preferred_min_alloc_size = 0,
         .preferred_max_alloc_size = 512 * 1024,
         .preferred_free_space = 1024 * 1024 * 3/2,  /* at 1MB free, "dispcheck" may stop working */
-        #ifdef CONFIG_1100D
-        .minimum_free_space = 384 * 1024,
-        #else
         .minimum_free_space = 512 * 1024,           /* Canon code also allocates from here, so keep it free */
-        #endif
     },
 #ifndef CONFIG_INSTALLER    /* installer only needs the basic allocators */
 
@@ -1101,7 +1097,7 @@ static void guess_free_mem_task(void* priv, int delta)
             uint32_t v = MEM(p);
             #ifdef CONFIG_MARK_UNUSED_MEMORY_AT_STARTUP
             if (v != 0x124B1DE0 /* RA(W)VIDEO*/)
-            #else
+#else
             if (v != 0 && v != 0xFFFFFFFF)
             #endif
             {
@@ -1425,7 +1421,7 @@ static struct menu_entry mem_menus[] = {
         .icon_type = IT_ALWAYS_ON,
         .help = "Free memory, shared between ML and Canon firmware.",
     },
-#else // dryos
+#else
     {
         .name = "Free Memory",
         .update = meminfo_display,
