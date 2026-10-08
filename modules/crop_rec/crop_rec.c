@@ -6319,6 +6319,91 @@ static int eosm_lv_guard_step(int menu_shown, int mlv_busy)
 }
 #endif
 
+/* ------------------------------------------------------------------------
+ * Record-stop Live View check
+ *
+ * After a recording stops, mlv_lite resumes Live View.  It used to follow that
+ * with an unconditional x5 -> x1 -> x5 zoom bounce, which makes the screen go
+ * dark and show half-built frames for about a second, every time.  Instead,
+ * mlv_lite now just asks for a check here; we look at the real display state
+ * a moment later and only bounce the zoom if Live View did not come back
+ * healthy.  A failed or doubtful check does exactly what the old code did.
+ * ---------------------------------------------------------------------- */
+#ifndef YUV422_LV_BUFFER_DISPLAY_ADDR
+/* EOS M 2.0.2 (modules are built without the platform consts.h) */
+#define YUV422_LV_BUFFER_DISPLAY_ADDR (*(uint32_t*)(0x3E650+0x118))
+#endif
+
+#define LV_CHECK_DELAY_MS 450      /* let Canon finish resuming Live View */
+#define LV_CHECK_GIVEUP_MS 6000    /* never keep a request around longer than this */
+
+static volatile int lv_check_pending = 0;
+static volatile int lv_check_since = 0;
+
+/* called by mlv_lite once a recording has fully stopped */
+void crop_rec_request_lv_check(void)
+{
+    lv_check_since = get_ms_clock();
+    lv_check_pending = 1;
+}
+
+/* highest luma in a sparse grid of the displayed frame (read-only) */
+static int lv_check_display_luma_max(void)
+{
+    const uint8_t *vram;
+    int x, y;
+    int luma_max = 0;
+    int width = vram_lv.width;
+    int height = vram_lv.height;
+    int pitch = vram_lv.pitch;
+    static const uint8_t x_pos[] = { 2, 4, 6, 8 };
+    static const uint8_t y_pos[] = { 3, 5, 7 };
+
+    if (!YUV422_LV_BUFFER_DISPLAY_ADDR || width < 64 || height < 64 ||
+        pitch < width * 2)
+        return 0; /* no usable data: treat as not healthy */
+
+    vram = (const uint8_t *)UNCACHEABLE(YUV422_LV_BUFFER_DISPLAY_ADDR);
+    for (y = 0; y < COUNT(y_pos); y++)
+    {
+        int py = height * y_pos[y] / 10;
+        for (x = 0; x < COUNT(x_pos); x++)
+        {
+            int px = width * x_pos[x] / 10;
+            /* UYVY: luma is the second byte of each two-byte pixel */
+            luma_max = MAX(luma_max, vram[py * pitch + px * 2 + 1]);
+        }
+    }
+    return luma_max;
+}
+
+/* are the display-route registers set the way our x5 preset expects? */
+static int lv_check_route_ok(void)
+{
+    if (!Preview_Control || !YUV_LV_Buf)
+        return 1;
+
+    return shamem_read(0xC0F11B8C) == YUV_HD_S_H &&
+           shamem_read(0xC0F11BCC) == YUV_HD_S_V &&
+           shamem_read(0xC0F11BC8) == YUV_HD_S_V_E &&
+           shamem_read(0xC0F11ACC) == YUV_LV_S_V &&
+           shamem_read(0xC0F04210) == YUV_LV_Buf;
+}
+
+/* Returns 1 if Live View looks fine and the zoom bounce can be skipped. */
+static int lv_check_is_healthy(void)
+{
+    if (lv_dispsize != 5 || !patch_active || !CROP_PRESET_MENU || !is_movie_mode())
+        return 0;
+    if (PathDriveMode->zoom != 5)
+        return 0;
+    if (!lv_check_route_ok())
+        return 0;
+    if (lv_check_display_luma_max() <= 20)
+        return 0;
+    return 1;
+}
+
 /* when closing ML menu, check whether we need to refresh the LiveView */
 static unsigned int crop_rec_polling_cbr(unsigned int unused)
 {
@@ -6385,6 +6470,33 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
         /* don't change while recording raw, or while mlv_lite is starting/stopping */
         return CBR_RET_CONTINUE;
     }
+
+#ifndef CONFIG_EOSM
+    if (lv_check_pending)
+    {
+        int waited = get_ms_clock() - lv_check_since;
+
+        if (waited >= LV_CHECK_GIVEUP_MS)
+        {
+            lv_check_pending = 0;
+        }
+        else if (waited >= LV_CHECK_DELAY_MS)
+        {
+            lv_check_pending = 0;
+
+            if (!lv_check_is_healthy() && lv_dispsize == 5)
+            {
+                /* same recovery the old record-stop code ran every time */
+                info_led_on();
+                gui_uilock(UILOCK_EVERYTHING);
+                set_zoom(1);
+                set_zoom(5);
+                gui_uilock(UILOCK_NONE);
+                info_led_off();
+            }
+        }
+    }
+#endif
 
 #ifdef CONFIG_EOSM
     if (eosm_lv_guard_step(menu_shown, mlv_busy))

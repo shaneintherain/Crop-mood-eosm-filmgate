@@ -91,6 +91,7 @@ static GUARDED_BY(GuiMainTask) int show_edmac = 0;
 
 /* from mlv_play module */
 extern WEAK_FUNC(ret_0) void mlv_play_file(char *filename);
+extern WEAK_FUNC(ret_0) void crop_rec_request_lv_check(void);
 
 /* Dual ISO: skip ML raw preview while recording (striped dual RAW on LV). */
 static int dual_iso_skip_raw_preview(void)
@@ -3858,6 +3859,8 @@ void raw_video_rec_task(uint32_t thread)
     int named_clip = 0;      /* set once this run has picked a new movie file name */
     int last_block_size = 0; /* for detecting early stops */
     int liveview_hacked = 0;
+    int lv_paused_early = 0;   /* Live View was already paused by the early-abort path */
+    int lv_pause_deferred = 0; /* normal stop: Live View is paused right before cleanup */
     int last_write_timestamp = 0;    /* last FIO_WriteFile call */        
     int last_processed_frame = 0;
     static int fps;
@@ -4288,6 +4291,7 @@ abort_and_check_early_stop:
 #ifndef CONFIG_EOSM
                 /* faster writing speed that way */
                 PauseLiveView();
+                lv_paused_early = 1;
 #endif
             }
 
@@ -4332,8 +4336,20 @@ abort_and_check_early_stop:
 #ifndef CONFIG_EOSM
     if (!RECORDING_H264 && thread == 0)
     {
-        /* faster writing speed that way */
-        PauseLiveView();
+        if (cam_eos_m && !lv_paused_early)
+        {
+            /* Normal stop on the EOS M: keep Live View running while the last
+             * frames are written (capture has already stopped), so the screen
+             * is not black for the whole write-out.  Canon still needs the
+             * usual pause/resume cycle to restore its exposure and button
+             * state, so that is done right before cleanup instead. */
+            lv_pause_deferred = 1;
+        }
+        else
+        {
+            /* faster writing speed that way */
+            PauseLiveView();
+        }
 
         /* PauseLiveView breaks UI locks - why? */
         gui_uilock(UILOCK_EVERYTHING);
@@ -4430,6 +4446,15 @@ abort_and_check_early_stop:
     }
 
 cleanup:
+#ifndef CONFIG_EOSM
+    if (lv_pause_deferred)
+    {
+        /* everything is written: do the pause that normally comes first */
+        lv_pause_deferred = 0;
+        PauseLiveView();
+        gui_uilock(UILOCK_EVERYTHING);
+    }
+#endif
     if (f) finish_chunk(f, thread);
     if (!written_total[thread])
     {
@@ -4509,13 +4534,14 @@ cleanup:
         if (crop_rec_is_enabled())
         {
 #ifndef CONFIG_EOSM
-            if (cam_eos_m) // what about other models?
+            if (cam_eos_m)
             {
+                /* Used to bounce the zoom here (x5 -> x1 -> x5) every time,
+                 * which made the screen flash dark.  Ask crop_rec to check
+                 * the Live View state instead; it only bounces the zoom if
+                 * Live View did not come back healthy. */
                 if (lv_dispsize == 5)
-                {
-                    set_lv_zoom(1);
-                    set_lv_zoom(5);
-                }
+                    crop_rec_request_lv_check();
             }
 #endif
         }
