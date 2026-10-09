@@ -20,7 +20,7 @@
 #ifndef _FILM_FORMATS_H_
 #define _FILM_FORMATS_H_
 
-#define FILM_FRAME_COUNT   25   /* entries in film_frames[], including OFF at index 0 */
+#define FILM_FRAME_COUNT   24   /* entries in film_frames[], including OFF at index 0 */
 #define FILM_FORMAT_COUNT  11   /* Film Formats in the Movie menu (both standards) */
 #define FILM_FILM_COUNT    6    /* the first six are the FILM standard; the rest are VIDEO */
 
@@ -84,7 +84,6 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     /* 2/3" (8.8 x 6.6 mm) */
     { "2/3\" 16:9 Crop",    2032, 1144, "2/3\" sensor width (8.8 mm), cropped to 16:9",   "1:1 16:9 2560x1440",  "16:9 Crop",  FILM_RO_1440 },
     { "2/3\" 4:3",          2032, 1524, "2/3\" sensor (8.8 x 6.6 mm), 4:3",              "1:1 4:3 2160x1620",   "4:3", FILM_RO_1620 },
-    { "2/3\" 1.85:1 Crop",  1984, 1072, "2/3\" sensor width, cropped to 1.85:1",         "1:1 2.33:1 2520x1080", "1.85:1 Crop", FILM_RO_25K },
     /* 1/2" (6.4 x 4.8 mm) */
     { "1/2\" 16:9 Crop",    1472,  828, "1/2\" sensor width (6.4 mm), cropped to 16:9",   "1:1 2.33:1 2520x1080", "16:9 Crop", FILM_RO_25K },
     { "1/2\" 4:3",          1472, 1104, "1/2\" sensor (6.4 x 4.8 mm), 4:3",              "1:1 3:2 1920x1280",   "4:3", FILM_RO_1280 },
@@ -119,11 +118,11 @@ static const struct film_format film_formats[FILM_FORMAT_COUNT] __attribute__((u
     { "S8",             "S8",     10, 2 },
     { "8mm",            "8mm",    12, 2 },
     /* VIDEO standard */
-    { "2/3\"",          "2/3\"",  14, 3 },
-    { "1/2\"",          "1/2\"",  17, 2 },
-    { "1/2.3\"",        "1/2.3\"",19, 2 },
-    { "1/3\"",          "1/3\"",  21, 2 },
-    { "1/4\"",          "1/4\"",  23, 2 },
+    { "2/3\"",          "2/3\"",  14, 2 },
+    { "1/2\"",          "1/2\"",  16, 2 },
+    { "1/2.3\"",        "1/2.3\"",18, 2 },
+    { "1/3\"",          "1/3\"",  20, 2 },
+    { "1/4\"",          "1/4\"",  22, 2 },
 };
 
 /* index into film_frames[] for a Film Format and a Frame choice (out-of-range input is clamped) */

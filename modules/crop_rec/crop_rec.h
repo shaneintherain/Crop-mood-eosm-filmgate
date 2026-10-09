@@ -14,7 +14,7 @@ extern WEAK_FUNC(ret_0) int crop_rec_touch_get_value(int control, int slot,
 /* Custom page Movie controls: 0=Mode, 1=Aspect Ratio, 2=Preset. */
 extern WEAK_FUNC(ret_0) int crop_rec_custom_adjust(int control, int delta);
 /* Film Format / Frame chosen in the Movie menu: 0 = none, otherwise an index
- * 1..24 into the film_frames[] table in src/film-formats.h. */
+ * 1..23 into the film_frames[] table in src/film-formats.h. */
 extern WEAK_FUNC(ret_0) int crop_rec_film_format();
 /* 1 when the active recording format is a FILM standard one (A35 ... 8mm): the shutter is shown
  * as an angle first.  0 for the VIDEO standard and for every other mode. */
