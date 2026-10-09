@@ -3131,6 +3131,12 @@ skip_name:
     // value string too big? move it to the left
     int val_width = bmp_string_width(fnt, info->value);
 #ifdef CONFIG_SLIM_MENUS
+    /* FILM standard Shutter row: angle digits as the value, followed by the ° ring */
+    int ring_after_value = draw_tri_arrows && info->value[0] && shutter_row_angle_first(entry);
+    if (ring_after_value)
+        val_width += 10;
+#endif
+#ifdef CONFIG_SLIM_MENUS
     if (reserve_lut_marker && draw_tri_arrows)
     {
         /* Dynamic LUT filenames may be much longer than ordinary values.
@@ -3152,7 +3158,7 @@ skip_name:
     if (draw_tri_arrows && info->rinfo[0])
     {
         adj_rinfo_w = bmp_string_width(fnt, info->rinfo) + arrow_pad;
-        if (entry->name && streq(entry->name, "Shutter"))
+        if (entry->name && streq(entry->name, "Shutter") && !ring_after_value)
             adj_rinfo_w += 10; /* ° ring after angle digits */
     }
 #endif
@@ -3233,6 +3239,15 @@ skip_name:
     );
 
 #ifdef CONFIG_SLIM_MENUS
+    if (ring_after_value)
+    {
+        /* same ring as the one drawn after the angle digits in the other standard */
+        int deg_x = x_value + bmp_string_width(fnt, info->value) + 2;
+        int deg_y = y + y_font_offset + MAX(fonth / 5, 4);
+        int deg_r = MAX(fonth / 10, 3);
+        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, arrow_color);
+        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, arrow_color);
+    }
     if (draw_right_arrow)
     {
         int x_after_value = x_value + val_width + arrow_pad + arrow_w;
@@ -3256,7 +3271,7 @@ skip_name:
                 "%s",
                 info->rinfo
             );
-            if (entry->name && streq(entry->name, "Shutter"))
+            if (entry->name && streq(entry->name, "Shutter") && !ring_after_value)
             {
                 int deg_x = rx + bmp_string_width(fnt, info->rinfo) + 2;
                 int deg_y = y + y_font_offset + MAX(fonth / 5, 4);

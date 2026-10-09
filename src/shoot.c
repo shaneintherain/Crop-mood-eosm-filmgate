@@ -1705,6 +1705,15 @@ iso_toggle( void * priv, int sign )
 extern void shutter_lock_accept(int shutter);
 #endif
 
+static MENU_UPDATE_FUNC(shutter_display);
+
+/* Shutter row in the FILM standard: the angle is the value (◄ 180° ►), the speed second.
+ * menu.c uses this to draw the ° ring after the value instead of after the speed. */
+int shutter_row_angle_first(struct menu_entry * entry)
+{
+    return entry && entry->update == shutter_display && shutter_angle_display();
+}
+
 static MENU_UPDATE_FUNC(shutter_display)
 {
     if (is_movie_mode())
@@ -1713,9 +1722,18 @@ static MENU_UPDATE_FUNC(shutter_display)
         int deg = 3600 * fps_get_current_x1000() / s;
         deg = (deg + 5) / 10;
 #ifdef CONFIG_SLIM_MENUS
-        /* ◄ shutter ► on value; angle digits in rinfo (° drawn as Canon-sized ring). */
-        MENU_SET_VALUE("%s", lens_format_shutter_reciprocal(s, 5));
-        MENU_SET_RINFO("%d", deg);
+        if (shutter_angle_display())
+        {
+            /* FILM standard: ◄ angle ► on value (° ring drawn by menu.c), speed after it */
+            MENU_SET_VALUE("%d", deg);
+            MENU_SET_RINFO("%s", lens_format_shutter_reciprocal(s, 5));
+        }
+        else
+        {
+            /* ◄ shutter ► on value; angle digits in rinfo (° drawn as Canon-sized ring). */
+            MENU_SET_VALUE("%s", lens_format_shutter_reciprocal(s, 5));
+            MENU_SET_RINFO("%d", deg);
+        }
         MENU_SET_ENABLED(1);
 #else
         MENU_SET_VALUE(

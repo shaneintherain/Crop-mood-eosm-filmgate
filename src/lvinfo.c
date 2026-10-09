@@ -94,6 +94,11 @@ static const char * lvinfo_touch_field_value(enum lvinfo_touch_field field)
         case LVINFO_TOUCH_APERTURE:
             return lens_info.raw_aperture ? lens_format_aperture(lens_info.raw_aperture) : "F0.0";
         case LVINFO_TOUCH_SHUTTER:
+            if (shutter_angle_display())
+            {
+                snprintf(value, sizeof(value), "%d"SYM_DEGREE, current_shutter_angle());
+                return value;
+            }
             return lens_format_shutter_reciprocal(get_current_shutter_reciprocal_x1000(), 2);
         case LVINFO_TOUCH_ISO:
 #ifdef CONFIG_SLIM_MENUS

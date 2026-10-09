@@ -233,6 +233,10 @@ const char * lens_format_shutter(int raw_shutter);
 
 /** Pretty prints the shutter speed given the shutter reciprocal (times 1000) as input */
 /** FIXME: not thread-safe */
+/* FILM standard (crop_rec): the shutter is shown as an angle first, the speed second.
+ * shutter_angle_display() tells when; current_shutter_angle() is the angle in degrees (rounded). */
+int shutter_angle_display();
+int current_shutter_angle();
 const char * lens_format_shutter_reciprocal(int shutter_reciprocal_x1000, int digits);
 
 /** Pretty prints the aperture given the raw value as input */

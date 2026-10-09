@@ -4438,6 +4438,13 @@ int crop_rec_shutter_record()
     return is_EOSM && Shutter_rec;
 }
 
+/* 1 when the active recording format is one of the FILM standard formats (shutter shown as an angle) */
+int crop_rec_film_standard()
+{
+    int fmt = slim_film_active();
+    return fmt >= 0 && !film_is_video(fmt);
+}
+
 int crop_rec_film_format()
 {
     int frame;
@@ -4754,7 +4761,7 @@ static int slim_crop_fps_mask(void)
     {
         int ar = COERCE(crop_preset_ar_menu, 0, 4);
         if (ar == 4)
-            return 0x1 | 0x2 | 0x4; /* 3:2 → 23.976 / 25 / 30 */
+            return 0x1 | 0x2;       /* 3:2 (A35, A35 Anamorphic) → 23.976 / 25; no 30 in FILM */
         return 0; /* High FPS AR: single fixed rate (shown specially) */
     }
 
@@ -5394,6 +5401,7 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
     (void *)&crop_rec_touch_get_value,
     (void *)&crop_rec_custom_adjust,
     (void *)&crop_rec_film_format,
+    (void *)&crop_rec_film_standard,
     (void *)&crop_rec_shutter_record,
     (void *)&crop_rec_lv_transition_busy,
     (void *)&crop_rec_lv_transition_diag,
