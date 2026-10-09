@@ -19,5 +19,7 @@ extern WEAK_FUNC(ret_0) int crop_rec_film_format();
 /* 1 when the active recording format is a FILM standard one (A35 ... 8mm): the shutter is shown
  * as an angle first.  0 for the VIDEO standard and for every other mode. */
 extern WEAK_FUNC(ret_0) int crop_rec_film_standard();
+/* 1 when the active recording format is a VIDEO standard one (2/3" ... 1/4"): ISO is shown as Gain. */
+extern WEAK_FUNC(ret_0) int crop_rec_video_standard();
 /* Settings -> Shutter record: 1 = a half-press of the shutter button starts/stops recording. */
 extern WEAK_FUNC(ret_0) int crop_rec_shutter_record();

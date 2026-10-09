@@ -236,6 +236,8 @@ const char * lens_format_shutter(int raw_shutter);
 /* FILM standard (crop_rec): the shutter is shown as an angle first, the speed second.
  * shutter_angle_display() tells when; current_shutter_angle() is the angle in degrees (rounded). */
 int shutter_angle_display();
+/* VIDEO standard (crop_rec): ISO is shown as Gain in dB, ISO 100 = 0 dB (see iso-gain.h) */
+int gain_display();
 int current_shutter_angle();
 const char * lens_format_shutter_reciprocal(int shutter_reciprocal_x1000, int digits);
 

@@ -32,7 +32,7 @@ if grep -n '"Super 8 Actual"\|"A35 Anamorphic 2x"' modules/crop_rec/crop_rec.c m
 fi
 
 # 3. build and run
-for t in film settings menu ltc; do
+for t in film settings menu gain ltc; do
   echo "== $t"
   gcc $CF -o "$OUT/$t" tests/${t}_tests.c -lm
   "$OUT/$t"

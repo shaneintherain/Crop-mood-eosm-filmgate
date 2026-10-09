@@ -368,11 +368,8 @@ static int slim_handle_set_button(unsigned int key)
  * CMOS refresh runs from CBR_SHOOT_TASK (do not block the key handler). */
 static void slim_toggle_dual_iso(void)
 {
-    if (RECORDING)
-        return;
-    int en = get_config_var("isoless.hdr");
-    set_config_var("isoless.hdr", en ? 0 : 1);
-    lens_display_set_dirty();
+    /* Dual ISO is disabled in every mode: the module is not built, and nothing may
+     * switch it on through a config variable either. */
 }
 
 /* ISO arrow shortcuts: when Dual ISO is ON, step primary+recovery as a pair. */
@@ -4445,6 +4442,13 @@ int crop_rec_film_standard()
     return fmt >= 0 && !film_is_video(fmt);
 }
 
+/* 1 when the active recording format is one of the VIDEO standard sizes (ISO is shown as Gain) */
+int crop_rec_video_standard()
+{
+    int fmt = slim_film_active();
+    return fmt >= 0 && film_is_video(fmt);
+}
+
 int crop_rec_film_format()
 {
     int frame;
@@ -5402,6 +5406,7 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
     (void *)&crop_rec_custom_adjust,
     (void *)&crop_rec_film_format,
     (void *)&crop_rec_film_standard,
+    (void *)&crop_rec_video_standard,
     (void *)&crop_rec_shutter_record,
     (void *)&crop_rec_lv_transition_busy,
     (void *)&crop_rec_lv_transition_diag,

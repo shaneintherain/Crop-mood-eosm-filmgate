@@ -5,6 +5,7 @@
 #include <lvinfo.h>
 #include <lens.h>
 #include <fps.h>
+#include "iso-gain.h"
 #include <module.h>
 #include <propvalues.h>
 
@@ -76,7 +77,7 @@ static const char * lvinfo_touch_field_name(enum lvinfo_touch_field field)
     {
         case LVINFO_TOUCH_APERTURE: return "Aperture";
         case LVINFO_TOUCH_SHUTTER:  return "Shutter";
-        case LVINFO_TOUCH_ISO:      return "ISO";
+        case LVINFO_TOUCH_ISO:      return gain_display() ? "Gain" : "ISO";
         case LVINFO_TOUCH_WB:       return "White Balance";
         case LVINFO_TOUCH_CROP:     return "Crop info";
         case LVINFO_TOUCH_FPS:      return "FPS";
@@ -101,6 +102,11 @@ static const char * lvinfo_touch_field_value(enum lvinfo_touch_field field)
             }
             return lens_format_shutter_reciprocal(get_current_shutter_reciprocal_x1000(), 2);
         case LVINFO_TOUCH_ISO:
+            if (gain_display() && lens_info.raw_iso)
+            {
+                iso_gain_text(value, sizeof(value), lens_info.raw_iso, 0);
+                return value;
+            }
 #ifdef CONFIG_SLIM_MENUS
             /* The editor changes recovery ISO when Dual ISO is enabled, so
              * its center value must show that same second ISO. */

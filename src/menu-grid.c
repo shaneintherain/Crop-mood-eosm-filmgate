@@ -7,6 +7,7 @@
 #include "gui-common.h"
 #include "config.h"
 #include "lens.h"
+#include "iso-gain.h"
 #include "shoot.h"
 #include "fps.h"
 #include "slim-font.h"
@@ -519,7 +520,13 @@ static int quick_screen_value(
     }
     else if (index == 7)
     {
-        snprintf(buf, size, "%s", raw_value);
+        if (gain_display())
+        {
+            /* VIDEO standard: Gain only (the cell is too narrow for the ISO as well) */
+            iso_gain_text(buf, size, lens_info.iso ? lens_info.iso_equiv_raw : 72, 0);
+        }
+        else
+            snprintf(buf, size, "%s", raw_value);
     }
     else
     {
