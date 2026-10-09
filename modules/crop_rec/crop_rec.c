@@ -4319,7 +4319,7 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
 };
 
 /* ---- Film Format menu ------------------------------------------------------
- * The Movie menu offers twelve formats in two Standards (menu row "Standard"):
+ * The Movie menu offers eleven formats in two Standards (menu row "Standard"):
  *   FILM   Academy 35mm, A35 Anamorphic, S16, 16mm, S8, 8mm   (the default)
  *   VIDEO  video sensor sizes at 1:1: 2/3", 1/2", 1/2.3", 1/3", 1/4"
  * The old Mode / Aspect Ratio / Preset choices are no longer exposed.  Rows are reused:
@@ -4344,7 +4344,7 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
  * readout is already saved by the crop_preset_* settings, but several formats share a
  * readout (A35 / A35 Anamorphic, S8 / 8mm, most video sizes): without these the group
  * would fall back to its first format (and the Frame choice to the first entry) at every start. */
-static CONFIG_INT("crop.film_fmt", slim_film_fmt, 0);        /* selected Film Format 0..11 (6 and up = VIDEO) */
+static CONFIG_INT("crop.film_fmt", slim_film_fmt, 0);        /* selected Film Format 0..10 (6 and up = VIDEO) */
 static CONFIG_INT("crop.film_frames", slim_film_frames, 0);  /* Frame choice per format, 2 bits each */
 
 static int slim_film_frame_get(int fmt)
@@ -4387,7 +4387,7 @@ static int slim_film_menu_readout(void)
 }
 
 /* Which Film Format does the current menu state correspond to?  Returns
- * 0..11, or -1 for a leftover legacy mode (not in the film list).  Also repairs
+ * 0..10, or -1 for a leftover legacy mode (not in the film list).  Also repairs
  * the saved format and Frame choice so they agree with the readout. */
 static int slim_film_sync(void)
 {
@@ -4422,7 +4422,7 @@ static int slim_film_active_readout(void)
     return -1;
 }
 
-/* Film Format of the real crop mode: 0..11 or -1 (no writes: also called from mlv_lite) */
+/* Film Format of the real crop mode: 0..10 or -1 (no writes: also called from mlv_lite) */
 static int slim_film_active(void)
 {
     int frame;
@@ -7748,6 +7748,7 @@ static unsigned int crop_rec_init()
 
         /* Derive Mode UI (incl. LV) then push 1x1 combo / Full-Res. */
         slim_crop_sync_from_backend();
+        slim_film_sync();   /* saved Film Format / Frame agree with the saved readout from the start */
         slim_crop_apply_mode();
         slim_crop_apply_bit_depth();
 

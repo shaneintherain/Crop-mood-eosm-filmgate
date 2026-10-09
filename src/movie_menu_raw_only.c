@@ -25,6 +25,7 @@ static struct menu_entry movie_menu_raw_toggle[] =
 {
 #ifdef CONFIG_SLIM_MENUS
     /* Flat Crop Mode settings — top of Movie page */
+    { .name = "Standard",             .placeholder = 1 },
     { .name = "Mode",                 .placeholder = 1 },
     { .name = "Aspect Ratio",         .placeholder = 1 },
     { .name = "Preset",               .placeholder = 1 },
