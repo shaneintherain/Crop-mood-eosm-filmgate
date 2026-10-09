@@ -16,6 +16,15 @@ CR=modules/crop_rec/crop_rec.c
   python3 tests/extract.py $CR function slim_film_frame_get
   python3 tests/extract.py $CR function slim_film_frame_set
 } > "$OUT/crop_rec_snippets.h"
+# the Film Format / Standard menu logic (tests/menu_tests.c)
+{
+  python3 tests/extract.py $CR function slim_film_frame_get
+  python3 tests/extract.py $CR function slim_film_frame_set
+  python3 tests/extract.py $CR function slim_video_standard
+  python3 tests/extract.py $CR function slim_film_menu_readout
+  python3 tests/extract.py $CR function slim_film_sync
+} > "$OUT/crop_rec_menu_snippets.h"
+python3 tests/extract.py $CR function slim_film_apply > "$OUT/crop_rec_apply_snippet.h"
 
 # 2. structure check: the film table exists once, in src/film-formats.h only
 if grep -n '"Super 8 Actual"\|"A35 Anamorphic 2x"' modules/crop_rec/crop_rec.c modules/mlv_lite/mlv_lite.c; then
@@ -23,7 +32,7 @@ if grep -n '"Super 8 Actual"\|"A35 Anamorphic 2x"' modules/crop_rec/crop_rec.c m
 fi
 
 # 3. build and run
-for t in film settings ltc; do
+for t in film settings menu ltc; do
   echo "== $t"
   gcc $CF -o "$OUT/$t" tests/${t}_tests.c -lm
   "$OUT/$t"

@@ -47,18 +47,94 @@ int main(void)
         CHECK(fr->name[0] && fr->gate[0] && fr->mode[0] && fr->frame[0], "frame %d has an empty text", i);
         CHECK(readout_of(fr->mode, &rw, &rh), "frame %d (%s): no readout size in '%s'", i, fr->name, fr->mode);
         CHECK(fr->w <= rw && fr->h <= rh, "frame %d (%s): %dx%d does not fit the %dx%d readout", i, fr->name, fr->w, fr->h, rw, rh);
+        /* the readout number must be the one the 'mode' text names */
+        CHECK(fr->readout >= 0 && fr->readout < FILM_RO_COUNT, "frame %d (%s): bad readout number %d", i, fr->name, fr->readout);
+        if (fr->readout >= 0 && fr->readout < FILM_RO_COUNT)
+        {
+            CHECK(film_readouts[fr->readout].w == rw && film_readouts[fr->readout].h == rh,
+                  "frame %d (%s): readout table says %dx%d, 'mode' text says %dx%d", i, fr->name,
+                  film_readouts[fr->readout].w, film_readouts[fr->readout].h, rw, rh);
+            CHECK(fr->w <= film_readouts[fr->readout].w && fr->h <= film_readouts[fr->readout].h,
+                  "frame %d (%s): does not fit its readout", i, fr->name);
+        }
     }
 
-    /* frames of one format share the readout and the width (only the height / crop differs) */
+    /* frames of one format share the width (only the height / crop differs).  FILM formats
+     * also share one readout; VIDEO sizes may use a different readout per frame */
     for (int f = 0; f < FILM_FORMAT_COUNT; f++)
         for (int k = 1; k < film_formats[f].count; k++)
         {
             const struct film_frame * a = &film_frames[film_formats[f].first];
             const struct film_frame * b = &film_frames[film_formats[f].first + k];
-            CHECK(!strcmp(a->mode, b->mode), "format %s: frames use different readouts", film_formats[f].name);
-            if (f != 1) /* anamorphic: 2x and 1.33x have different squeezed widths */
+            if (!film_is_video(f))
+                CHECK(!strcmp(a->mode, b->mode) && a->readout == b->readout, "format %s: frames use different readouts", film_formats[f].name);
+            if (f != 1 && f != 7) /* anamorphic: 2x and 1.33x are squeezed differently; 2/3" 1.85:1 needs the narrower 2.5K window */
                 CHECK(a->w == b->w, "format %s: frames have different widths", film_formats[f].name);
         }
+
+    /* the two standards */
+    CHECK(FILM_FILM_COUNT == 6 && FILM_FORMAT_COUNT == 12, "6 FILM + 6 VIDEO formats expected");
+    CHECK(!film_is_video(0) && !film_is_video(5) && film_is_video(6) && film_is_video(11), "film_is_video boundaries");
+    for (int f = FILM_FILM_COUNT; f < FILM_FORMAT_COUNT; f++)
+        for (int k = 0; k < film_formats[f].count; k++)
+        {
+            const struct film_frame * fr = &film_frames[film_formats[f].first + k];
+            /* video sizes are 16:9, 4:3, 1.85:1 or 2.35:1 */
+            int r1000 = fr->w * 1000 / fr->h;
+            CHECK((r1000 > 1740 && r1000 < 1790) || (r1000 > 1320 && r1000 < 1355) ||
+                  (r1000 > 1840 && r1000 < 1870) || (r1000 > 2330 && r1000 < 2360),
+                  "video frame %s: odd aspect ratio %d/1000", fr->name, r1000);
+            /* none of them may need more than the physical sensor: 4.30 um per pixel */
+            CHECK(fr->w <= 2977, "video frame %s wider than a 1\" sensor", fr->name);
+        }
+    /* the 1" size, and the sensor widths, in order (largest first) */
+    for (int f = FILM_FILM_COUNT + 1; f < FILM_FORMAT_COUNT; f++)
+        CHECK(film_frames[film_formats[f].first].w < film_frames[film_formats[f - 1].first].w,
+              "video size %s is not smaller than %s", film_formats[f].name, film_formats[f - 1].name);
+
+    /* film_pick(): readout -> format and frame */
+    {
+        int fr;
+        CHECK(film_pick(-1, 0, 0, &fr) == -1, "no readout -> no format");
+        CHECK(film_pick(FILM_RO_COUNT, 0, 0, &fr) == -1, "bad readout -> no format");
+        /* the saved choice is kept whenever it can use the readout */
+        CHECK(film_pick(FILM_RO_3X3, 1, 1, &fr) == 1 && fr == 1, "A35-ANA frame 1 is kept");
+        CHECK(film_pick(FILM_RO_3X3, 0, 2, &fr) == 0 && fr == 2, "A35 frame 2 is kept");
+        CHECK(film_pick(FILM_RO_1280, 5, 1, &fr) == 5 && fr == 1, "8mm is kept on 1280p");
+        CHECK(film_pick(FILM_RO_1280, 8, 1, &fr) == 8 && fr == 1, "1/2\" 4:3 is kept on 1280p");
+        CHECK(film_pick(FILM_RO_25K, 9, 1, &fr) == 9 && fr == 1, "1/2.3\" 4:3 is kept on 2.5K");
+        /* a stored frame from another readout is repaired */
+        CHECK(film_pick(FILM_RO_1280, 8, 0, &fr) == 8 && fr == 1, "1/2\" on 1280p must be its 4:3 frame");
+        CHECK(film_pick(FILM_RO_25K, 8, 1, &fr) == 8 && fr == 0, "1/2\" on 2.5K must be its 16:9 frame");
+        CHECK(film_pick(FILM_RO_1620, 7, 0, &fr) == 7 && fr == 1, "2/3\" on 1620p must be its 4:3 frame");
+        CHECK(film_pick(FILM_RO_1440, 7, 2, &fr) == 7 && fr == 0, "2/3\" on 1440p must be its 16:9 frame");
+        /* a format that cannot use the readout is replaced by the first one that can */
+        CHECK(film_pick(FILM_RO_3K, 3, 0, &fr) == 2 && fr == 0, "3K from 16mm -> S16");
+        CHECK(film_pick(FILM_RO_3K, 9, 0, &fr) == 2 && fr == 0, "3K from 1/2.3\" -> S16 (first format with that readout)");
+        CHECK(film_pick(FILM_RO_1280, 2, 0, &fr) == 4 && fr == 0, "1280p from S16 -> S8");
+        CHECK(film_pick(FILM_RO_25K, 0, 0, &fr) == 7 && fr == 2, "2.5K from A35 -> 2/3\" 1.85:1");
+        CHECK(film_pick(FILM_RO_1620, 0, 0, &fr) == 7 && fr == 1, "1620p from A35 -> 2/3\" 4:3");
+        /* every frame of every format maps back to itself */
+        for (int f = 0; f < FILM_FORMAT_COUNT; f++)
+            for (int k = 0; k < film_formats[f].count; k++)
+            {
+                int ro = film_frames[film_formats[f].first + k].readout;
+                int got = film_pick(ro, f, k, &fr);
+                CHECK(got == f && fr == k, "frame %d of format %d does not map back to itself (got %d/%d)", k, f, got, fr);
+            }
+        /* no readout is left without a format */
+        for (int ro = 0; ro < FILM_RO_COUNT; ro++)
+            CHECK(film_pick(ro, 0, 0, &fr) >= 0, "readout %d belongs to no format", ro);
+    }
+
+    /* black-bar scale: pixel scale on the 720x480 layer, window always fits the layer */
+    for (int i = 1; i < FILM_FRAME_COUNT; i++)
+    {
+        const struct film_readout * ro = &film_readouts[film_frames[i].readout];
+        int nw = film_frames[i].w * 720 / ro->w;
+        int nh = film_frames[i].h * ro->kn / ro->kd;
+        CHECK(nw <= 720 && nh <= 480, "frame %d (%s): bars %dx%d do not fit the 720x480 layer", i, film_frames[i].name, nw, nh);
+    }
 
     /* film_frame_index: right entry, clamps bad input */
     for (int f = 0; f < FILM_FORMAT_COUNT; f++)

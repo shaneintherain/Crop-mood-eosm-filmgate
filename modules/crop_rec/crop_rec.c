@@ -1606,21 +1606,33 @@ static unsigned RAW_V = 0;            // RAW vertical resolution          0xC0F0
  * Only done for 24p presets (within 1% of 23.976), so 25p / 30p / high-FPS presets are untouched,
  * and Timer B may shrink only while at least 75% of the original vertical blanking (B - RAW_V) remains. */
 #define NTSC24_PRODUCT 1334667   /* 32000000 * 1001 / 24000, rounded */
+#define NTSC30_PRODUCT 1067733   /* 32000000 * 1001 / 30000, rounded */
+/* defined with the Film Format menu code */
+static int slim_video_standard(void);
 static void ntsc24_snap_timers(void)
 {
-    if (!Framerate_24 || !is_EOSM) return;
+    if (!is_EOSM) return;
+
+    /* 24p always; 30p only for the VIDEO standard on the 2.5K readout (29.97 fps) */
+    int target;
+    if (Framerate_24)
+        target = NTSC24_PRODUCT;
+    else if (Framerate_30 && crop_preset == CROP_PRESET_1X1 && CROP_2_5K && slim_video_standard())
+        target = NTSC30_PRODUCT;
+    else
+        return;
 
     int a = TimerA + 1;
     int b0 = TimerB + 1;
     if (a < 2 || b0 < 2) return;
 
     int p0 = a * b0;
-    if (p0 < NTSC24_PRODUCT - NTSC24_PRODUCT / 100 || p0 > NTSC24_PRODUCT + NTSC24_PRODUCT / 100) return;
+    if (p0 < target - target / 100 || p0 > target + target / 100) return;
 
-    int err0 = ABS(p0 - NTSC24_PRODUCT);
+    int err0 = ABS(p0 - target);
     int blank0 = b0 - (int)RAW_V;      /* original vertical blanking, in lines */
     int best_b = b0, best_err = err0;
-    int b_floor = NTSC24_PRODUCT / a;
+    int b_floor = target / a;
 
     for (int k = 0; k < 2; k++)
     {
@@ -1630,7 +1642,7 @@ static void ntsc24_snap_timers(void)
         /* keep most of the original blanking when Timer B gets smaller */
         if (b < b0 && (blank0 <= 0 || (b - (int)RAW_V) * 4 < blank0 * 3)) continue;
 
-        int err = ABS(a * b - NTSC24_PRODUCT);
+        int err = ABS(a * b - target);
         if (err < best_err)
         {
             best_err = err; best_b = b;
@@ -4310,33 +4322,39 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
 };
 
 /* ---- Film Format menu ------------------------------------------------------
- * The Movie menu offers six film formats; the old Mode / Aspect Ratio / Preset
- * choices are no longer exposed.  Rows are reused:
- *   "Mode" row         -> Film Format  (S35, S35 Anamorphic, S16, 16mm, S8, 8mm)
+ * The Movie menu offers twelve formats in two Standards (menu row "Standard"):
+ *   FILM   Academy 35mm, A35 Anamorphic, S16, 16mm, S8, 8mm   (the default)
+ *   VIDEO  video sensor sizes at 1:1: 1", 2/3", 1/2", 1/2.3", 1/3", 1/4"
+ * The old Mode / Aspect Ratio / Preset choices are no longer exposed.  Rows are reused:
+ *   "Mode" row         -> Film Format  (or Sensor Size in the VIDEO standard)
  *   "Aspect Ratio" row -> Frame        (Actual / 16:9 Crop / 1.85:1 Crop ...)
  *   "Preset" row       -> hidden
- * Each format uses one existing sensor readout (no register is changed):
- *   S35            3x3 binning, 3:2 readout 1736x1160
- *   S35 Anamorphic 3x3 binning, same readout as S35: squeezed windows for an
- *                  anamorphic lens (2x: 1.18:1, 1.33x: 4:3), de-squeezed in post
- *   S16            1:1 2.35:1 3K    16mm  1:1 16:9 2560x1440
- *   S8, 8mm        1:1 3:2 1920x1280
- * mlv_lite cuts the film window out of the readout and asks
- * crop_rec_film_format() which window to use: the number it returns is the
- * index into film_frames[] in src/film-formats.h (0 = not a film format).
+ * Each Frame is cut from one existing sensor readout (no register is changed):
+ *   A35, A35 Anamorphic  3x3 binning, 3:2 readout 1736x1160 (anamorphic: squeezed
+ *                        windows, 2x: 1.18:1, 1.33x: 4:3, de-squeezed in post)
+ *   S16                  1:1 2.35:1 3K    16mm  1:1 16:9 2560x1440
+ *   S8, 8mm              1:1 3:2 1920x1280
+ *   VIDEO sizes          1:1 3K, 1440p, 1620p 4:3, 2.5K or 1280p: see film_frames[]
+ * In the VIDEO standard the Frame choice can move to a different readout (for example
+ * 2/3" 16:9 is cut from 1440p and 2/3" 4:3 from 1620p).
+ * mlv_lite cuts the window out of the readout and asks crop_rec_film_format() which
+ * window to use: the number it returns is the index into film_frames[] in
+ * src/film-formats.h (0 = not a film format).
  */
 /* names, labels, frame choices and recorded sizes all come from src/film-formats.h */
 #define SLIM_FILM_FORMATS FILM_FORMAT_COUNT
 /* Both are saved in the module config, so the choice survives a reboot.  The sensor
- * readout is already saved by the crop_preset_* settings, but A35 and A35 Anamorphic
- * share a readout, and so do S8 and 8mm: without these the pair would fall back to
- * the first one (and the Frame choice back to the first entry) at every start. */
-static CONFIG_INT("crop.film_fmt", slim_film_fmt, 0);        /* selected Film Format 0..5 */
+ * readout is already saved by the crop_preset_* settings, but several formats share a
+ * readout (A35 / A35 Anamorphic, S8 / 8mm, most video sizes): without these the group
+ * would fall back to its first format (and the Frame choice to the first entry) at every start. */
+static CONFIG_INT("crop.film_fmt", slim_film_fmt, 0);        /* selected Film Format 0..11 (6 and up = VIDEO) */
 static CONFIG_INT("crop.film_frames", slim_film_frames, 0);  /* Frame choice per format, 2 bits each */
 
 static int slim_film_frame_get(int fmt)
 {
-    int v = (slim_film_frames >> (2 * fmt)) & 3;
+    int v;
+    fmt = COERCE(fmt, 0, FILM_FORMAT_COUNT - 1);
+    v = (slim_film_frames >> (2 * fmt)) & 3;
     return COERCE(v, 0, film_formats[fmt].count - 1);
 }
 
@@ -4345,54 +4363,73 @@ static void slim_film_frame_set(int fmt, int v)
     slim_film_frames = (slim_film_frames & ~(3 << (2 * fmt))) | ((v & 3) << (2 * fmt));
 }
 
-/* Which Film Format does the current menu state correspond to?  Returns
- * 0..5, or -1 for a leftover legacy mode (not in the film list). */
-static int slim_film_sync(void)
+/* the VIDEO standard is active (used by the fps code, which is defined earlier) */
+static int slim_video_standard(void)
+{
+    return film_is_video(slim_film_fmt);
+}
+
+/* Sensor readout (FILM_RO_*) that the menu state asks for, or -1 for a leftover legacy mode */
+static int slim_film_menu_readout(void)
 {
     switch (slim_mode_ui)
     {
-        case 2: /* 3x3 3:2 - S35 or S35 Anamorphic */
-            if (crop_preset_ar_menu != 4) return -1;
-            if (slim_film_fmt != 0 && slim_film_fmt != 1)
-                slim_film_fmt = 0;
-            break;
+        case 2: /* 3x3 3:2 */
+            return crop_preset_ar_menu == 4 ? FILM_RO_3X3 : -1;
         case 0:
             switch (slim_1x1_ar)
             {
-                case 1: /* 2.35:1 3K Highest */
-                    if (slim_unified_preset != 0) return -1;
-                    slim_film_fmt = 2;
-                    break;
-                case 2: slim_film_fmt = 3; break; /* 16:9 */
-                case 3: /* 3:2 - S8 or 8mm */
-                    if (slim_film_fmt != 4 && slim_film_fmt != 5)
-                        slim_film_fmt = 4;
-                    break;
-                default: return -1;
+                case 0: return FILM_RO_25K;
+                case 1: return slim_unified_preset == 0 ? FILM_RO_3K : -1; /* 2.8K Higher is legacy */
+                case 2: return FILM_RO_1440;
+                case 3: return FILM_RO_1280;
+                case 4: return FILM_RO_1620;
             }
-            break;
-        default: return -1;
     }
-    return slim_film_fmt;
+    return -1;
 }
 
-/* Film Format of the real crop mode (not the menu state): 0..5 or -1 */
-static int slim_film_active(void)
+/* Which Film Format does the current menu state correspond to?  Returns
+ * 0..11, or -1 for a leftover legacy mode (not in the film list).  Also repairs
+ * the saved format and Frame choice so they agree with the readout. */
+static int slim_film_sync(void)
+{
+    int frame;
+    int fmt = film_pick(slim_film_menu_readout(), slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
+    if (fmt >= 0)
+    {
+        slim_film_fmt = fmt;
+        slim_film_frame_set(fmt, frame);
+    }
+    return fmt;
+}
+
+/* Readout of the real crop mode (not the menu state), or -1 */
+static int slim_film_active_readout(void)
 {
     if (!crop_rec_is_enabled())
         return -1;
     if (CROP_PRESET_MENU == CROP_PRESET_3X3)
-        return crop_preset_3x3_res_menu == 2 ? (slim_film_fmt == 1 ? 1 : 0) : -1;
+        return crop_preset_3x3_res_menu == 2 ? FILM_RO_3X3 : -1;
     if (CROP_PRESET_MENU == CROP_PRESET_1X1)
     {
         switch (crop_preset_1x1_res_menu)
         {
-            case 2: return 2;
-            case 3: return 3;
-            case 4: return (slim_film_fmt == 5) ? 5 : 4;
+            case 0: return FILM_RO_25K;
+            case 2: return FILM_RO_3K;
+            case 3: return FILM_RO_1440;
+            case 4: return FILM_RO_1280;
+            case 6: return FILM_RO_1620;
         }
     }
     return -1;
+}
+
+/* Film Format of the real crop mode: 0..11 or -1 (no writes: also called from mlv_lite) */
+static int slim_film_active(void)
+{
+    int frame;
+    return film_pick(slim_film_active_readout(), slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
 }
 
 /* used by mlv_lite; reads the real crop mode, not the menu state */
@@ -4403,10 +4440,11 @@ int crop_rec_shutter_record()
 
 int crop_rec_film_format()
 {
-    int fmt = slim_film_active();
+    int frame;
+    int fmt = film_pick(slim_film_active_readout(), slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
     if (fmt < 0)
         return 0; /* not a film format */
-    return film_frame_index(fmt, slim_film_frame_get(fmt));
+    return film_frame_index(fmt, frame);
 }
 
 static void slim_crop_apply_mode(void);
@@ -4492,7 +4530,8 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
         /* 3:2 → 1920x1280 @ 24/25 — Highest only */
         *res_idx = 4;
         *w = 1920; *h = 1280;
-        *fps_mask = 0xB;   /* 23.976 / 25 / 18 (Super 8 and 8mm) */
+        /* 23.976 / 25 / 18 (Super 8 and 8mm); the VIDEO standard has no 18 */
+        *fps_mask = slim_video_standard() ? 0x3 : 0xB;
         slim_unified_preset = 0;
     }
     else
@@ -4740,19 +4779,52 @@ static void slim_crop_clamp_fps(void)
     crop_preset_fps_menu = 0;
 }
 
+/* Point the crop settings at the readout of a Film Format's current Frame choice */
 static void slim_film_apply(int fmt)
 {
+    fmt = COERCE(fmt, 0, FILM_FORMAT_COUNT - 1);
     slim_film_fmt = fmt;
     slim_unified_preset = 0; /* every film readout is a single Highest mode */
-    switch (fmt)
+    switch (film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].readout)
     {
-        case 0: slim_mode_ui = 2; crop_preset_ar_menu = 4; break; /* S35: 3x3 3:2 */
-        case 1: slim_mode_ui = 2; crop_preset_ar_menu = 4; break; /* S35 Anamorphic: 3x3 3:2 */
-        case 2: slim_mode_ui = 0; slim_1x1_ar = 1; break;         /* S16 */
-        case 3: slim_mode_ui = 0; slim_1x1_ar = 2; break;         /* 16mm */
-        default: slim_mode_ui = 0; slim_1x1_ar = 3; break;        /* S8, 8mm */
+        case FILM_RO_3X3:  slim_mode_ui = 2; crop_preset_ar_menu = 4; break; /* 3x3 3:2 */
+        case FILM_RO_3K:   slim_mode_ui = 0; slim_1x1_ar = 1; break;         /* 2.35:1 3K */
+        case FILM_RO_1440: slim_mode_ui = 0; slim_1x1_ar = 2; break;         /* 16:9 */
+        case FILM_RO_1280: slim_mode_ui = 0; slim_1x1_ar = 3; break;         /* 3:2 */
+        case FILM_RO_25K:  slim_mode_ui = 0; slim_1x1_ar = 0; break;         /* 2.33:1 */
+        default:           slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
     }
     slim_crop_apply_mode();
+}
+
+/* "Standard" row: FILM <-> VIDEO.  Each standard remembers the format last used in it
+ * (until the next start; then it begins at its first format). */
+static int slim_std_last[2] = { 0, FILM_FILM_COUNT };
+static int slim_standard_ui = 0;   /* 0 = FILM, 1 = VIDEO: only mirrors the saved format for the menu */
+
+static MENU_SELECT_FUNC(slim_crop_standard_select)
+{
+    int cur;
+    int std;
+
+    (void)priv; (void)delta;
+    slim_crop_sync_from_backend();
+    cur = slim_film_sync();
+    if (cur < 0)
+        cur = slim_film_fmt;
+    std = film_is_video(cur) ? 1 : 0;
+    slim_std_last[std] = cur;
+    slim_film_apply(slim_std_last[1 - std]);
+}
+
+static MENU_UPDATE_FUNC(slim_crop_standard_update)
+{
+    slim_crop_sync_from_backend();
+    slim_film_sync();
+    slim_standard_ui = film_is_video(slim_film_fmt) ? 1 : 0;
+    MENU_SET_VALUE("%s", slim_standard_ui ? "VIDEO" : "FILM");
+    MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 1\", 2/3\", 1/2\", 1/2.3\", 1/3\", 1/4\" sensor sizes.");
+    MENU_SET_ENABLED(1);
 }
 
 /* "Mode" row = Film Format */
@@ -4763,7 +4835,12 @@ static MENU_SELECT_FUNC(slim_crop_mode_select)
     if (fmt < 0)
         fmt = 0; /* leaving a legacy mode: always start at A35, whichever way was pressed */
     else
-        fmt = MOD(fmt + (delta < 0 ? -1 : 1), SLIM_FILM_FORMATS);
+    {
+        /* cycle inside the current standard: A35 .. 8mm, or 1" .. 1/4" */
+        int base = film_is_video(fmt) ? FILM_FILM_COUNT : 0;
+        int n = film_is_video(fmt) ? FILM_FORMAT_COUNT - FILM_FILM_COUNT : FILM_FILM_COUNT;
+        fmt = base + MOD(fmt - base + (delta < 0 ? -1 : 1), n);
+    }
     slim_film_apply(fmt);
 }
 
@@ -4771,11 +4848,14 @@ static MENU_UPDATE_FUNC(slim_crop_mode_update)
 {
     slim_crop_sync_from_backend();
     int fmt = slim_film_sync();
-    MENU_SET_NAME("Film Format");
+    MENU_SET_NAME(film_is_video(slim_film_fmt) ? "Sensor Size" : "Film Format");
     if (fmt >= 0)
     {
         MENU_SET_VALUE("%s", film_formats[fmt].name);
-        MENU_SET_HELP("Film gate. Sets the sensor readout and the recorded window.");
+        if (film_is_video(fmt))
+            MENU_SET_HELP("Video sensor size at 1:1. Sets the sensor readout and the recorded window.");
+        else
+            MENU_SET_HELP("Film gate. Sets the sensor readout and the recorded window.");
     }
     else
     {
@@ -4797,7 +4877,12 @@ static MENU_SELECT_FUNC(slim_crop_preset_select)
     {
         /* Frame: Actual / 16:9 Crop / ... (either arrow cycles) */
         int cur = slim_film_frame_get(film_fmt);
-        slim_film_frame_set(film_fmt, MOD(cur + (delta < 0 ? -1 : 1), film_formats[film_fmt].count));
+        int next = MOD(cur + (delta < 0 ? -1 : 1), film_formats[film_fmt].count);
+        int old_ro = film_frames[film_frame_index(film_fmt, cur)].readout;
+        slim_film_frame_set(film_fmt, next);
+        /* the VIDEO sizes can use a different readout per Frame: switch to it */
+        if (film_frames[film_frame_index(film_fmt, next)].readout != old_ro)
+            slim_film_apply(film_fmt);
         return;
     }
 
@@ -4898,7 +4983,7 @@ static MENU_UPDATE_FUNC(slim_crop_ar_update)
         return;
     }
     MENU_SET_VALUE("%s", film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].frame);
-    MENU_SET_HELP("Frame inside the %s gate: Actual size or a crop.", film_formats[fmt].name);
+    MENU_SET_HELP("Frame inside the %s %s: Actual size or a crop.", film_formats[fmt].name, film_is_video(fmt) ? "sensor" : "gate");
     MENU_SET_ENABLED(film_formats[fmt].count > 1);
 }
 
@@ -5079,7 +5164,10 @@ static MENU_UPDATE_FUNC(slim_crop_fps_update)
     }
 
     static const char * labels[] = { "23.976", "25", "30", "18" };
-    MENU_SET_VALUE("%s", labels[COERCE(crop_preset_fps_menu, 0, 3)]);
+    if (slim_video_standard() && crop_preset_fps_menu == 2)
+        MENU_SET_VALUE("29.97");   /* VIDEO standard: 2.5K readout snapped to 29.97 */
+    else
+        MENU_SET_VALUE("%s", labels[COERCE(crop_preset_fps_menu, 0, 3)]);
 
     /* Only one valid rate → show it greyed (read-only). */
     int mask = slim_crop_fps_mask();
@@ -5213,7 +5301,9 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
             else
             {
                 static const char *labels[] = { "23.976", "25", "30", "18" };
-                snprintf(value, size, "%s", labels[COERCE(crop_preset_fps_menu, 0, 3)]);
+                snprintf(value, size, "%s",
+                    (slim_video_standard() && crop_preset_fps_menu == 2) ? "29.97" :
+                    labels[COERCE(crop_preset_fps_menu, 0, 3)]);
             }
             enabled = bits > 1;
         }
@@ -5314,6 +5404,17 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
 static struct menu_entry crop_rec_menu_eosm[] =
 {
     {
+        .name       = "Standard",
+        .priv       = &slim_standard_ui,
+        .select     = slim_crop_standard_select,
+        .update     = slim_crop_standard_update,
+        .max        = 1,
+        .choices    = CHOICES("FILM", "VIDEO"),
+        .edit_mode  = EM_INLINE_ADJUST,
+        .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
+        .help       = "FILM or VIDEO sensor-size formats.",
+    },
+    {
         .name       = "Mode",
         .priv       = &slim_mode_ui,
         .select     = slim_crop_mode_select,
@@ -5323,7 +5424,7 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .choices    = CHOICES("1x1", "1x3", "3x3", "LV"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
-        .help       = "Film format (Academy 35mm, A35 Anamorphic, S16, 16mm, S8, 8mm).",
+        .help       = "Film format (A35, A35 Anamorphic, S16, 16mm, S8, 8mm) or video sensor size.",
     },
     {
         .name       = "Aspect Ratio",

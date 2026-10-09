@@ -117,7 +117,7 @@ int main(void)
     reset_defaults(); crop_settings_ver = 3;
     crop_preset_index = 9; crop_preset_1x1_res_menu = 99; crop_preset_3x3_res_menu = -4; crop_preset_ar_menu = 5;
     crop_preset_fps_menu = 12; bit_depth_analog = -2; fps_over = 2000000000; SET_button = 0; Arrows_U_D = 7;
-    INFO_button = 40; slim_film_fmt = 7; slim_film_frames = -1; Shutter_zoom = 3; shutter_range = 2; tapdisp = 6;
+    INFO_button = 40; slim_film_fmt = 12; slim_film_frames = -1; Shutter_zoom = 3; shutter_range = 2; tapdisp = 6;
     crop_settings_load();
     CHECK(crop_preset_index == 1, "crop_preset_index reset to 1, got %d", crop_preset_index);
     CHECK(crop_preset_1x1_res_menu == 3 && crop_preset_3x3_res_menu == 2 && crop_preset_ar_menu == 4 && crop_preset_fps_menu == 0, "preset menus reset to defaults");
@@ -128,11 +128,11 @@ int main(void)
     reset_defaults(); crop_settings_ver = 3;
     crop_preset_index = 2; crop_preset_1x1_res_menu = 7; crop_preset_1x3_res_menu = 3; crop_preset_3x3_res_menu = 0;
     crop_preset_ar_menu = 0; crop_preset_fps_menu = 3; bit_depth_analog = 3; fps_over = -100000; SET_button = 2;
-    Arrows_U_D = 0; INFO_button = 6; slim_film_fmt = 5; slim_film_frames = 4095; Shutter_zoom = 2; tapdisp = 5;
+    Arrows_U_D = 0; INFO_button = 6; slim_film_fmt = 11; slim_film_frames = 0xFFFFFF; Shutter_zoom = 2; tapdisp = 5;
     crop_settings_load();
     CHECK(crop_preset_index == 2 && crop_preset_1x1_res_menu == 7 && crop_preset_1x3_res_menu == 3 && crop_preset_3x3_res_menu == 0 &&
           crop_preset_ar_menu == 0 && crop_preset_fps_menu == 3 && bit_depth_analog == 3 && fps_over == -100000 && SET_button == 2 &&
-          Arrows_U_D == 0 && INFO_button == 6 && slim_film_fmt == 5 && slim_film_frames == 4095 && Shutter_zoom == 2 && tapdisp == 5,
+          Arrows_U_D == 0 && INFO_button == 6 && slim_film_fmt == 11 && slim_film_frames == 0xFFFFFF && Shutter_zoom == 2 && tapdisp == 5,
           "values at the edge of their ranges must be kept");
 
     /* --- Frame choice per Film Format (2 bits each, saved in one number) --- */
@@ -152,7 +152,7 @@ int main(void)
         slim_film_frame_set(f, film_formats[f].count - 1);
     for (int f = 0; f < FILM_FORMAT_COUNT; f++)
         CHECK(slim_film_frame_get(f) == film_formats[f].count - 1, "all formats at their last frame: format %d reads %d", f, slim_film_frame_get(f));
-    slim_film_frames = 0xFFF;                        /* every field = 3: must clamp to the last valid frame */
+    slim_film_frames = 0xFFFFFF;                        /* every field = 3: must clamp to the last valid frame */
     for (int f = 0; f < FILM_FORMAT_COUNT; f++)
         CHECK(slim_film_frame_get(f) == film_formats[f].count - 1, "format %d: stored 3 must clamp to %d, got %d", f, film_formats[f].count - 1, slim_film_frame_get(f));
     CHECK(slim_film_frames <= (1 << (2 * FILM_FORMAT_COUNT)) - 1, "frames field fits its range");

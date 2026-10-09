@@ -694,12 +694,9 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
 
     int f = crop_rec_film_format();
 
-    int rw, kn, kd; /* readout width, vertical scale numerator / denominator */
-
-    if (f <= 5)      { rw = 1736; kn = 90;  kd = 217;  } /* S35: 3x3 3:2 readout */
-    else if (f == 6) { rw = 3072; kn = 15;  kd = 64;   } /* Super 16     */
-    else if (f <= 9) { rw = 2560; kn = 9;   kd = 32;   } /* 16mm         */
-    else             { rw = 1920; kn = 3;   kd = 8;    } /* Super 8, 8mm */
+    /* readout width and LCD scale numerator / denominator, from the shared table */
+    const struct film_readout * ro = &film_readouts[film_frames[f].readout];
+    int rw = ro->w, kn = ro->kn, kd = ro->kd;
 
     int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
     int nh = res_y * kn / kd;
