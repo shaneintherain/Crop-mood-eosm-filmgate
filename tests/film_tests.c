@@ -92,6 +92,26 @@ int main(void)
         CHECK(film_frames[film_formats[f].first].w < film_frames[film_formats[f - 1].first].w,
               "video size %s is not smaller than %s", film_formats[f].name, film_formats[f - 1].name);
 
+    /* film_step(): the quick menu never leaves the selected standard */
+    for (int f = 0; f < FILM_FORMAT_COUNT; f++)
+        for (int dir = -1; dir <= 1; dir += 2)
+        {
+            int n = f;
+            for (int i = 0; i < 2 * FILM_FORMAT_COUNT; i++)
+            {
+                n = film_step(n, dir);
+                CHECK(n >= 0 && n < FILM_FORMAT_COUNT && film_is_video(n) == film_is_video(f),
+                      "film_step from %d (dir %d) left its standard: %d", f, dir, n);
+            }
+            /* a full lap through the standard visits every format of it exactly once */
+            int seen = 0, count = film_is_video(f) ? FILM_FORMAT_COUNT - FILM_FILM_COUNT : FILM_FILM_COUNT;
+            n = f;
+            for (int i = 0; i < count; i++) { n = film_step(n, dir); seen |= 1 << n; }
+            CHECK(n == f && __builtin_popcount(seen) == count, "film_step lap from %d (dir %d) does not cover the standard", f, dir);
+        }
+    CHECK(film_step(5, 1) == 0 && film_step(0, -1) == 5, "FILM list wraps A35 <-> 8mm");
+    CHECK(film_step(10, 1) == 6 && film_step(6, -1) == 10, "VIDEO list wraps 2/3\" <-> 1/4\"");
+
     /* film_pick(): readout -> format and frame */
     {
         int fr;

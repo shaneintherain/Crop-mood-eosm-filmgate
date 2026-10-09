@@ -4836,10 +4836,8 @@ static MENU_SELECT_FUNC(slim_crop_mode_select)
         fmt = 0; /* leaving a legacy mode: always start at A35, whichever way was pressed */
     else
     {
-        /* cycle inside the current standard: A35 .. 8mm, or 2/3" .. 1/4" */
-        int base = film_is_video(fmt) ? FILM_FILM_COUNT : 0;
-        int n = film_is_video(fmt) ? FILM_FORMAT_COUNT - FILM_FILM_COUNT : FILM_FILM_COUNT;
-        fmt = base + MOD(fmt - base + (delta < 0 ? -1 : 1), n);
+        /* cycle inside the current standard (A35 .. 8mm, or 2/3" .. 1/4"), see film_step() */
+        fmt = film_step(fmt, delta);
     }
     slim_film_apply(fmt);
 }

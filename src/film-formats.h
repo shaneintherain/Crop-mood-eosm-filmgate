@@ -141,6 +141,19 @@ static inline int film_is_video(int fmt)
     return fmt >= FILM_FILM_COUNT;
 }
 
+/* Next / previous Film Format, staying inside the current standard: FILM formats cycle
+ * among themselves and VIDEO sizes among themselves, so the quick menu never has to page
+ * through both lists.  dir < 0 steps back, otherwise forward. */
+static inline int film_step(int fmt, int dir)
+{
+    int base = film_is_video(fmt) ? FILM_FILM_COUNT : 0;
+    int n = film_is_video(fmt) ? FILM_FORMAT_COUNT - FILM_FILM_COUNT : FILM_FILM_COUNT;
+    int pos = fmt - base + (dir < 0 ? -1 : 1);
+    if (pos < 0) pos = n - 1;
+    if (pos >= n) pos = 0;
+    return base + pos;
+}
+
 /* does a Film Format have a Frame choice cut from this readout? */
 static inline int film_format_has_readout(int fmt, int readout)
 {
