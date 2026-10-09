@@ -1863,8 +1863,12 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             RAW_H    = 0x23E + reg_width;
             RAW_V    = 0x671 + reg_height;
             TimerA   = 0x279;
-            /* Single supported rate (same TimerB as dannephoto for all menu FPS indices). */
+            /* Normal rate (same TimerB as dannephoto for the 24p / 25p indices). */
             TimerB   = 0x838;
+            /* EXPERIMENTAL, VIDEO standard (2/3" 4:3) only: 29.97 fps.  32 MHz / (0x27A * 0x694)
+             * = 29.971 fps, but it leaves only ~35 lines of vertical blanking (0x694 - 0x671). */
+            if (Framerate_30 && slim_video_standard())
+                TimerB = 0x693;
         }
 
         Preview_H     = 2156 + reg_Preview_H;  // 2556 causes preview artifacts
@@ -4550,7 +4554,8 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
         /* 4:3 → 2160x1620 @ 23.943 FPS (dannephoto CROP_1620p; single TimerB) — Highest only */
         *res_idx = 6;
         *w = 2160; *h = 1620;
-        *fps_mask = 0x1;
+        /* 1620p is only reachable as the 2/3" 4:3 VIDEO size: 23.976 and (experimental) 29.97 */
+        *fps_mask = 0x1 | 0x4;
         slim_unified_preset = 0;
     }
 }
@@ -5146,12 +5151,11 @@ static MENU_UPDATE_FUNC(slim_crop_fps_update)
         /* ar == 4 (3:2): fall through to 23.976 / 25 / 30 */
     }
 
-    /* 1x1 4:3 2160x1620 — single fixed rate (TimerB 0x838); label 23.943. */
-    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res_menu == 6)
+    /* 1x1 4:3 2160x1620 (2/3" 4:3): 23.976 and an EXPERIMENTAL 29.97 */
+    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res_menu == 6 &&
+        crop_preset_fps_menu == 2)
     {
-        MENU_SET_VALUE("23.943");
-        MENU_SET_ENABLED(0);
-        return;
+        MENU_SET_HELP("EXPERIMENTAL: 29.97 at 2160x1620 has very little timing margin. May glitch; go back to 23.976 if so.");
     }
 
     /* EOS M 1x3 Highest 16:9 runs at 22.250, not 23.976. */

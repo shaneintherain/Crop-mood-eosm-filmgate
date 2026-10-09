@@ -23,6 +23,8 @@ CR=modules/crop_rec/crop_rec.c
   python3 tests/extract.py $CR function slim_video_standard
   python3 tests/extract.py $CR function slim_film_menu_readout
   python3 tests/extract.py $CR function slim_film_sync
+  python3 tests/extract.py $CR function slim_1x1_resolve
+  python3 tests/extract.py $CR function slim_crop_fps_mask
 } > "$OUT/crop_rec_menu_snippets.h"
 python3 tests/extract.py $CR function slim_film_apply > "$OUT/crop_rec_apply_snippet.h"
 

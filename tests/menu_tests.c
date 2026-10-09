@@ -12,6 +12,10 @@ static int failures = 0, checks = 0;
 static int slim_mode_ui = 2, slim_1x1_ar = 2, slim_unified_preset = 0, crop_preset_ar_menu = 4;
 static int slim_film_fmt = 0, slim_film_frames = 0;
 static int apply_calls = 0;
+/* backend state read by slim_crop_fps_mask() */
+enum { CROP_PRESET_OFF, CROP_PRESET_1X1, CROP_PRESET_1X3, CROP_PRESET_3X3 };
+static int g_preset = CROP_PRESET_3X3, crop_preset_1x1_res_menu = 3, crop_preset_1x3_res_menu = 1;
+#define CROP_PRESET_MENU g_preset
 
 #include "crop_rec_menu_snippets.h"
 
@@ -60,6 +64,28 @@ int main(void)
     CHECK(slim_film_sync() == -1, "1x3 is not a film format");
     slim_mode_ui = 3;
     CHECK(slim_film_sync() == -1, "Full-Res LV is not a film format");
+
+    /* 3b. frame rates: bit0 = 23.976, bit1 = 25, bit2 = 30 (29.97 in VIDEO), bit3 = 18.
+     *     FILM never offers 30 or 29.97; VIDEO never offers 18; VIDEO offers 29.97 only on the
+     *     2.5K frames and (experimental) on 2/3" 4:3 */
+    for (int f = 0; f < FILM_FORMAT_COUNT; f++)
+        for (int k = 0; k < film_formats[f].count; k++)
+        {
+            set_state(f, k);
+            slim_film_apply(f);
+            g_preset = (slim_mode_ui == 2) ? CROP_PRESET_3X3 : CROP_PRESET_1X1;
+            int mask = slim_crop_fps_mask();
+            int ro = film_frames[film_frame_index(f, k)].readout;
+            CHECK(mask & 1, "format %d frame %d: 23.976 must always be offered", f, k);
+            if (!film_is_video(f))
+                CHECK(!(mask & 4), "FILM format %d frame %d must not offer 30 / 29.97 (mask %x)", f, k, mask);
+            else
+            {
+                CHECK(!(mask & 8), "VIDEO format %d frame %d must not offer 18 fps (mask %x)", f, k, mask);
+                int ok30 = (ro == FILM_RO_25K || ro == FILM_RO_1620);
+                CHECK(!!(mask & 4) == ok30, "VIDEO format %d frame %d: 29.97 offered=%d, expected %d (mask %x)", f, k, !!(mask & 4), ok30, mask);
+            }
+        }
 
     /* 4. the default install is FILM */
     slim_film_fmt = 0; slim_film_frames = 0;
