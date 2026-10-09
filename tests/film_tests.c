@@ -68,13 +68,13 @@ int main(void)
             const struct film_frame * b = &film_frames[film_formats[f].first + k];
             if (!film_is_video(f))
                 CHECK(!strcmp(a->mode, b->mode) && a->readout == b->readout, "format %s: frames use different readouts", film_formats[f].name);
-            if (f != 1 && f != 7) /* anamorphic: 2x and 1.33x are squeezed differently; 2/3" 1.85:1 needs the narrower 2.5K window */
+            if (f != 1 && f != 6) /* anamorphic: 2x and 1.33x are squeezed differently; 2/3" 1.85:1 needs the narrower 2.5K window */
                 CHECK(a->w == b->w, "format %s: frames have different widths", film_formats[f].name);
         }
 
     /* the two standards */
-    CHECK(FILM_FILM_COUNT == 6 && FILM_FORMAT_COUNT == 12, "6 FILM + 6 VIDEO formats expected");
-    CHECK(!film_is_video(0) && !film_is_video(5) && film_is_video(6) && film_is_video(11), "film_is_video boundaries");
+    CHECK(FILM_FILM_COUNT == 6 && FILM_FORMAT_COUNT == 11, "6 FILM + 5 VIDEO formats expected");
+    CHECK(!film_is_video(0) && !film_is_video(5) && film_is_video(6) && film_is_video(10), "film_is_video boundaries");
     for (int f = FILM_FILM_COUNT; f < FILM_FORMAT_COUNT; f++)
         for (int k = 0; k < film_formats[f].count; k++)
         {
@@ -84,10 +84,10 @@ int main(void)
             CHECK((r1000 > 1740 && r1000 < 1790) || (r1000 > 1320 && r1000 < 1355) ||
                   (r1000 > 1840 && r1000 < 1870) || (r1000 > 2330 && r1000 < 2360),
                   "video frame %s: odd aspect ratio %d/1000", fr->name, r1000);
-            /* none of them may need more than the physical sensor: 4.30 um per pixel */
-            CHECK(fr->w <= 2977, "video frame %s wider than a 1\" sensor", fr->name);
+            /* none of them may need more than the physical sensor: 4.30 um per pixel (2/3" is 8.8 mm = 2047 px) */
+            CHECK(fr->w <= 2047, "video frame %s wider than a 2/3\" sensor", fr->name);
         }
-    /* the 1" size, and the sensor widths, in order (largest first) */
+    /* the sensor widths, in order (largest first) */
     for (int f = FILM_FILM_COUNT + 1; f < FILM_FORMAT_COUNT; f++)
         CHECK(film_frames[film_formats[f].first].w < film_frames[film_formats[f - 1].first].w,
               "video size %s is not smaller than %s", film_formats[f].name, film_formats[f - 1].name);
@@ -101,19 +101,19 @@ int main(void)
         CHECK(film_pick(FILM_RO_3X3, 1, 1, &fr) == 1 && fr == 1, "A35-ANA frame 1 is kept");
         CHECK(film_pick(FILM_RO_3X3, 0, 2, &fr) == 0 && fr == 2, "A35 frame 2 is kept");
         CHECK(film_pick(FILM_RO_1280, 5, 1, &fr) == 5 && fr == 1, "8mm is kept on 1280p");
-        CHECK(film_pick(FILM_RO_1280, 8, 1, &fr) == 8 && fr == 1, "1/2\" 4:3 is kept on 1280p");
-        CHECK(film_pick(FILM_RO_25K, 9, 1, &fr) == 9 && fr == 1, "1/2.3\" 4:3 is kept on 2.5K");
+        CHECK(film_pick(FILM_RO_1280, 7, 1, &fr) == 7 && fr == 1, "1/2\" 4:3 is kept on 1280p");
+        CHECK(film_pick(FILM_RO_25K, 8, 1, &fr) == 8 && fr == 1, "1/2.3\" 4:3 is kept on 2.5K");
         /* a stored frame from another readout is repaired */
-        CHECK(film_pick(FILM_RO_1280, 8, 0, &fr) == 8 && fr == 1, "1/2\" on 1280p must be its 4:3 frame");
-        CHECK(film_pick(FILM_RO_25K, 8, 1, &fr) == 8 && fr == 0, "1/2\" on 2.5K must be its 16:9 frame");
-        CHECK(film_pick(FILM_RO_1620, 7, 0, &fr) == 7 && fr == 1, "2/3\" on 1620p must be its 4:3 frame");
-        CHECK(film_pick(FILM_RO_1440, 7, 2, &fr) == 7 && fr == 0, "2/3\" on 1440p must be its 16:9 frame");
+        CHECK(film_pick(FILM_RO_1280, 7, 0, &fr) == 7 && fr == 1, "1/2\" on 1280p must be its 4:3 frame");
+        CHECK(film_pick(FILM_RO_25K, 7, 1, &fr) == 7 && fr == 0, "1/2\" on 2.5K must be its 16:9 frame");
+        CHECK(film_pick(FILM_RO_1620, 6, 0, &fr) == 6 && fr == 1, "2/3\" on 1620p must be its 4:3 frame");
+        CHECK(film_pick(FILM_RO_1440, 6, 2, &fr) == 6 && fr == 0, "2/3\" on 1440p must be its 16:9 frame");
         /* a format that cannot use the readout is replaced by the first one that can */
         CHECK(film_pick(FILM_RO_3K, 3, 0, &fr) == 2 && fr == 0, "3K from 16mm -> S16");
-        CHECK(film_pick(FILM_RO_3K, 9, 0, &fr) == 2 && fr == 0, "3K from 1/2.3\" -> S16 (first format with that readout)");
+        CHECK(film_pick(FILM_RO_3K, 8, 0, &fr) == 2 && fr == 0, "3K from 1/2.3\" -> S16 (the only 3K format)");
         CHECK(film_pick(FILM_RO_1280, 2, 0, &fr) == 4 && fr == 0, "1280p from S16 -> S8");
-        CHECK(film_pick(FILM_RO_25K, 0, 0, &fr) == 7 && fr == 2, "2.5K from A35 -> 2/3\" 1.85:1");
-        CHECK(film_pick(FILM_RO_1620, 0, 0, &fr) == 7 && fr == 1, "1620p from A35 -> 2/3\" 4:3");
+        CHECK(film_pick(FILM_RO_25K, 0, 0, &fr) == 6 && fr == 2, "2.5K from A35 -> 2/3\" 1.85:1");
+        CHECK(film_pick(FILM_RO_1620, 0, 0, &fr) == 6 && fr == 1, "1620p from A35 -> 2/3\" 4:3");
         /* every frame of every format maps back to itself */
         for (int f = 0; f < FILM_FORMAT_COUNT; f++)
             for (int k = 0; k < film_formats[f].count; k++)

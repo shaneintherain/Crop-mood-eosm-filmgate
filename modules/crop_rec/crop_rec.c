@@ -4324,7 +4324,7 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
 /* ---- Film Format menu ------------------------------------------------------
  * The Movie menu offers twelve formats in two Standards (menu row "Standard"):
  *   FILM   Academy 35mm, A35 Anamorphic, S16, 16mm, S8, 8mm   (the default)
- *   VIDEO  video sensor sizes at 1:1: 1", 2/3", 1/2", 1/2.3", 1/3", 1/4"
+ *   VIDEO  video sensor sizes at 1:1: 2/3", 1/2", 1/2.3", 1/3", 1/4"
  * The old Mode / Aspect Ratio / Preset choices are no longer exposed.  Rows are reused:
  *   "Mode" row         -> Film Format  (or Sensor Size in the VIDEO standard)
  *   "Aspect Ratio" row -> Frame        (Actual / 16:9 Crop / 1.85:1 Crop ...)
@@ -4334,7 +4334,7 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
  *                        windows, 2x: 1.18:1, 1.33x: 4:3, de-squeezed in post)
  *   S16                  1:1 2.35:1 3K    16mm  1:1 16:9 2560x1440
  *   S8, 8mm              1:1 3:2 1920x1280
- *   VIDEO sizes          1:1 3K, 1440p, 1620p 4:3, 2.5K or 1280p: see film_frames[]
+ *   VIDEO sizes          1:1 1440p, 1620p 4:3, 2.5K or 1280p: see film_frames[]
  * In the VIDEO standard the Frame choice can move to a different readout (for example
  * 2/3" 16:9 is cut from 1440p and 2/3" 4:3 from 1620p).
  * mlv_lite cuts the window out of the readout and asks crop_rec_film_format() which
@@ -4823,7 +4823,7 @@ static MENU_UPDATE_FUNC(slim_crop_standard_update)
     slim_film_sync();
     slim_standard_ui = film_is_video(slim_film_fmt) ? 1 : 0;
     MENU_SET_VALUE("%s", slim_standard_ui ? "VIDEO" : "FILM");
-    MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 1\", 2/3\", 1/2\", 1/2.3\", 1/3\", 1/4\" sensor sizes.");
+    MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 2/3\", 1/2\", 1/2.3\", 1/3\", 1/4\" sensor sizes.");
     MENU_SET_ENABLED(1);
 }
 
@@ -4836,7 +4836,7 @@ static MENU_SELECT_FUNC(slim_crop_mode_select)
         fmt = 0; /* leaving a legacy mode: always start at A35, whichever way was pressed */
     else
     {
-        /* cycle inside the current standard: A35 .. 8mm, or 1" .. 1/4" */
+        /* cycle inside the current standard: A35 .. 8mm, or 2/3" .. 1/4" */
         int base = film_is_video(fmt) ? FILM_FILM_COUNT : 0;
         int n = film_is_video(fmt) ? FILM_FORMAT_COUNT - FILM_FILM_COUNT : FILM_FILM_COUNT;
         fmt = base + MOD(fmt - base + (delta < 0 ? -1 : 1), n);
