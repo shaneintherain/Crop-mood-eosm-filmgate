@@ -1863,9 +1863,11 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             RAW_H    = 0x23E + reg_width;
             RAW_V    = 0x671 + reg_height;
             TimerA   = 0x279;
-            /* Single supported rate (same TimerB as dannephoto for all menu FPS indices).
+            /* 23.976: TimerB of dannephoto.  25: TimerB 0x7E2 (32 MHz / (0x27A * 0x7E3) = 25.000),
+             * about 370 lines of blanking left; the 1440p readout runs 25 with 278.
              * 29.97 was tried (TimerB 0x693, only ~35 lines of blanking): the LCD shows no image. */
             TimerB   = 0x838;
+            if (Framerate_25) TimerB = 0x7E2;
         }
 
         Preview_H     = 2156 + reg_Preview_H;  // 2556 causes preview artifacts
@@ -4562,8 +4564,9 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
         /* 3:2 → 1920x1280 @ 24/25 — Highest only */
         *res_idx = 4;
         *w = 1920; *h = 1280;
-        /* 23.976 / 25 / 18 (Super 8 and 8mm); the VIDEO standard has no 18 */
-        *fps_mask = slim_video_standard() ? 0x3 : 0xB;
+        /* FILM: 23.976 / 25 / 18 (Super 8 and 8mm).  VIDEO: 23.976 / 25 / 29.97 (TimerB 0x75D = 29.977,
+         * untested on this readout; the original 1280p preset never offered 30). */
+        *fps_mask = slim_video_standard() ? 0x7 : 0xB;
         slim_unified_preset = 0;
     }
     else
@@ -4571,7 +4574,7 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
         /* 4:3 → 2160x1620 @ 23.976 FPS (dannephoto CROP_1620p; single TimerB) — Highest only */
         *res_idx = 6;
         *w = 2160; *h = 1620;
-        *fps_mask = 0x1;   /* 1620p (2/3" 4:3): one rate; 29.97 does not work here */
+        *fps_mask = 0x3;   /* 1620p (2/3" 4:3): 23.976 / 25; 29.97 does not work here */
         slim_unified_preset = 0;
     }
 }

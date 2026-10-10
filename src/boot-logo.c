@@ -1643,6 +1643,7 @@ static void boot_logo_task(void *unused)
 
     const int fallback_handoff_time = boot_logo_hide_time + 500;
     const int settle_limit_time = boot_logo_hide_time + 4000;  /* never hold the splash longer than this */
+    int last_full_redraw = 0;
     while (boot_logo_active)
     {
         int splash_time_done = get_ms_clock() >= boot_logo_hide_time;
@@ -1653,7 +1654,22 @@ static void boot_logo_task(void *unused)
 
         /* Canon sometimes punches a small transparent hole in the canvas (live video
          * shows through at the lower right).  Keep the empty bottom strip opaque. */
-        BMP_LOCK( bmp_fill(COLOR_PEN_BG, 0, 345, 720, 480 - BOOT_LOGO_BAR_H - 345); bmp_fill(COLOR_PEN_NAVY, 0, 480 - BOOT_LOGO_BAR_H, 720, BOOT_LOGO_BAR_H); )
+        BMP_LOCK(
+            /* Canon rebuilds its overlay layer while Live View settles (zoom x1/x5); that wipes
+             * the splash and the live picture (black in the crop modes) shows through, e.g. the
+             * blue bars turning black.  If a few sample points no longer match, draw it all again. */
+            if ((bmp_getpixel(4, 4) != COLOR_PEN_NAVY ||
+                 bmp_getpixel(4, 480 - 4) != COLOR_PEN_NAVY ||
+                 bmp_getpixel(4, 100) != COLOR_PEN_BG) &&
+                get_ms_clock() >= last_full_redraw + 200)   /* at most 5 times a second */
+            {
+                last_full_redraw = get_ms_clock();
+                boot_logo_draw();
+            }
+            bmp_fill(COLOR_PEN_BG, 0, 345, 720, 480 - BOOT_LOGO_BAR_H - 345);
+            bmp_fill(COLOR_PEN_NAVY, 0, 480 - BOOT_LOGO_BAR_H, 720, BOOT_LOGO_BAR_H);
+            bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, BOOT_LOGO_BAR_H);
+        )
         msleep(20);
     }
 
