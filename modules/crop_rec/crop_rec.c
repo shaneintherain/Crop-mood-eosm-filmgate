@@ -3241,6 +3241,9 @@ void SetAspectRatioCorrectionValues()
                 case 2:                                                         // CROP_3K
                          YUV_LV_Buf = 0x1170520; YUV_LV_S_V = 0x1050282; break;
                 case 3:  YUV_LV_Buf = 0x1710520; YUV_LV_S_V = 0x10501E5; break; // CROP_1440p
+                /* 1620p over HDMI: not measured. Taken from the LCD 1620p values with the same
+                 * LCD -> HDMI factors the 1440p entries show (buffer x0.911, S_V x1.097). */
+                case 6:  YUV_LV_Buf = 0x18E0520; YUV_LV_S_V = 0x10501DC; break; // CROP_1620p
                 default: YUV_LV_Buf = 0x1830520; YUV_LV_S_V = 0x6100AC;  break;
             }
         }
@@ -3253,6 +3256,8 @@ void SetAspectRatioCorrectionValues()
                 case 2:                                                         // CROP_3K
                          YUV_LV_Buf = 0x1580CA8; YUV_LV_S_V = 0x1050209; break;
                 case 3:  YUV_LV_Buf = 0x1C70CA8; YUV_LV_S_V = 0x105018A; break; // CROP_1440p
+                /* 1620p over HDMI: not measured (buffer x1.124, S_V x0.890 of the LCD values) */
+                case 6:  YUV_LV_Buf = 0x1EB0CA8; YUV_LV_S_V = 0x1050183; break; // CROP_1620p
                 default: YUV_LV_Buf = 0x21B0CA8; YUV_LV_S_V = 0x8700AC;  break;
             }
         }
@@ -3265,6 +3270,8 @@ void SetAspectRatioCorrectionValues()
                 case 2:                                                         // CROP_3K
                          YUV_LV_Buf = 0x1180A50; YUV_LV_S_V = 0x1050280; break;
                 case 3:  YUV_LV_Buf = 0x1730A50; YUV_LV_S_V = 0x10501E3; break; // CROP_1440p
+                /* 1620p over HDMI: not measured (buffer x0.916, S_V x1.093 of the LCD values) */
+                case 6:  YUV_LV_Buf = 0x1900A50; YUV_LV_S_V = 0x10501DA; break; // CROP_1620p
                 default: YUV_LV_Buf = 0x1B70A50; YUV_LV_S_V = 0x370056;  break;
             }
         }
@@ -3885,7 +3892,7 @@ static MENU_UPDATE_FUNC(crop_preset_1x1_res_update)
     }
     if (crop_preset_1x1_res_menu == 6)
     {
-        MENU_SET_HELP("2160x1620 @ 23.943 FPS");
+        MENU_SET_HELP("2160x1620 @ 23.976 FPS");
     }
 }
 
@@ -4561,7 +4568,7 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
     }
     else
     {
-        /* 4:3 → 2160x1620 @ 23.943 FPS (dannephoto CROP_1620p; single TimerB) — Highest only */
+        /* 4:3 → 2160x1620 @ 23.976 FPS (dannephoto CROP_1620p; single TimerB) — Highest only */
         *res_idx = 6;
         *w = 2160; *h = 1620;
         *fps_mask = 0x1;   /* 1620p (2/3" 4:3): one rate; 29.97 does not work here */
