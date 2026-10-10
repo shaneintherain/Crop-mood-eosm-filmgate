@@ -67,7 +67,7 @@ int main(void)
 
     /* 3b. frame rates: bit0 = 23.976, bit1 = 25, bit2 = 30 (29.97 in VIDEO), bit3 = 18.
      *     FILM never offers 30 or 29.97; VIDEO never offers 18; VIDEO offers 29.97 only on the
-     *     2.5K frames and (experimental) on 2/3" 4:3 */
+     *     2.5K frames (the other readouts do not run it) */
     for (int f = 0; f < FILM_FORMAT_COUNT; f++)
         for (int k = 0; k < film_formats[f].count; k++)
         {
@@ -82,7 +82,7 @@ int main(void)
             else
             {
                 CHECK(!(mask & 8), "VIDEO format %d frame %d must not offer 18 fps (mask %x)", f, k, mask);
-                int ok30 = (ro == FILM_RO_25K || ro == FILM_RO_1620);
+                int ok30 = (ro == FILM_RO_25K);
                 CHECK(!!(mask & 4) == ok30, "VIDEO format %d frame %d: 29.97 offered=%d, expected %d (mask %x)", f, k, !!(mask & 4), ok30, mask);
             }
         }

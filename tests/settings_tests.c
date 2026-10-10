@@ -67,7 +67,7 @@ int main(void)
 
     /* --- config from the oldest builds (version 0): INFO and arrows are converted --- */
     static const struct { int old_info, new_info; const char * what; } info_map[] = {
-        { 0, 0, "OFF" }, { 1, 0, "Aperture -> OFF" }, { 2, 4, "False Color" }, { 3, 0, "Dual ISO -> OFF" }, { 4, 5, "Framing" },
+        { 0, 0, "OFF" }, { 1, 0, "Aperture -> OFF" }, { 2, 4, "False Color" }, { 3, 0, "Dual ISO -> OFF" }, { 4, 0, "Framing -> OFF (hidden since version 4)" },
     };
     for (int i = 0; i < COUNT(info_map); i++)
     {
@@ -89,18 +89,30 @@ int main(void)
         reset_defaults(); crop_settings_ver = 2; INFO_button = v;
         crop_settings_load();
         int expect = (v <= 1) ? 0 : v - 1;
+        if (expect == 5) expect = 0;                 /* old framing: hidden since version 4 */
         CHECK(INFO_button == expect, "v2 INFO %d -> %d, expected %d", v, INFO_button, expect);
+    }
+
+    /* --- version 3 config: Framing (5) becomes OFF, everything else stays --- */
+    for (int v = 0; v <= 6; v++)
+    {
+        reset_defaults(); crop_settings_ver = 3; INFO_button = v; Shutter_rec = 1;
+        crop_settings_load();
+        int expect = (v == 5) ? 0 : v;
+        CHECK(INFO_button == expect, "v3 INFO %d -> %d, expected %d", v, INFO_button, expect);
+        CHECK(Shutter_rec == 1, "v3 Shutter record must stay on");
     }
 
     /* --- current config: INFO untouched, and loading twice changes nothing more --- */
     for (int v = 0; v <= 6; v++)
     {
-        reset_defaults(); crop_settings_ver = 3; INFO_button = v; Shutter_rec = 1;
+        reset_defaults(); crop_settings_ver = CROP_SETTINGS_VERSION; INFO_button = v; Shutter_rec = 1;
         crop_settings_load();
-        CHECK(INFO_button == v, "v3 INFO %d must stay, got %d", v, INFO_button);
-        CHECK(Shutter_rec == 1, "v3 Shutter record must stay on");
+        CHECK(INFO_button == (v == 5 ? 0 : v), "v%d INFO %d -> %d", CROP_SETTINGS_VERSION, v, INFO_button);
+        CHECK(Shutter_rec == 1, "current Shutter record must stay on");
+        int after = INFO_button;
         crop_settings_load();
-        CHECK(INFO_button == v && crop_settings_ver == 3, "second load must change nothing");
+        CHECK(INFO_button == after && crop_settings_ver == CROP_SETTINGS_VERSION, "second load must change nothing");
     }
     reset_defaults(); INFO_button = 2;               /* old FC, converted once... */
     crop_settings_load();

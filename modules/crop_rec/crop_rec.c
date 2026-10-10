@@ -1863,12 +1863,9 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             RAW_H    = 0x23E + reg_width;
             RAW_V    = 0x671 + reg_height;
             TimerA   = 0x279;
-            /* Normal rate (same TimerB as dannephoto for the 24p / 25p indices). */
+            /* Single supported rate (same TimerB as dannephoto for all menu FPS indices).
+             * 29.97 was tried (TimerB 0x693, only ~35 lines of blanking): the LCD shows no image. */
             TimerB   = 0x838;
-            /* EXPERIMENTAL, VIDEO standard (2/3" 4:3) only: 29.97 fps.  32 MHz / (0x27A * 0x694)
-             * = 29.971 fps, but it leaves only ~35 lines of vertical blanking (0x694 - 0x671). */
-            if (Framerate_30 && slim_video_standard())
-                TimerB = 0x693;
         }
 
         Preview_H     = 2156 + reg_Preview_H;  // 2556 causes preview artifacts
@@ -4242,9 +4239,21 @@ static struct menu_entry expo_shutter_range_eosm[] = {
     },
 };
 
+/* Framing (value 5) is hidden: stepping skips it, and a stray 5 becomes OFF */
+static MENU_SELECT_FUNC(slim_info_button_select)
+{
+    int dir = delta < 0 ? -1 : 1;
+    int v = INFO_button + dir;
+    if (v == 5)
+        v += dir;
+    INFO_button = MOD(v, 7);
+}
+
 static MENU_UPDATE_FUNC(slim_info_button_update)
 {
     static int last_info_button = -1;
+    if (INFO_button == 5)
+        INFO_button = 0;
     if (last_info_button == 5 && INFO_button != 5)
         mlv_lite_info_framing_reset();
     last_info_button = INFO_button;
@@ -4258,9 +4267,10 @@ static struct menu_entry slim_info_button_menu[] = {
         .max       = 6,
         .choices   = CHOICES("OFF", "Histogram", "Waveform", "Zebras", "False Color", "Framing", "Quick Panel"),
         .edit_mode = EM_INLINE_ADJUST,
+        .select    = slim_info_button_select,
         .update    = slim_info_button_update,
         .icon_type = IT_DICE,
-        .help      = "Assign INFO to an overlay, framing, or the Quick Panel.",
+        .help      = "Assign INFO to an overlay or the Quick Panel.",
         .help2     = "OFF uses Canon INFO. Idle LV: long-press INFO (or double-press) opens last setting.",
     },
     {
@@ -4554,8 +4564,7 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
         /* 4:3 → 2160x1620 @ 23.943 FPS (dannephoto CROP_1620p; single TimerB) — Highest only */
         *res_idx = 6;
         *w = 2160; *h = 1620;
-        /* 1620p is only reachable as the 2/3" 4:3 VIDEO size: 23.976 and (experimental) 29.97 */
-        *fps_mask = 0x1 | 0x4;
+        *fps_mask = 0x1;   /* 1620p (2/3" 4:3): one rate; 29.97 does not work here */
         slim_unified_preset = 0;
     }
 }
@@ -5149,13 +5158,6 @@ static MENU_UPDATE_FUNC(slim_crop_fps_update)
             return;
         }
         /* ar == 4 (3:2): fall through to 23.976 / 25 / 30 */
-    }
-
-    /* 1x1 4:3 2160x1620 (2/3" 4:3): 23.976 and an EXPERIMENTAL 29.97 */
-    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res_menu == 6 &&
-        crop_preset_fps_menu == 2)
-    {
-        MENU_SET_HELP("EXPERIMENTAL: 29.97 at 2160x1620 has very little timing margin. May glitch; go back to 23.976 if so.");
     }
 
     /* EOS M 1x3 Highest 16:9 runs at 22.250, not 23.976. */
@@ -7575,7 +7577,7 @@ static unsigned int raw_info_update_cbr(unsigned int unused)
  * to change what a saved value MEANS, add a block to crop_settings_load() for the new
  * version and raise CROP_SETTINGS_VERSION.  Blocks run once per config file.
  */
-#define CROP_SETTINGS_VERSION 3
+#define CROP_SETTINGS_VERSION 4
 
 static const struct setting_range crop_settings[] = {
     SETTING(crop_preset_index,          1,       3,      1),  /* slim: 1..3 (3x3 / 1x1 / 1x3) */
@@ -7630,6 +7632,13 @@ static void crop_settings_load(void)
         else if (INFO_button > 1) INFO_button--;
         crop_settings_ver = 3;
     }
+
+    /* version 4: Framing is hidden from the INFO button list (value 5 stays unused): -> OFF.
+     * Checked on every load, so a stray 5 can never come back. */
+    if (INFO_button == 5)
+        INFO_button = 0;
+    if (crop_settings_ver < 4)
+        crop_settings_ver = 4;
 
     /* never lower the number (a config file touched by a newer build keeps its version) */
     if (crop_settings_ver < CROP_SETTINGS_VERSION)
