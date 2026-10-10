@@ -339,12 +339,13 @@ static CONFIG_INT( "focus.peaking.slim.filter.edges", focus_peaking_filter_edges
 static CONFIG_INT( "focus.peaking.slim.thr", focus_peaking_pthr, 5);
 static CONFIG_INT( "focus.peaking.slim.color", focus_peaking_color, 0);
 extern int preview_peaking;
-static CONFIG_INT("focus.assist.mode2", focus_assist_mode, 0);  /* new key: old numbering had Focus Peaking at 1 */
+static CONFIG_INT("focus.assist.mode3", focus_assist_mode, 0);  /* new key each time the numbering changes */
 
 enum slim_focus_assist_mode
 {
     FOCUS_ASSIST_OFF = 0,
     FOCUS_ASSIST_SHARPER_IMAGE,
+    FOCUS_ASSIST_SHARPER_PLUS,
     FOCUS_ASSIST_EDGE_DETECT,
 };
 
@@ -361,6 +362,7 @@ static void slim_focus_assist_apply_mode(void)
     focus_peaking = 0;
     preview_peaking =
         focus_assist_mode == FOCUS_ASSIST_SHARPER_IMAGE ? 1 :
+        focus_assist_mode == FOCUS_ASSIST_SHARPER_PLUS ? 4 :   /* 4: same filter as 1 + stronger contrast (tweaks.c) */
         focus_assist_mode == FOCUS_ASSIST_EDGE_DETECT ? 2 : 0;
 
 }
@@ -3347,10 +3349,10 @@ struct menu_entry zebra_menus[] = {
         .min            = 0,
         .max            = FOCUS_ASSIST_EDGE_DETECT,
         .icon_type = IT_DICE,
-        .choices = CHOICES("OFF", "Sharper Image", "Edge Detect"),
+        .choices = CHOICES("OFF", "Sharper Image", "Sharper Image+", "Edge Detect"),
         .edit_mode = EM_INLINE_ADJUST,
         .help = "DIGIC preview assistance; does not affect the recording.",
-        .help2 = "Sharper Image is subtle; Edge Detect is monochrome.",
+        .help2 = "Sharper Image is subtle; Sharper Image+ is stronger; Edge Detect is monochrome.",
         .depends_on = DEP_LIVEVIEW,
     },
     {

@@ -3082,6 +3082,10 @@ static void preview_contrast_n_saturation_step()
     #ifdef FEATURE_DIGIC_FOCUS_PEAKING
     if ((preview_peaking == 2 || preview_peaking == 3) && !preview_peaking_force_normal_image)
         desired_contrast = contrast_values_at_brigthness_2[4];
+    /* Sharper Image+ (4): same sharpening filter as 1, with the contrast raised 1.5x around mid-grey
+     * so the edge halos stand out more. Preview only; half-shutter shows the normal contrast again. */
+    else if (preview_peaking == 4 && !preview_peaking_force_normal_image)
+        desired_contrast = contrast_values_at_brigthness_0[5];
     #endif
 
     if (gui_menu_shown() && !menu_active_but_hidden())
@@ -3117,7 +3121,7 @@ static void preview_contrast_n_saturation_step()
     int current_filter_value = (int) shamem_read(filter_register);
     int desired_filter_value = 
         gui_menu_shown() && !menu_active_but_hidden() ? 0 :
-        preview_peaking == 1 || (preview_peaking > 1 && preview_peaking_force_normal_image) ? 0x4d4 :
+        preview_peaking == 1 || preview_peaking == 4 || (preview_peaking > 1 && preview_peaking_force_normal_image) ? 0x4d4 :
         preview_peaking == 2 || preview_peaking == 3 ? 0x4c0 :
         preview_peaking;
 
