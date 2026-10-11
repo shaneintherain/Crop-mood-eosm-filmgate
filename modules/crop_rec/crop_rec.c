@@ -5421,6 +5421,126 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
     (void *)&crop_rec_lv_transition_diag,
 };
 
+/* ---- Debug: write the preview / display registers to ML/LOGS/REGnn.TXT ----------------------
+ * For finding out why a preset's picture is wrong on an output (2/3" 4:3 over HDMI).
+ * Only reads Canon's shadow copy of the registers (shamem_read, what Canon / this module last
+ * wrote), in the 4 KB pages this module already uses; it does not touch the hardware or any setting. */
+static void slim_dump_regs_line(FILE *fh, char *buf, int size, int *len, const char *fmt, uint32_t a, uint32_t b)
+{
+    int n = snprintf(buf + *len, size - *len, fmt, a, b);
+    if (n < 0) return;
+    *len += n;
+    if (*len > size - 80)
+    {
+        FIO_WriteFile(fh, buf, *len);
+        *len = 0;
+    }
+}
+
+static void slim_dump_regs_now(void)
+{
+    static const uint32_t pages[] = {
+        0xC0F04000, 0xC0F05000, 0xC0F06000, 0xC0F07000, 0xC0F08000, 0xC0F09000, 0xC0F11000,
+        0xC0F1A000, 0xC0F26000, 0xC0F35000, 0xC0F37000, 0xC0F38000, 0xC0F3A000, 0xC0F3B000,
+        0xC0F42000,
+    };
+
+    if (!lv)
+    {
+        NotifyBox(2500, "Live View is off, nothing saved");
+        return;
+    }
+
+    const int size = 4096;
+    char *buf = malloc(size);
+    if (!buf)
+    {
+        NotifyBox(2500, "No memory");
+        return;
+    }
+
+    char name[64];
+    FIO_CreateDirectory("ML/LOGS");
+    if (get_numbered_file_name("ML/LOGS/REG%02d.TXT", 99, name, sizeof(name)) < 0)
+        snprintf(name, sizeof(name), "ML/LOGS/REG00.TXT");
+
+    FILE *fh = FIO_CreateFile(name);
+    if (!fh)
+    {
+        free(buf);
+        NotifyBox(2500, "Cannot write %s", name);
+        return;
+    }
+
+    int len = 0;
+    int out = PathDriveMode ? (int)PathDriveMode->OutputType : -1;
+    int zoom = PathDriveMode ? (int)PathDriveMode->zoom : -1;
+    len += snprintf(buf + len, size - len,
+        "# crop_rec register dump\n"
+        "# film_format=%d standard=%s crop_preset=%d res_1x1=%d preset_ar=%d fps_idx=%d\n"
+        "# lv_dispsize=%d output_type=%d (0 LCD, 3 HDMI 1080i full, 4 HDMI 1080i info, 5/6 720p, 7 HDMI 480) path_zoom=%d\n"
+        "# RAW_H=%u RAW_V=%u TimerA=%u TimerB=%u\n"
+        "# Preview_H=%u Preview_V=%u Preview_R=%x YUV_LV_Buf=%x YUV_LV_S_V=%x YUV_HD_S_H=%x YUV_HD_S_V=%x\n"
+        "# format: address value (non-zero shadow values only)\n",
+        crop_rec_film_format(), slim_video_standard() ? "VIDEO" : "FILM",
+        (int)crop_preset, (int)crop_preset_1x1_res, (int)crop_preset_ar, (int)crop_preset_fps,
+        (int)lv_dispsize, out, zoom,
+        (unsigned)RAW_H, (unsigned)RAW_V, (unsigned)TimerA, (unsigned)TimerB,
+        (unsigned)Preview_H, (unsigned)Preview_V, (unsigned)Preview_R,
+        (unsigned)YUV_LV_Buf, (unsigned)YUV_LV_S_V, (unsigned)YUV_HD_S_H, (unsigned)YUV_HD_S_V);
+
+    for (unsigned k = 0; k < COUNT(pages); k++)
+    {
+        for (uint32_t off = 0; off < 0x1000; off += 4)
+        {
+            uint32_t a = pages[k] + off;
+            uint32_t v = shamem_read(a);
+            if (v)
+                slim_dump_regs_line(fh, buf, size, &len, "%08X %08X\n", a, v);
+        }
+    }
+    if (len)
+        FIO_WriteFile(fh, buf, len);
+    FIO_CloseFile(fh);
+    free(buf);
+    NotifyBox(3000, "Saved %s", name);
+}
+
+/* The picture settings change while the ML menu is open, so the dump is taken 3 s after the
+ * menu has been closed (called from the polling task). */
+static int slim_dump_regs_req = 0;
+static int slim_dump_regs_t = 0;
+
+static MENU_SELECT_FUNC(slim_dump_regs_select)
+{
+    (void)priv; (void)delta;
+    slim_dump_regs_req = 1;
+    slim_dump_regs_t = 0;
+    NotifyBox(3000, "Close the menu: dump in 3 s");
+}
+
+static void slim_dump_regs_poll(void)
+{
+    if (!slim_dump_regs_req) return;
+    if (gui_menu_shown() || !lv || RECORDING)
+    {
+        slim_dump_regs_t = 0;
+        return;
+    }
+    int now = get_ms_clock();
+    if (!slim_dump_regs_t)
+    {
+        slim_dump_regs_t = now;
+        return;
+    }
+    if (now - slim_dump_regs_t >= 3000)
+    {
+        slim_dump_regs_req = 0;
+        slim_dump_regs_t = 0;
+        slim_dump_regs_now();
+    }
+}
+
 static struct menu_entry crop_rec_menu_eosm[] =
 {
     {
@@ -5503,6 +5623,13 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
         .help       = "Lossless RAW bit depth. Always available.",
+    },
+    {
+        .name       = "Dump Registers",
+        .select     = slim_dump_regs_select,
+        .icon_type  = IT_ACTION,
+        .depends_on = DEP_LIVEVIEW,
+        .help       = "Debug: close the menu, 3 s later saves ML/LOGS/REGnn.TXT.",
     },
 };
 
@@ -6611,7 +6738,8 @@ static int lv_check_is_healthy(void)
 /* when closing ML menu, check whether we need to refresh the LiveView */
 static unsigned int crop_rec_polling_cbr(unsigned int unused)
 {
-    
+    slim_dump_regs_poll();
+
     /* touch/Movie-tab shortcuts inject Q+SET into an open menu — not used on slim. */
 #ifndef CONFIG_SLIM_MENUS
     if (gui_menu_shown() && submenu && !RECORDING)
