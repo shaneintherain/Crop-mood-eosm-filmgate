@@ -690,7 +690,7 @@ static int film_frame_possible(void)
 }
 
 /* raw rows the recorded window sits higher than the centred frame at 48 fps (958-row readout), negative = up */
-#define FILM_48FPS_UP_ROWS_958 (-21)
+#define FILM_48FPS_UP_ROWS_958 (-39)
 
 static int film_frame_rect(int * x, int * y, int * w, int * h)
 {
@@ -707,10 +707,11 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     int nh = res_y * kn / kd;
 
     /* 48 fps (A35 frames) reads a shorter sensor readout than the 1160-row one the scales above were
-     * measured on, and the recorded window sits higher in it: measured on the camera with a target at
-     * 24 and 48 fps, the recorded picture of the A35 16:9 and 1.85:1 frames moved about 20 raw rows up
-     * (19.5 and 22).  The frame is moved up by the same amount.  Not measured for 2.35:1 (738-row
-     * readout): left at 0 until it is. */
+     * measured on, and the recorded window sits higher in it.  Measured on the camera: white boxes
+     * lined up with the LCD outline at 48 fps and recorded; with the outline moved up 21 rows the
+     * recorded box still sat 12 (16:9) and 24 (1.85:1) rows above the frame centre, so 18 more rows up
+     * (-39 in total).  2.35:1 (738-row readout) was only 4 rows off, inside the measuring error, so it
+     * is left at 0. */
     int dy_rows = 0;
     if (film_frames[f].readout == FILM_RO_3X3)
     {
