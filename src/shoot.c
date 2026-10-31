@@ -1902,6 +1902,13 @@ aperture_toggle( void* priv, int sign)
 
 void kelvin_toggle( void* priv, int sign )
 {
+    int wrap = (priv != (void*)-1);
+    /* AUTO sits between 15000K and 1500K when the value wraps around (menus, Quick Menu) */
+    if (wrap && lens_info.wb_mode == WB_AUTO && !uniwb_is_active())
+    {
+        lens_set_kelvin(sign > 0 ? KELVIN_MIN : KELVIN_MAX);
+        return;
+    }
     int k;
     switch (lens_info.wb_mode)
     {
@@ -1919,6 +1926,11 @@ void kelvin_toggle( void* priv, int sign )
         step *= 5;
     
     k = (k/step) * step;
+    if (wrap && (k + sign * step > KELVIN_MAX || k + sign * step < KELVIN_MIN))
+    {
+        lens_set_wb_auto();
+        return;
+    }
     if (priv == (void*)-1) // no wrap around
         k = COERCE(k + sign * step, KELVIN_MIN, KELVIN_MAX);
     else // allow wrap around

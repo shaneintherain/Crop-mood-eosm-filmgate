@@ -882,6 +882,38 @@ static int kill_gd_frame_rect(int * x, int * y, int * w, int * h)
  *           Global Draw, which draws the bars over all of it.
  * A bar can be thin on one side (e.g. the A35 1.33x frame is almost full height and starts at
  * x = 2 on HDMI), so every bar that is at least 8 pixels wide is tried, left one first. */
+/* Put back what belongs under the on-screen recording status (x, y, w, h): transparent where the
+ * picture is, black where the frame bars are, and the frame line.  Lets the status be drawn
+ * without a box of its own. */
+static void status_area_restore(int x, int y, int w, int h)
+{
+    bmp_fill(COLOR_EMPTY, x, y, w, h);
+
+    /* bars are on screen only with Kill Global Draw while recording, or with Global Draw on */
+    if (!((kill_gd && RAW_IS_RECORDING) || get_global_draw()))
+        return;
+
+    int fx, fy, fw, fh;
+    if (!kill_gd_frame_rect(&fx, &fy, &fw, &fh))
+        return;
+
+    int x2 = x + w, y2 = y + h;
+    int fx2 = fx + fw, fy2 = fy + fh;
+    /* rows above / below the frame: all bar */
+    if (y < fy)  bmp_fill(COLOR_BLACK, x, y, w, MIN(y2, fy) - y);
+    if (y2 > fy2) bmp_fill(COLOR_BLACK, x, MAX(y, fy2), w, y2 - MAX(y, fy2));
+    /* rows level with the frame: bars left and right of it */
+    int my1 = MAX(y, fy), my2 = MIN(y2, fy2);
+    if (my2 > my1)
+    {
+        if (x < fx)   bmp_fill(COLOR_BLACK, x, my1, MIN(x2, fx) - x, my2 - my1);
+        if (x2 > fx2) bmp_fill(COLOR_BLACK, MAX(x, fx2), my1, x2 - MAX(x, fx2), my2 - my1);
+    }
+    /* the 2 px frame line, as draw_film_bars() draws it */
+    bmp_draw_rect(COLOR_WHITE, fx - 1, fy - 1, fw + 2, fh + 2);
+    bmp_draw_rect(COLOR_WHITE, fx - 2, fy - 2, fw + 4, fh + 4);
+}
+
 static int film_bars_missing(int full)
 {
     int x, y, w, h;
@@ -897,15 +929,31 @@ static int film_bars_missing(int full)
     xp = MIN(xp, BMP_W_PLUS - 1);
     yp = MIN(yp, BMP_H_PLUS - 1);
 
-    if (x - xa >= 8)
-        return bmp_getpixel((xa + x) / 2, y + h / 2) != COLOR_BLACK;           /* left   */
-    if (xp - (x + w) >= 8)
-        return bmp_getpixel((x + w + xp) / 2, y + h / 2) != COLOR_BLACK;       /* right  */
-    if (y - ya >= 8)
-        return bmp_getpixel(x + w / 2, (ya + y) / 2) != COLOR_BLACK;           /* top    */
-    if (yp - (y + h) >= 8)
-        return bmp_getpixel(x + w / 2, (y + h + yp) / 2) != COLOR_BLACK;       /* bottom */
-    return 0;   /* no bars to check */
+    if (!full)
+    {
+        /* idle (Live View info bars on screen): probe only the first wide bar, as before */
+        if (x - xa >= 8)
+            return bmp_getpixel((xa + x) / 2, y + h / 2) != COLOR_BLACK;           /* left   */
+        if (xp - (x + w) >= 8)
+            return bmp_getpixel((x + w + xp) / 2, y + h / 2) != COLOR_BLACK;       /* right  */
+        if (y - ya >= 8)
+            return bmp_getpixel(x + w / 2, (ya + y) / 2) != COLOR_BLACK;           /* top    */
+        if (yp - (y + h) >= 8)
+            return bmp_getpixel(x + w / 2, (y + h + yp) / 2) != COLOR_BLACK;       /* bottom */
+        return 0;
+    }
+
+    /* Kill Global Draw while recording: check every bar that is wide enough, not just the
+     * first: the top and bottom strips can be wiped while the side bars stay (16mm, 2/3") */
+    if (x - xa >= 8 &&
+        bmp_getpixel((xa + x) / 2, y + h / 2) != COLOR_BLACK) return 1;            /* left   */
+    if (xp - (x + w) >= 8 &&
+        bmp_getpixel((x + w + xp) / 2, y + h / 2) != COLOR_BLACK) return 1;        /* right  */
+    if (y - ya >= 8 &&
+        bmp_getpixel(x + w / 2, (ya + y) / 2) != COLOR_BLACK) return 1;            /* top    */
+    if (yp - (y + h) >= 8 &&
+        bmp_getpixel(x + w / 2, (y + h + yp) / 2) != COLOR_BLACK) return 1;        /* bottom */
+    return 0;
 }
 
 static void film_frame_settle_redraw(void)
@@ -2249,7 +2297,7 @@ static int update_status(char * buffer, int buffer_size)
     /* Calculate the stats */
     int fps = fps_get_current_x1000();  /* FPS x1000 */
     if (fps == 0)
-        return COLOR_PEN_NAVY;
+        return UI_PILL;
 
     int p = pre_recorded_frames();      /* pre-recorded frames */
     int r = (frame_count - 1 - p);      /* recorded frames */
@@ -2307,8 +2355,8 @@ static int update_status(char * buffer, int buffer_size)
         }
         else if (predicted_frames_left > 10000)
         {
-            /* assume continuous recording: navy box, no alarm */
-            return COLOR_PEN_NAVY;
+            /* assume continuous recording: dark grey box, no alarm */
+            return UI_PILL;
         }
         else if (RAW_IS_RECORDING)
         {
@@ -2318,15 +2366,15 @@ static int update_status(char * buffer, int buffer_size)
             }
 
             /* warning - recording not continuous.
-             * navy, then amber (under 30 s), then bright red (under 10 s). */
+             * dark grey, then amber (under 30 s), then bright red (under 10 s). */
             return (time_left < 10) ? COLOR_RED :
                    (time_left < 30) ? 19 /* amber (palette 19) */ :
-                                      COLOR_PEN_NAVY;
+                                      UI_PILL;
         }
         else
         {
             /* preparing, finishing */
-            return COLOR_PEN_NAVY;
+            return UI_PILL;
         }
     } 
     else 
@@ -2441,6 +2489,12 @@ void show_recording_status()
                 int len = strlen(status);
                 snprintf(status + len, sizeof(status) - len, "               ");
 
+                /* No box behind the text (it showed the picture through the black bars):
+                 * put back what belongs under the status first (picture inside the frame,
+                 * black bars and frame line outside), then draw outlined text on top. */
+                int rl_h = 5 + font_med.height + font_small.height * num_threads + 4;
+                BMP_LOCK( status_area_restore(rl_x, rl_y, 720 - 4 - rl_x, rl_h); )
+
                 /* Draw the movie camera icon */
                 rl_icon_width = bfnt_draw_char(
                     ICON_ML_MOVIE,
@@ -2450,7 +2504,7 @@ void show_recording_status()
 
                 /* Display the Status */
                 bmp_printf(
-                    FONT(FONT_MED, COLOR_WHITE, COLOR_BG_DARK),
+                    SHADOW_FONT(FONT(FONT_MED, COLOR_WHITE, COLOR_BLACK)),
                     rl_x+rl_icon_width+5, rl_y+5,
                     status
                 );
@@ -2468,7 +2522,7 @@ void show_recording_status()
                             if (idle_percent[thread]) { STR_APPEND(msg, ", %d%% idle", idle_percent[thread]); }
                             else { STR_APPEND(msg,", %dms idle", idle_time[thread]); }
                         }
-                        bmp_printf (FONT(FONT_SMALL, COLOR_WHITE, COLOR_BG_DARK), rl_x+rl_icon_width+5, rl_y+5+font_med.height+font_small.height*thread, "%s  ", msg);
+                        bmp_printf (SHADOW_FONT(FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK)), rl_x+rl_icon_width+5, rl_y+5+font_med.height+font_small.height*thread, "%s  ", msg);
                     }
                 }
             }
@@ -2661,7 +2715,9 @@ static void draw_film_bars(void)
         bmp_fill(COLOR_BLACK, BMP_W_MINUS, y2, BMP_W_PLUS - BMP_W_MINUS, BMP_H_PLUS - y2);             /* bottom */
         bmp_fill(COLOR_BLACK, BMP_W_MINUS, y1, x1 - BMP_W_MINUS, y2 - y1);                             /* left   */
         bmp_fill(COLOR_BLACK, x2, y1, BMP_W_PLUS - x2, y2 - y1);                                       /* right  */
-        bmp_draw_rect(COLOR_GRAY(70), x1, y1, x2 - x1, y2 - y1);                                       /* edge   */
+        /* edge: 2 px white line just outside the frame, the same as the normal frame line */
+        bmp_draw_rect(COLOR_WHITE, x1 - 1, y1 - 1, x2 - x1 + 2, y2 - y1 + 2);
+        bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 4, y2 - y1 + 4);
     }
 }
 

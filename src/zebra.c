@@ -1576,6 +1576,7 @@ static void bvram_mirror_clear()
     ASSERT(bvram_mirror_start);
     BMP_LOCK( bzero32(bvram_mirror_start, BMP_VRAM_SIZE); )
     cropmark_cache_dirty = 1;
+    cropmarks_mirror_x = cropmarks_mirror_y = -1;
 }
 void bvram_mirror_init()
 {
@@ -4223,6 +4224,35 @@ static void draw_zoom_overlay(int dirty)
     //~ bmp_fill(rawoff ? COLOR_BLACK : COLOR_GREEN1, x0c, y0c + H, W, 1);
 }
 #endif // FEATURE_MAGIC_ZOOM
+
+/* Canon is showing a screen of its own on top of Live View (a dialog, its Q screen,
+ * its menu ...), as opposed to plain Live View that is only paused or switching zoom. */
+int liveview_canon_ui_open()
+{
+    struct gui_task * current = gui_task_list.current;
+    struct dialog * dialog = current ? current->priv : 0;
+    extern thunk LiveViewApp_handler;
+#if defined(CONFIG_DIGIC_V)
+    extern thunk LiveViewShutterApp_handler;
+#endif
+#if defined(CONFIG_LVAPP_HACK_RELOC)
+    extern uintptr_t new_LiveViewApp_handler;
+#endif
+    int lv_app = dialog && (
+        dialog->handler == (dialog_handler_t) &LiveViewApp_handler
+#if defined(CONFIG_LVAPP_HACK_RELOC)
+        || dialog->handler == (dialog_handler_t) new_LiveViewApp_handler
+#endif
+#if defined(CONFIG_DIGIC_V)
+        || dialog->handler == (dialog_handler_t) &LiveViewShutterApp_handler
+#endif
+    );
+    return gui_state != GUISTATE_IDLE || !lv_app || CURRENT_GUI_MODE > 3
+#ifdef CURRENT_GUI_MODE_2
+        || CURRENT_GUI_MODE_2 > 3
+#endif
+        ;
+}
 
 int liveview_display_idle()
 {

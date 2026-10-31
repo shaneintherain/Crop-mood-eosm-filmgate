@@ -6,6 +6,8 @@
 #include "shoot.h"
 #include "bmp.h"
 #include "lens.h"
+#include "cropmarks.h"
+#include "lvinfo.h"
 #include "../modules/crop_rec/crop_rec.h"
 
 /* Canon's powersave timer */
@@ -411,7 +413,16 @@ void idle_kill_flicker()
         clrscr();
         if (is_movie_mode())
         {
-            black_bars_50D();
+            /* With a Live View frame set, put the finished frame straight back (black outside,
+             * frame line, picture inside) instead of plain 16:9 bars: otherwise the picture
+             * shows without its frame bars until the crop marks are redrawn. */
+            if (!RECORDING && lv && (get_global_draw_setting() & 1) && film_canvas_paint(1))
+            {
+                crop_set_dirty(1);
+                lens_display_set_dirty();
+            }
+            else
+                black_bars_50D();
             if (RECORDING) {
                 fill_circle(os.x_max - 12, os.y0 + 28, 10, COLOR_RED);
             }
@@ -508,8 +519,20 @@ void idle_powersave_step()
                     if (!canon_gui_front_buffer_disabled())
                         idle_kill_flicker();
                 }
-                else if (canon_gui_front_buffer_disabled())
-                    idle_stop_killing_flicker();
+                else if (liveview_canon_ui_open() || lv_disp_mode != 0 || !DISPLAY_IS_ON)
+                {
+                    /* Canon is showing a screen of its own: let it be seen */
+                    if (canon_gui_front_buffer_disabled())
+                        idle_stop_killing_flicker();
+                }
+                else
+                {
+                    /* Live View is only pausing or switching (x1 <-> x5 rebuild after a mode
+                     * change, start-up): keep Canon's overlay layer off, so its x5 magnification
+                     * box and arrows are never drawn on screen in the first place. */
+                    if (!canon_gui_front_buffer_disabled())
+                        idle_kill_flicker();
+                }
             }
             static int prev_idle = 0;
             if (!idle && prev_idle != idle) redraw();

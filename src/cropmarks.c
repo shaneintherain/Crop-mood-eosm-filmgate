@@ -23,6 +23,9 @@ static int crop_dirty = 0; // redraw cropmarks after some time (unit: 0.1s)
 
 static int cropmarks_x = -1;
 static int cropmarks_y = -1;
+/* the frame the cropmark mirror was last built for (see film_canvas_paint) */
+static int cropmarks_mirror_x = -1;
+static int cropmarks_mirror_y = -1;
 
 void crop_set_dirty(int value)
 {
@@ -592,9 +595,10 @@ static void FAST default_movie_cropmarks()
             if(draw || (x < x1 || x > x2))
             {
                 /* default cropmarks are black */
-                /* border pixels should be brighter, to be visible in dark */
-                int border = (x > x1-2 && x < x2+2 && y > y1-2 && y < y2+2);
-                newcolor = border ? COLOR_GRAY(70) : COLOR_BLACK;
+                /* border: a 2 px white line just outside the frame (a 1 px grey one
+                 * looked dotted on the EOS M screen) */
+                int border = (x > x1-3 && x < x2+3 && y > y1-3 && y < y2+3);
+                newcolor = border ? COLOR_WHITE : COLOR_BLACK;
             }
             
             if (newcolor)
@@ -620,6 +624,72 @@ static void FAST default_movie_cropmarks()
             }
         }
     }
+
+    cropmarks_mirror_x = crop_x;
+    cropmarks_mirror_y = crop_y;
+}
+
+int film_canvas_paint(int fill_outside)
+{
+    if (cropmarks_x == -1 || cropmarks_y == -1) return 0;
+    /* Only paint the frame the crop marks are actually showing: the mirror must be built
+     * for this very frame (not stale, not about to be rebuilt).  Otherwise the bars painted
+     * here could disagree with the ones the crop marks keep up, and leave stray strips. */
+    if (cropmark_cache_dirty || cropmarks_x != cropmarks_mirror_x || cropmarks_y != cropmarks_mirror_y)
+        return 0;
+    if (!bmp_vram()) return 0;
+    int x1 = (cropmarks_x >> 16);
+    int x2 = (cropmarks_x & 0xFFFF);
+    int y1 = (cropmarks_y >> 16);
+    int y2 = (cropmarks_y & 0xFFFF);
+    if (x2 <= x1 || y2 <= y1) return 0;
+
+    if (fill_outside)
+    {
+        /* same area the Kill Global Draw bars cover (includes the HDMI margins) */
+        bmp_fill(COLOR_BLACK, BMP_W_MINUS, BMP_H_MINUS, BMP_W_PLUS - BMP_W_MINUS, y1 - BMP_H_MINUS);
+        bmp_fill(COLOR_BLACK, BMP_W_MINUS, y2 + 1, BMP_W_PLUS - BMP_W_MINUS, BMP_H_PLUS - y2 - 1);
+        bmp_fill(COLOR_BLACK, BMP_W_MINUS, y1, x1 - BMP_W_MINUS, y2 - y1 + 1);
+        bmp_fill(COLOR_BLACK, x2 + 1, y1, BMP_W_PLUS - x2 - 1, y2 - y1 + 1);
+    }
+    /* the picture area: transparent, so Live View shows */
+    bmp_fill(COLOR_EMPTY, x1, y1, x2 - x1 + 1, y2 - y1 + 1);
+    /* the frame line exactly as default_movie_cropmarks() draws it: 2 px just outside */
+    /* (bmp_draw_rect covers x0 .. x0 + w - 1, like bmp_fill) */
+    bmp_draw_rect(COLOR_WHITE, x1 - 1, y1 - 1, x2 - x1 + 3, y2 - y1 + 3);
+    bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 5, y2 - y1 + 5);
+    return 1;
+}
+
+/* Repaint one small area of the screen exactly as the film frame shows it: black outside the
+ * frame, the 2 px white line, transparent (picture) inside.  Used to clean up after something
+ * drawn over the frame (e.g. the block behind the record dot).  Returns 0 if the frame is not
+ * known / not current, so the caller can fall back to something else. */
+static void fill_clipped(int color, int ax1, int ay1, int ax2, int ay2, int bx1, int by1, int bx2, int by2)
+{
+    int x1 = MAX(ax1, bx1), y1 = MAX(ay1, by1);
+    int x2 = MIN(ax2, bx2), y2 = MIN(ay2, by2);
+    if (x2 >= x1 && y2 >= y1)
+        bmp_fill(color, x1, y1, x2 - x1 + 1, y2 - y1 + 1);
+}
+
+int film_canvas_restore_area(int x, int y, int w, int h)
+{
+    if (cropmarks_x == -1 || cropmarks_y == -1) return 0;
+    if (cropmark_cache_dirty || cropmarks_x != cropmarks_mirror_x || cropmarks_y != cropmarks_mirror_y)
+        return 0;
+    if (!bmp_vram() || w <= 0 || h <= 0) return 0;
+    int x1 = (cropmarks_x >> 16);
+    int x2 = (cropmarks_x & 0xFFFF);
+    int y1 = (cropmarks_y >> 16);
+    int y2 = (cropmarks_y & 0xFFFF);
+    if (x2 <= x1 || y2 <= y1) return 0;
+
+    int ax2 = x + w - 1, ay2 = y + h - 1;
+    bmp_fill(COLOR_BLACK, x, y, w, h);
+    fill_clipped(COLOR_WHITE, x, y, ax2, ay2, x1 - 2, y1 - 2, x2 + 2, y2 + 2);
+    fill_clipped(COLOR_EMPTY, x, y, ax2, ay2, x1, y1, x2, y2);
+    return 1;
 }
 
 void set_movie_cropmarks(int x, int y, int w, int h)

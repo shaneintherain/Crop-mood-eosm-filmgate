@@ -40,6 +40,8 @@
 #include "debug.h"
 #include "lvinfo.h"
 #include "powersave.h"
+#include "cropmarks.h"
+#include "shoot.h"
 #include "gui-common.h"
 #include "module.h"
 #include "slim-font.h"
@@ -55,7 +57,7 @@
 #define MENU_HELP_Y_POS_2 458
 #define MENU_WARNING_Y_POS (menu_lv_transparent_mode ? 425 : 458)
 
-#define MENU_BG_COLOR_HEADER_FOOTER COLOR_PEN_NAVY
+#define MENU_BG_COLOR_HEADER_FOOTER UI_BG
 
 extern int bmp_color_scheme;
 #define MENU_BAR_COLOR COLOR_CREAM
@@ -172,6 +174,16 @@ static int slim_touch_scroll_repeat_ms;
 static int slim_touch_grid_back_x1, slim_touch_grid_back_y1;
 static int slim_touch_grid_back_x2, slim_touch_grid_back_y2;
 
+/* Tab strip (Exposure / Monitoring / Movie / Settings) in the page header.
+ * slim_tab_focus: the D-pad is on the tab strip (Up from the first row); Left/Right then
+ * switch pages, Down / SET go back to the rows.  Touch boxes are filled when drawn. */
+#define SLIM_TAB_COUNT 4
+static int slim_tab_focus = 0;
+static int slim_tab_x1[SLIM_TAB_COUNT], slim_tab_x2[SLIM_TAB_COUNT];
+static int slim_tab_y1, slim_tab_y2;
+static int slim_tab_current = -1;   /* page index shown, -1 = not a tab page (e.g. Custom) */
+#define SLIM_ROW_SEL(entry) ((entry)->selected && !slim_tab_focus)
+
 static void slim_touch_scroll_repeat(int timer, void *opaque);
 static int slim_touch_handle_scroll(int x, int y, int pressed);
 static int slim_touch_handle_grid_back(int x, int y);
@@ -250,17 +262,24 @@ static int entry_is_slim_style(struct menu_entry * entry, int in_submenu)
 }
 
 /* Filled ◄ — tip points left (narrow on left, flat base on right). */
+/* Arrows are drawn at 3/4 of the slot size (slots and touch boxes keep the full size);
+ * the flat base stays where it was, next to the value. */
+#define SLIM_ARROW_SCALE(h) MAX(((h) * 3) / 4, 6)
 static void slim_draw_arrow_left(int tip_x, int cy, int height, int color)
 {
     int depth = MAX((height * 6) / 10, 2);
-    bmp_draw_antialiased_triangle(tip_x, cy, 0, depth, height, color);
+    int h2 = SLIM_ARROW_SCALE(height);
+    int depth2 = MAX((h2 * 6) / 10, 2);
+    bmp_draw_antialiased_triangle(tip_x + depth - depth2, cy, 0, depth2, h2, color);
 }
 
 /* Filled ► — tip points right (flat base on left, narrow on right). */
 static void slim_draw_arrow_right(int tip_x, int cy, int height, int color)
 {
     int depth = MAX((height * 6) / 10, 2);
-    bmp_draw_antialiased_triangle(tip_x, cy, 1, depth, height, color);
+    int h2 = SLIM_ARROW_SCALE(height);
+    int depth2 = MAX((h2 * 6) / 10, 2);
+    bmp_draw_antialiased_triangle(tip_x - depth + depth2, cy, 1, depth2, h2, color);
 }
 #endif
 
@@ -3012,22 +3031,22 @@ entry_print(
     {
         /* Film Edge: the selected row is a solid cream block (like the quick menu),
          * other rows get a thin divider line. Drawn before the text. */
-        if (entry->selected)
-            bmp_fill(COLOR_PEN_NAVY, 10, y, 666, h - 1);
+        if (SLIM_ROW_SEL(entry))
+            bmp_fill(UI_SEL, 10, y, 666, h - 1);
         else
-            bmp_fill(COLOR_PEN_LINE, 10, y + h - 1, 666, 1);
+            bmp_fill(UI_LINE, 10, y + h - 1, 666, 1);
     }
 
     if (slim_style && !customize_mode && !junkie_mode)
     {
         /* Canon Gothic — native camera UI font (smoother than RBF bitmap fonts). */
         /* Film Edge: selected row black on cream, other rows in softer grey. */
-        int fg = entry->selected ? COLOR_WHITE : COLOR_PEN_NAVY;
+        int fg = SLIM_ROW_SEL(entry) ? UI_SEL_TEXT : UI_TEXT;
         /* read-only rows use enabled=0 and stay muted. */
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? COLOR_PEN_SKY : COLOR_PEN_MUTED;
-        fnt = slim_ui_font_spec(fg, entry->selected ? COLOR_PEN_NAVY : COLOR_PEN_BG);
+            fg = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_MUTED;
+        fnt = slim_ui_font_spec(fg, SLIM_ROW_SEL(entry) ? UI_SEL : UI_BG);
     }
 #endif
 
@@ -3056,11 +3075,11 @@ skip_name:
     /* Slim chrome: Canon font for the whole row (~camera UI size/weight). */
     if (slim_style && !customize_mode && !junkie_mode)
     {
-        int fg = entry->selected ? COLOR_WHITE : COLOR_PEN_NAVY;
+        int fg = SLIM_ROW_SEL(entry) ? UI_SEL_TEXT : UI_TEXT;
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? COLOR_PEN_SKY : COLOR_PEN_MUTED;
-        fnt = slim_ui_font_spec(fg, entry->selected ? COLOR_PEN_NAVY : COLOR_PEN_BG);
+            fg = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_MUTED;
+        fnt = slim_ui_font_spec(fg, SLIM_ROW_SEL(entry) ? UI_SEL : UI_BG);
     }
 
     /* Keep dial arrows visible on locked rows, but draw the entire control
@@ -3077,11 +3096,14 @@ skip_name:
         !junkie_mode;
     int draw_left_arrow = draw_tri_arrows;
     int draw_right_arrow = draw_tri_arrows;
-    int arrow_color = COLOR_PEN_NAVY;
+    int arrow_color = UI_ARROW;
     if (draw_tri_arrows && slim_locked)
-        arrow_color = COLOR_PEN_MUTED;
-    else if (draw_tri_arrows && entry->selected)
-        arrow_color = COLOR_WHITE;
+        arrow_color = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_MUTED;
+    else if (draw_tri_arrows && SLIM_ROW_SEL(entry))
+        arrow_color = UI_SEL_TEXT;
+    /* degree rings follow the value text, not the (dimmer) arrows */
+    int ring_color = SLIM_ROW_SEL(entry) ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
+                                     : (slim_locked ? UI_MUTED : UI_TEXT);
     int fonth = fontspec_font(fnt)->height;
     int tri_h = MAX(fonth - 4, 18); /* match value glyph height */
     int arrow_slot_w = (tri_h * 6) / 10 + 1;
@@ -3227,9 +3249,9 @@ skip_name:
     /* Value colours: light blue (117) on the selected (navy) row, black on the others;
      * read-only rows keep the muted colour chosen above. */
     if (slim_style && !customize_mode && !junkie_mode && !slim_locked)
-        value_fnt = entry->selected
-            ? slim_ui_font_spec(COLOR_PEN_LIGHT, COLOR_PEN_NAVY)
-            : slim_ui_font_spec(COLOR_BLACK, COLOR_PEN_BG);
+        value_fnt = SLIM_ROW_SEL(entry)
+            ? slim_ui_font_spec(UI_SEL_TEXT, UI_SEL)
+            : slim_ui_font_spec(UI_TEXT, UI_BG);
 #endif
     bmp_printf(
         value_fnt,
@@ -3245,8 +3267,8 @@ skip_name:
         int deg_x = x_value + bmp_string_width(fnt, info->value) + 2;
         int deg_y = y + y_font_offset + MAX(fonth / 5, 4);
         int deg_r = MAX(fonth / 10, 3);
-        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, arrow_color);
-        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, arrow_color);
+        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, ring_color);
+        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, ring_color);
     }
     if (draw_right_arrow)
     {
@@ -3276,8 +3298,8 @@ skip_name:
                 int deg_x = rx + bmp_string_width(fnt, info->rinfo) + 2;
                 int deg_y = y + y_font_offset + MAX(fonth / 5, 4);
                 int deg_r = MAX(fonth / 10, 3);
-                draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, arrow_color);
-                draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, arrow_color);
+                draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, ring_color);
+                draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, ring_color);
             }
         }
     }
@@ -3450,7 +3472,7 @@ skip_name:
                     if (len > 700) break;
                     STR_APPEND(help2_buf, "%s%s", pickbox_string(entry, i), i < entry->max ? " / " : ".");
                 }
-                help_color = COLOR_PEN_SKY;
+                help_color = UI_DIM;
                 help2 = help2_buf;
             }
         }
@@ -3515,7 +3537,7 @@ menu_post_display()
     if (cfg_preset && !submenu_level)
     {
         bmp_printf(
-            SHADOW_FONT(FONT(FONT_MED, COLOR_GRAY(40), COLOR_PEN_BG)) | FONT_ALIGN_RIGHT,
+            SHADOW_FONT(FONT(FONT_MED, COLOR_GRAY(40), UI_BG)) | FONT_ALIGN_RIGHT,
             715, 480-50-font_med.height+4,
             "%s", cfg_preset
         );
@@ -4657,9 +4679,9 @@ show_hidden_items(struct menu * menu, int force_clear)
         if (is_menu_active("Help")) hidden_pos_y -= font_med.height;
         if (hidden_count)
         {
-            bmp_fill(COLOR_PEN_BG, 0, hidden_pos_y, 720, 19);
+            bmp_fill(UI_BG, 0, hidden_pos_y, 720, 19);
             bmp_printf(
-                SHADOW_FONT(FONT(FONT_MED, customize_mode ? MENU_WARNING_COLOR : COLOR_ORANGE , COLOR_PEN_BG)), 
+                SHADOW_FONT(FONT(FONT_MED, customize_mode ? MENU_WARNING_COLOR : COLOR_ORANGE , UI_BG)), 
                  10, hidden_pos_y, 
                  hidden_msg
             );
@@ -4673,12 +4695,6 @@ show_vscroll(struct menu * parent){
     if (edit_mode)
         return;
 
-#ifdef CONFIG_SLIM_MENUS
-    /* Movie page: no vertical scroll indicator (list still scrolls). */
-    if (parent && parent->name && streq(parent->name, "Movie")
-        && menu_grid_is_launched() && !submenu_level)
-        return;
-#endif
     
     int pos = get_menu_selected_pos(parent);
     int max = get_menu_visible_count(parent);
@@ -4719,12 +4735,12 @@ show_vscroll(struct menu * parent){
         int bar_w = 24;
 
         /* Minimal scrollbar: orange thumb and white Canon-style arrows only. */
-        bmp_fill(COLOR_PEN_NAVY, x + 9, y, 6, size);
+        bmp_fill(UI_DIM, x + 9, y, 6, size);
         int arrow_size = MAX(slim_ui_font_height() - 4, 18);
         slim_draw_scroll_arrow_up(x + bar_w / 2, y_lo + arrow_size / 2 + 2,
-            arrow_size, COLOR_PEN_NAVY);
+            arrow_size, UI_DIM);
         slim_draw_scroll_arrow_down(x + bar_w / 2, h_bot - arrow_size / 2 - 2,
-            arrow_size, COLOR_PEN_NAVY);
+            arrow_size, UI_DIM);
         slim_touch_scroll_x1 = x;
         slim_touch_scroll_x2 = x + bar_w;
         slim_touch_scroll_up_y1 = y_lo;
@@ -4826,10 +4842,10 @@ void menus_display(
     int x = orig_x + junkie_mode ? 2 : 150;
     int icon_spacing = junkie_mode ? 716 / num_tabs : (720 - 150) / num_tabs;
     
-    int bgs = COLOR_PEN_BG;
+    int bgs = UI_BG;
     int bgu = MENU_BG_COLOR_HEADER_FOOTER;
     int fgu = COLOR_WHITE;
-    int fgs = COLOR_PEN_NAVY;
+    int fgs = UI_SEL;
 
     if (customize_mode) fgs = get_customize_color();
 
@@ -4855,22 +4871,62 @@ void menus_display(
             snprintf(title_caps, sizeof(title_caps), "%s", slim_menu_display_name(sel->name));
             for (char *c = title_caps; *c; c++)
                 if (*c >= 'a' && *c <= 'z') *c -= 32;
-            bmp_printf(slim_ui_font_spec(COLOR_WHITE, bgu),
-                SLIM_MENU_TITLE_X, title_y, "%s", title_caps);
+            /* Tab strip: the four main pages side by side, the open one in white with an
+             * orange underline, the others dimmed.  Other pages (Custom) keep a plain title. */
+            static const char * const slim_tabs[] = { "EXPOSURE", "MONITORING", "MOVIE", "SETTINGS" };
+            int is_tab = 0;
+            for (int t = 0; t < COUNT(slim_tabs); t++)
+                if (streq(title_caps, slim_tabs[t])) is_tab = 1;
+
+            /* divider under the whole header */
+            bmp_fill(UI_LINE, orig_x, y + header_h - 1, 720, 1);
+
+            slim_tab_current = -1;
+            if (is_tab)
+            {
+                int tx = SLIM_MENU_TITLE_X;
+                slim_tab_y1 = y;
+                slim_tab_y2 = y + header_h;
+                for (int t = 0; t < COUNT(slim_tabs) && t < SLIM_TAB_COUNT; t++)
+                {
+                    int on = streq(title_caps, slim_tabs[t]);
+                    if (on) slim_tab_current = t;
+                    /* D-pad on the tab strip: the open tab becomes an orange block */
+                    int block = on && slim_tab_focus;
+                    int tbg = block ? UI_SEL : bgu;
+                    uint32_t tf = slim_ui_font_spec(block ? UI_SEL_TEXT : on ? UI_TEXT : UI_DIM, tbg);
+                    int tw = bmp_string_width(tf, slim_tabs[t]);
+                    if (block)
+                        bmp_fill(UI_SEL, tx - 8, y + 4, tw + 16, header_h - 8);
+                    bmp_printf(tf, tx, title_y, "%s", slim_tabs[t]);
+                    if (on && !block)
+                        bmp_fill(UI_SEL, tx, y + header_h - 4, tw, 4);
+                    /* touch box: the label plus half the gap on each side */
+                    slim_tab_x1[t] = tx - 13;
+                    slim_tab_x2[t] = tx + tw + 13;
+                    tx += tw + 26;
+                }
+            }
+            else
+            {
+                bmp_printf(slim_ui_font_spec(UI_TEXT, bgu),
+                    SLIM_MENU_TITLE_X, title_y, "%s", title_caps);
+            }
         }
 
-        /* Blue accent along the bottom edge of the grey bar */
-        bmp_fill(COLOR_PEN_SKY, orig_x, y + header_h - 2, 720, 2);
-
-        /* Return-to-grid control in every launched category header. */
-        slim_draw_arrow_left(690, y + header_h / 2,
-            MAX(slim_ui_font_height() - 4, 18), COLOR_WHITE);
-        /* EOS M touch X coordinates top out near 616; keep the visual arrow
-         * at the right while making its touch box reachable and generous. */
-        slim_touch_grid_back_x1 = 500;
-        slim_touch_grid_back_x2 = 718;
-        slim_touch_grid_back_y1 = y;
-        slim_touch_grid_back_y2 = y + header_h;
+        slim_touch_grid_back_x1 = slim_touch_grid_back_x2 = 0;
+        if (slim_tab_current < 0)
+        {
+            /* not a tab page (Custom): back arrow closes the menu */
+            slim_draw_arrow_left(690, y + header_h / 2,
+                MAX(slim_ui_font_height() - 4, 18), COLOR_WHITE);
+            /* EOS M touch X coordinates top out near 616; keep the visual arrow
+             * at the right while making its touch box reachable and generous. */
+            slim_touch_grid_back_x1 = 500;
+            slim_touch_grid_back_x2 = 718;
+            slim_touch_grid_back_y1 = y;
+            slim_touch_grid_back_y2 = y + header_h;
+        }
 
         content_y = header_h + 12;
     }
@@ -5041,9 +5097,9 @@ submenu_display(struct menu * submenu)
         )
     {
         w = 720-2*bx;
-        bmp_fill(MENU_BG_COLOR_HEADER_FOOTER,  bx,  by, w, 40);
-        bmp_fill(COLOR_PEN_BG,  bx,  by + 40, w, h-40);
-        bmp_printf(slim_ui_font_spec(COLOR_WHITE, MENU_BG_COLOR_HEADER_FOOTER),  bx + 15,  by+2, "%s", submenu->name);
+        bmp_fill(UI_TILE,  bx,  by, w, 40);
+        bmp_fill(UI_BG,  bx,  by + 40, w, h-40);
+        bmp_printf(slim_ui_font_spec(UI_TEXT, UI_TILE),  bx + 15,  by+2, "%s", submenu->name);
 
         for (int i = 0; i < 5; i++)
             bmp_draw_rect(45,  bx-i,  by-i, w+i*2, h+i*2);
@@ -5062,7 +5118,7 @@ submenu_display(struct menu * submenu)
             bmp_draw_rect(COLOR_BLACK,  bx-i,  by-i, w+i*2, h+i*2);
 */            
 
-        submenu_key_hint(720-bx-45, by+5, COLOR_WHITE, MENU_BG_COLOR_HEADER_FOOTER, ICON_ML_Q_BACK);
+        submenu_key_hint(720-bx-45, by+5, COLOR_WHITE, UI_TILE, ICON_ML_Q_BACK);
 
     }
                                                    /* titlebar + padding difference for large submenus */
@@ -5639,7 +5695,7 @@ menu_redraw_do()
             {
 #ifdef CONFIG_SLIM_MENUS
                 /* Full screen — no grey header/footer reclaim strip. */
-                bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
+                bmp_fill(UI_BG, 0, 0, 720, 480);
 #else
                 bmp_fill(COLOR_BLACK, 0, 40, 720, 400 );
 #endif
@@ -6020,6 +6076,7 @@ static int slim_touch_handle_menu_arrow(int x, int y)
 
 static void slim_draw_scroll_arrow_up(int cx, int cy, int size, int color)
 {
+    size = SLIM_ARROW_SCALE(size);
     int depth = MAX((size * 6) / 10, 2);
     bmp_draw_antialiased_triangle(cx, cy - MAX(size / 2, 1), 2,
         depth, MAX(size / 2, 1), color);
@@ -6027,6 +6084,7 @@ static void slim_draw_scroll_arrow_up(int cx, int cy, int size, int color)
 
 static void slim_draw_scroll_arrow_down(int cx, int cy, int size, int color)
 {
+    size = SLIM_ARROW_SCALE(size);
     int depth = MAX((size * 6) / 10, 2);
     bmp_draw_antialiased_triangle(cx, cy + MAX(size / 2, 1), 3,
         depth, MAX(size / 2, 1), color);
@@ -6063,10 +6121,14 @@ int handle_ml_menu_touch(struct event * event)
                 {
                     if (!slim_touch_handle_grid_back(x, y))
                     {
-                        /* Header arrow returned to the launcher. */
+                        /* tab strip (or the Custom page's back arrow) handled it */
                     }
-                    else if (slim_touch_handle_scroll(x, y, 1))
-                        slim_touch_handle_menu_arrow(x, y);
+                    else
+                    {
+                        slim_tab_focus = 0;   /* touching a row leaves the tab strip */
+                        if (slim_touch_handle_scroll(x, y, 1))
+                            slim_touch_handle_menu_arrow(x, y);
+                    }
                 }
             }
 #endif
@@ -6164,17 +6226,29 @@ static int slim_touch_handle_scroll(int x, int y, int pressed)
 
 static int slim_touch_handle_grid_back(int x, int y)
 {
+    /* tab strip: touching a page name opens that page */
+    if (slim_tab_current >= 0 && !submenu_level && !edit_mode &&
+        y >= slim_tab_y1 && y < slim_tab_y2)
+    {
+        for (int t = 0; t < SLIM_TAB_COUNT; t++)
+        {
+            if (x >= slim_tab_x1[t] && x < slim_tab_x2[t])
+            {
+                slim_tab_focus = 0;
+                if (t != slim_tab_current)
+                    menu_grid_switch_page(t);
+                menu_redraw_full();
+                return 0;
+            }
+        }
+        return 0;   /* elsewhere on the header: nothing */
+    }
+
     if (!slim_touch_grid_back_x2 || x < slim_touch_grid_back_x1 ||
         x >= slim_touch_grid_back_x2 || y < slim_touch_grid_back_y1 ||
         y >= slim_touch_grid_back_y2)
         return 1;
-    if (menu_custom_is_active())
-        gui_stop_menu();
-    else
-    {
-        menu_grid_return();
-        menu_redraw();
-    }
+    gui_stop_menu();
     return 0;
 }
 
@@ -6381,6 +6455,25 @@ handle_ml_menu_keys(struct event * event)
     }
 #endif
     
+#ifdef CONFIG_SLIM_MENUS
+    /* Page switching: turning the rear wheel left/right shows the previous/next page
+     * (Exposure, Monitoring, Movie, Settings).  The D-pad Left/Right still change the
+     * selected value, Up/Down move through the rows (wrapping at the top and bottom).
+     * Touching a page name in the tab strip also works. */
+    if (menu_grid_is_launched() && slim_tab_current >= 0 && !submenu_level && !edit_mode &&
+        !menu_lv_transparent_mode && !menu_help_active &&
+        (button_code == BGMT_WHEEL_LEFT || button_code == BGMT_WHEEL_RIGHT))
+    {
+        int n = menu_grid_page_count();
+        int d = (button_code == BGMT_WHEEL_RIGHT) ? 1 : n - 1;
+        slim_tab_focus = 0;
+        menu_grid_switch_page((slim_tab_current + d) % n);
+        menu_redraw_full();
+        keyrepeat_ack(button_code);
+        return 0;
+    }
+#endif
+
     switch( button_code )
     {
     case BGMT_MENU:
@@ -6407,7 +6500,10 @@ handle_ml_menu_keys(struct event * event)
             }
             else
             {
-                menu_grid_return();
+                /* no home screen: MENU closes the menu */
+                slim_tab_focus = 0;
+                give_semaphore(gui_sem);
+                break;
             }
             menu_needs_full_redraw = 1;
             break;
@@ -7029,8 +7125,9 @@ static void menu_open()
     }
     else
     {
-        menu_grid_open();
+        menu_grid_open_page();   /* no home screen: straight to the last page used */
     }
+    slim_tab_focus = 0;
 #endif
     if (lv) menu_zebras_mirror_dirty = 1;
 
@@ -7062,6 +7159,31 @@ static void menu_close()
     menu_lv_transparent_mode = 0;
     
     close_canon_menu();
+#if defined(CONFIG_SLIM_MENUS) && defined(CONFIG_KILL_FLICKER)
+    /* x5 movie presets with Global Draw on: hand the screen straight back to the Live View
+     * frame (black outside, frame line, picture inside) instead of clearing it and letting
+     * Canon redraw its Live View screen first, which flashed the x5 box / arrows and the
+     * picture without its frame bars. */
+    {
+        extern int kill_canon_gui_mode;
+        int painted = 0;
+        if (lv && is_movie_mode() && !RECORDING && kill_canon_gui_mode == 1 &&
+            lv_disp_mode == 0 && (get_global_draw_setting() & 1))
+        {
+            BMP_LOCK( painted = film_canvas_paint(1); )
+        }
+        if (painted)
+        {
+            /* Canon's overlay layer stays off; ML redraws its own layers on top */
+            crop_set_dirty(1);
+            lens_display_set_dirty();
+            afframe_set_dirty();
+            bmp_on();
+            idle_kill_flicker_after_menu();
+            return;
+        }
+    }
+#endif
     canon_gui_enable_front_buffer(0);
     redraw();
     if (lv) bmp_on();
@@ -7527,9 +7649,9 @@ static void draw_longpress_indicator(struct longpress * longpress)
         int y = y0 + sin_table[MOD(i, 12)];
 
         /* blues, matching the menus */
-        int color = (!pressed)  ? COLOR_PEN_SKY   :  /* button just released */
-                    (n >= 25/2) ? COLOR_PEN_LIGHT :  /* long press event fired */
-                                  COLOR_PEN_SKY   ;  /* on the way to long press */
+        int color = (!pressed)  ? UI_DIM   :  /* button just released */
+                    (n >= 25/2) ? UI_SEL   :  /* long press event fired */
+                                  UI_DIM   ;  /* on the way to long press */
         fill_circle(x, y, 2, color);
     }
 }

@@ -8,6 +8,9 @@
 #include "raw.h"
 #include "propvalues.h"
 #include "state-object.h"
+#include "powersave.h"
+#include "cropmarks.h"
+#include "shoot.h"
 
 #if 0 /* superseded by the color startup bitmap below */
 struct boot_logo_span { uint16_t y; uint16_t x; uint16_t width; };
@@ -1537,13 +1540,54 @@ static const struct boot_logo_span boot_logo_spans[] = {
 /* The artwork is generated already centred on (360, 240). */
 #define BOOT_LOGO_Y 0
 
-/* Light start-up screen with navy bars, matching the menus. */
-#define BOOT_LOGO_BAR_H 48
+/* Dark "film strip" start-up screen, matching the menus.  Everything below
+ * BOOT_LOGO_STRIP_Y is the bottom strip the splash task keeps opaque; it holds the
+ * small credit (rows 400..413, right side) and the bottom sprocket band. */
+#define BOOT_LOGO_STRIP_Y 345
+#define BOOT_LOGO_BAND_H 42
+#define BOOT_LOGO_BAND_COLOR COLOR_GRAY(5)
+#define BOOT_LOGO_HOLE_COLOR COLOR_GRAY(22)
 
-static void boot_logo_bars(void)
+/* span levels 26..31 -> fixed palette entries (see generate_boot_logo.py) */
+static const uint8_t boot_logo_colors[8] = {
+    COLOR_GRAY(35), COLOR_GRAY(70), COLOR_WHITE, COLOR_ORANGE,
+    COLOR_GRAY(25), COLOR_GRAY(60), COLOR_WHITE, COLOR_WHITE
+};
+
+/* A dark band with a row of sprocket holes (20x14, corners rounded by one pixel).
+ * Every pixel is written once with its final colour, so redrawing it does not flicker. */
+static void boot_logo_band(int y0)
 {
-    bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, BOOT_LOGO_BAR_H);
-    bmp_fill(COLOR_PEN_NAVY, 0, 480 - BOOT_LOGO_BAR_H, 720, BOOT_LOGO_BAR_H);
+    bmp_fill(BOOT_LOGO_BAND_COLOR, 0, y0, 720, 14);
+    bmp_fill(BOOT_LOGO_BAND_COLOR, 0, y0 + 28, 720, BOOT_LOGO_BAND_H - 28);
+    for (int r = 0; r < 14; r++)
+    {
+        int y = y0 + 14 + r;
+        int inset = (r == 0 || r == 13) ? 1 : 0;   /* rounded corners */
+        int x = 0;
+        for (int hx = 14; hx < 720; hx += 40)
+        {
+            bmp_fill(BOOT_LOGO_BAND_COLOR, x, y, hx + inset - x, 1);
+            bmp_fill(BOOT_LOGO_HOLE_COLOR, hx + inset, y, MIN(20 - 2 * inset, 720 - hx - inset), 1);
+            x = hx + 20 - inset;
+        }
+        if (x < 720)
+            bmp_fill(BOOT_LOGO_BAND_COLOR, x, y, 720 - x, 1);
+    }
+}
+
+static void boot_logo_draw_spans(int y_min)
+{
+    for (unsigned int i = 0; i < BOOT_LOGO_SPANS; i++)
+    {
+        const struct boot_logo_span *s = &boot_logo_spans[i];
+        if (s->y < y_min) continue;
+        bmp_fill(boot_logo_colors[(s->color - 26) & 7],
+            BOOT_LOGO_X + s->x * BOOT_LOGO_SCALE,
+            BOOT_LOGO_Y + s->y * BOOT_LOGO_SCALE,
+            s->width * BOOT_LOGO_SCALE,
+            BOOT_LOGO_SCALE);
+    }
 }
 
 extern int ml_started;
@@ -1553,19 +1597,10 @@ static void boot_logo_draw(void)
     film_palette_apply();
     /* Keep splash writes inside ML's normal LCD canvas.  The surrounding
      * 960x540 backing surface is changed by Canon during LV/zoom switches. */
-    bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
-    boot_logo_bars();
-    /* span colours 26..29 = light blue, sky blue, navy, sky blue (fixed palette entries) */
-    static const uint8_t logo_colors[4] = { COLOR_PEN_LIGHT, COLOR_PEN_SKY, COLOR_PEN_NAVY, COLOR_PEN_SKY };
-    for (unsigned int i = 0; i < BOOT_LOGO_SPANS; i++)
-    {
-        const struct boot_logo_span *s = &boot_logo_spans[i];
-        bmp_fill(logo_colors[(s->color - 26) & 3],
-            BOOT_LOGO_X + s->x * BOOT_LOGO_SCALE,
-            BOOT_LOGO_Y + s->y * BOOT_LOGO_SCALE,
-            s->width * BOOT_LOGO_SCALE,
-            BOOT_LOGO_SCALE);
-    }
+    bmp_fill(UI_BG, 0, BOOT_LOGO_BAND_H, 720, 480 - 2 * BOOT_LOGO_BAND_H);
+    boot_logo_band(0);
+    boot_logo_band(480 - BOOT_LOGO_BAND_H);
+    boot_logo_draw_spans(0);
 }
 
 static volatile int boot_logo_active = 0;
@@ -1658,17 +1693,20 @@ static void boot_logo_task(void *unused)
             /* Canon rebuilds its overlay layer while Live View settles (zoom x1/x5); that wipes
              * the splash and the live picture (black in the crop modes) shows through, e.g. the
              * blue bars turning black.  If a few sample points no longer match, draw it all again. */
-            if ((bmp_getpixel(4, 4) != COLOR_PEN_NAVY ||
-                 bmp_getpixel(4, 480 - 4) != COLOR_PEN_NAVY ||
-                 bmp_getpixel(4, 100) != COLOR_PEN_BG) &&
+            if ((bmp_getpixel(4, 4) != BOOT_LOGO_BAND_COLOR ||
+                 bmp_getpixel(4, 480 - 4) != BOOT_LOGO_BAND_COLOR ||
+                 bmp_getpixel(4, 100) != UI_BG) &&
                 get_ms_clock() >= last_full_redraw + 200)   /* at most 5 times a second */
             {
                 last_full_redraw = get_ms_clock();
                 boot_logo_draw();
             }
-            bmp_fill(COLOR_PEN_BG, 0, 345, 720, 480 - BOOT_LOGO_BAR_H - 345);
-            bmp_fill(COLOR_PEN_NAVY, 0, 480 - BOOT_LOGO_BAR_H, 720, BOOT_LOGO_BAR_H);
-            bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, BOOT_LOGO_BAR_H);
+            /* keep the strip opaque around the small credit (rows 400..413, right side),
+             * without repainting the credit itself, so it does not flicker */
+            bmp_fill(UI_BG, 0, BOOT_LOGO_STRIP_Y, 720, 400 - BOOT_LOGO_STRIP_Y);
+            bmp_fill(UI_BG, 0, 400, 580, 14);
+            bmp_fill(UI_BG, 0, 414, 720, 480 - BOOT_LOGO_BAND_H - 414);
+            boot_logo_band(480 - BOOT_LOGO_BAND_H);
         )
         msleep(20);
     }
@@ -1685,14 +1723,37 @@ static void boot_logo_task(void *unused)
         while (boot_logo_hud_mask != 3 && get_ms_clock() < hud_deadline)
             msleep(20);
         boot_logo_handoff_pending = 0;
-        BMP_LOCK( boot_logo_release_canvas(); )
+        /* Hand over straight to the Live View frame when there is one (black outside, frame
+         * line, picture inside), so the picture never shows without its frame bars. */
+        int painted = 0;
+        if (lv && is_movie_mode() && (get_global_draw_setting() & 1))
+        {
+            BMP_LOCK( painted = film_canvas_paint(0); )
+        }
+        if (!painted)
+            BMP_LOCK( boot_logo_release_canvas(); )
         boot_logo_active = 0;
+#ifdef CONFIG_KILL_FLICKER
+        /* keep Canon's overlay layer off while Live View finishes settling, the same as after
+         * closing a menu, so the x5 magnification box and arrows do not flash at the hand-over */
+        idle_kill_flicker_after_menu();
+#endif
 
         /* Releasing the canvas wipes everything drawn during the splash (e.g. the Film Format
          * bars); redraw like closing a menu does.  Not during power-off, and not if a
          * recording was started while the splash was still up. */
         if (!ml_shutdown_requested && !RECORDING)
-            redraw();
+        {
+            if (painted)
+            {
+                /* no clear-and-redraw: ML's layers draw on top of the painted frame */
+                crop_set_dirty(1);
+                lens_display_set_dirty();
+                menu_set_dirty();
+            }
+            else
+                redraw();
+        }
     }
 }
 

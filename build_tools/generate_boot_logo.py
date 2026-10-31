@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """Generate src/boot-logo-spans.inc (the FilmGate start-up screen).
 
-Light background, navy/sky wordmark set in Jost Medium.  The picture is stored
-as horizontal runs {y, x, width, level}; level 26..28 is an edge-smoothing
-ramp that boot-logo.c maps to palette entries 117 (light), 104 (sky), 216 (navy).
-Level 29 is flat sky blue.  The artwork block is centred on (360, 240).
+Dark screen, "film strip" design: a large "FILMGATE" in the middle, "CROP MOOD
+<orange dot> EOS M" under it and "MAGIC LANTERN" at the lower right.  The two
+dark bands with sprocket holes along the top and bottom edges are plain
+rectangles drawn by boot-logo.c (boot_logo_band), not stored here.
+Set in Barlow Semi Condensed SemiBold (SIL OFL).
+
+The picture is stored as horizontal runs {y, x, width, level}.  boot-logo.c maps
+the levels to fixed palette entries (black background):
+  26, 27, 28  white ink edge ramp: grey 35 %, grey 70 %, white
+  29          orange (the dot)
+  30, 31      dim text edge ramp: grey 25 %, grey 60 %
 Run:  python3 build_tools/generate_boot_logo.py [preview.png]
 """
 from pathlib import Path
@@ -12,77 +19,76 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
-FONT = ROOT / "data" / "fonts" / "source" / "jost-medium.ttf"
+FONT = ROOT / "data" / "fonts" / "source" / "BarlowSemiCondensed-SemiBold.ttf"
 OUT = ROOT / "src" / "boot-logo-spans.inc"
 W, H, SS = 720, 480, 4          # screen and supersampling factor
-TITLE_W = 540                    # width of "MAGIC LANTERN"
 
-def text_mask(text, size, track):
-    """Return a coverage image (L) for text with letter tracking, supersampled."""
+# keep in sync with boot-logo.c
+BAND_H = 42                      # top and bottom bands
+CREDIT_Y = 400                   # top of "MAGIC LANTERN" (right side)
+
+
+def text_layer(layer, text, size, track, cx=None, x=None, top=0):
+    """Draw text with letter tracking (em fraction) into a supersampled L layer.
+    Centred on cx, or right-aligned so it ends x pixels from the right edge (x < 0).
+    Returns (left, right) in screen pixels."""
     f = ImageFont.truetype(str(FONT), size * SS)
-    adv = [f.getlength(c) + track * SS for c in text]
-    width = int(sum(adv)) + 4 * SS
-    img = Image.new("L", (width, int(size * 1.6) * SS), 0)
-    d = ImageDraw.Draw(img)
-    x = 2 * SS
-    base = int(size * 1.2) * SS
+    adv = [f.getlength(c) + track * size * SS for c in text]
+    width = sum(adv) - track * size * SS
+    cap = -f.getbbox("H", anchor="ls")[1]
+    if cx is not None:
+        x0 = cx * SS - width / 2
+    else:
+        x0 = (W + x) * SS - width
+    base = top * SS + cap
+    d = ImageDraw.Draw(layer)
+    xx = x0
     for c, a in zip(text, adv):
-        d.text((x, base), c, font=f, fill=255, anchor="ls")
-        x += a
-    return img, f
+        d.text((xx, base), c, font=f, fill=255, anchor="ls")
+        xx += a
+    return x0 / SS, (x0 + width) / SS
 
-def tight(img):
-    box = img.getbbox()
-    return img.crop(box)
-
-def fit_title():
-    lo, hi = 40, 140
-    for size in range(lo, hi):
-        img, _ = text_mask("MAGIC LANTERN", size, 3)
-        if tight(img).width / SS > TITLE_W:
-            return size - 1
-    return hi
 
 def main():
-    size = fit_title()
-    title = tight(text_mask("MAGIC LANTERN", size, 3)[0])
-    # split colours: MAGIC navy, LANTERN sky
-    full_w = title.width
-    ma, _ = text_mask("MAGIC ", size, 3)
-    split = int(ImageFont.truetype(str(FONT), size * SS).getlength("MAGIC ") + 3 * 6 * SS)
-    sub = tight(text_mask("EOS M  ·  FILMGATE", 21, 6)[0])
-
-    gap1, rule_h, gap2 = 34, 2, 30
-    th, sh = title.height // SS, sub.height // SS
-    block_h = th + gap1 + rule_h + gap2 + sh
-    top = (H - block_h) // 2
+    white = Image.new("L", (W * SS, H * SS), 0)
+    dim = Image.new("L", (W * SS, H * SS), 0)
+    orange = Image.new("L", (W * SS, H * SS), 0)
     canvas = {}   # (x, y) -> level
 
-    def put(mask, x0, y0, navy, xsplit=None):
-        w, h = mask.width // SS, mask.height // SS
-        small = mask.resize((w, h), Image.BOX)
+    text_layer(white, "FILMGATE", 104, 0.12, cx=W // 2 + 6, top=176)
+
+    # subtitle: "CROP MOOD" + orange dot + "EOS M", centred as one line
+    size, track, gap, dot = 17, 0.22, 14, 8
+    f = ImageFont.truetype(str(FONT), size)
+    wa = sum(f.getlength(c) + track * size for c in "CROP MOOD") - track * size
+    wb = sum(f.getlength(c) + track * size for c in "EOS M") - track * size
+    total = wa + gap + dot + gap + wb
+    left = W / 2 - total / 2
+    sub_top = 300
+    text_layer(dim, "CROP MOOD", size, track, cx=left + wa / 2, top=sub_top)
+    text_layer(dim, "EOS M", size, track, cx=left + wa + 2 * gap + dot + wb / 2, top=sub_top)
+    cap = -ImageFont.truetype(str(FONT), size * SS).getbbox("H", anchor="ls")[1] / SS
+    dcx, dcy = left + wa + gap + dot / 2, sub_top + cap / 2
+    ImageDraw.Draw(orange).ellipse(((dcx - dot / 2) * SS, (dcy - dot / 2) * SS,
+                                    (dcx + dot / 2) * SS, (dcy + dot / 2) * SS), fill=255)
+
+    text_layer(dim, "MAGIC LANTERN", 14, 0.08, x=-28, top=CREDIT_Y)
+
+    def put(layer, ramp):
+        small = layer.resize((W, H), Image.BOX)
         px = small.load()
-        for y in range(h):
-            for x in range(w):
+        for y in range(H):
+            for x in range(W):
                 c = px[x, y] / 255.0
                 if c < 0.15:
                     continue
-                is_navy = navy if xsplit is None else (x * SS < xsplit)
-                if is_navy:
-                    lvl = 26 if c < 0.45 else 27 if c < 0.8 else 28
-                else:
-                    lvl = 26 if c < 0.5 else 29
-                canvas[(x0 + x, y0 + y)] = lvl
+                lvl = ramp(c)
+                if lvl is not None and (x, y) not in canvas:
+                    canvas[(x, y)] = lvl
 
-    tx = (W - th * 0 - title.width // SS) // 2
-    put(title, tx, top, True, xsplit=split - 0)
-    ry = top + th + gap1
-    rw = 520
-    for y in range(ry, ry + rule_h):
-        for x in range((W - rw) // 2, (W + rw) // 2):
-            canvas[(x, y)] = 29
-    sx = (W - sub.width // SS) // 2
-    put(sub, sx, ry + rule_h + gap2, True)
+    put(orange, lambda c: 29 if c >= 0.4 else None)
+    put(white, lambda c: 26 if c < 0.45 else 27 if c < 0.8 else 28)
+    put(dim, lambda c: 30 if c < 0.5 else 31)
 
     spans = []
     for y in range(H):
@@ -96,23 +102,27 @@ def main():
             i = j + 1
     with OUT.open("w") as fh:
         fh.write("/* FilmGate start-up screen (720x480), generated by build_tools/generate_boot_logo.py.\n"
-                 " * Levels 26..28 = edge ramp (light, sky, navy); 29 = flat sky blue. */\n")
+                 " * Levels: 26..28 white edge ramp, 29 orange, 30..31 dim text ramp. */\n")
         fh.write("struct boot_logo_span { uint16_t y; uint16_t x; uint16_t width; uint8_t color; };\n\n")
         fh.write("static const struct boot_logo_span boot_logo_spans[] = {\n")
         for s in spans:
             fh.write("    { %d, %d, %d, %d },\n" % s)
         fh.write("};\n")
     ys = [k[1] for k in canvas]; xs = [k[0] for k in canvas]
-    print("spans", len(spans), "ink x", min(xs), max(xs), "y", min(ys), max(ys),
-          "centre", (min(xs)+max(xs))/2, (min(ys)+max(ys))/2)
+    print("spans", len(spans), "ink x", min(xs), max(xs), "y", min(ys), max(ys))
     if len(sys.argv) > 1:
-        rgb = {26: (190, 235, 240), 27: (45, 150, 205), 28: (45, 75, 130), 29: (45, 150, 205)}
-        im = Image.new("RGB", (W, H), (255, 255, 255))
+        rgb = {26: (101, 101, 101), 27: (170, 170, 170), 28: (235, 235, 235), 29: (231, 109, 0),
+               30: (69, 69, 69), 31: (152, 152, 152)}
+        im = Image.new("RGB", (W, H), (0, 0, 0))
         d = ImageDraw.Draw(im)
-        d.rectangle((0, 0, W, 47), fill=rgb[28]); d.rectangle((0, 432, W, H), fill=rgb[28])
+        for y0 in (0, H - BAND_H):   # bands and sprocket holes, as boot-logo.c draws them
+            d.rectangle((0, y0, W - 1, y0 + BAND_H - 1), fill=(27, 27, 27))
+            for hx in range(14, W, 40):
+                d.rounded_rectangle((hx, y0 + 14, hx + 19, y0 + 27), radius=2, fill=(64, 64, 64))
         for (x, y), l in canvas.items():
             im.putpixel((x, y), rgb[l])
         im.save(sys.argv[1])
+
 
 if __name__ == "__main__":
     main()

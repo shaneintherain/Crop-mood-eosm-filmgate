@@ -6,6 +6,7 @@
 /* return true if Canon display is in idle state (ready for shooting) */
 /* to be cleaned up and moved together */
 int liveview_display_idle();        /* applies only to LiveView */
+int liveview_canon_ui_open();       /* Canon is showing a screen of its own (dialog, Q screen, menu) */
 int display_idle();                 /* applies to both LiveView and photo */
 
 /* returns true if you may draw most overlays, info bars and so on

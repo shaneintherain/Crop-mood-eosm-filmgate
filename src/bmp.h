@@ -325,6 +325,20 @@ void film_palette_apply(void);
 
 #define COLOR_GRAY(percent) (38 + (percent) * 41 / 100) // e.g. COLOR_GRAY(50) is 50% gray
 
+/* FilmGate dark look (menus, Home, Quick Menu): roles mapped to fixed palette entries only
+ * (black, white, the grey ramp and the standard orange), so Canon cannot recolour them. */
+#define UI_BG        COLOR_BLACK      /* page background            */
+#define UI_TILE      COLOR_GRAY(10)   /* tiles, submenu title bar   */
+#define UI_LINE      COLOR_GRAY(20)   /* dividers                   */
+#define UI_ARROW     COLOR_GRAY(35)   /* arrows on rows not selected */
+#define UI_TEXT      COLOR_WHITE      /* labels and values          */
+#define UI_DIM       COLOR_GRAY(65)   /* secondary text             */
+#define UI_MUTED     COLOR_GRAY(45)   /* locked / read-only rows    */
+#define UI_SEL       COLOR_ORANGE     /* selection fill, accents    */
+#define UI_SEL_TEXT  COLOR_BLACK      /* text on the selection      */
+#define UI_SEL_MUTED COLOR_GRAY(25)   /* locked text on the selection */
+#define UI_PILL      COLOR_GRAY(20)   /* recording time box, audio meter track */
+
 #define COLOR_DARK_GREEN1_MOD 21
 #define COLOR_DARK_GREEN2_MOD 22
 #define COLOR_DARK_ORANGE_MOD 23

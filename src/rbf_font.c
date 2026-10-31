@@ -51,6 +51,11 @@ static int rbf_font_file_exists(const char *name)
     return (FIO_GetFileSize(filename, &size) == 0) && size > 0;
 }
 
+/* Large font for the Quick Menu values.  The 8 font slots are all taken, so this one is
+ * loaded privately at boot and drawn with rbf_draw_string(); 0 if the file is missing. */
+static font * quick_value_font = 0;
+font * rbf_quick_value_font(void) { return quick_value_font; }
+
 uint32_t font_by_name(char *file, uint32_t fg_color, uint32_t bg_color)
 {
     /* check if this font was already loaded */
@@ -653,6 +658,16 @@ void _load_fonts()
     {
         uint32_t jf = font_by_name("jost-info", COLOR_BLACK, COLOR_WHITE);
         font_jost_info = (FONT_ID(jf) != FONT_ID(FONT_CANON)) ? jf : 0;
+    }
+
+    if (rbf_font_file_exists("barlow-quick"))
+    {
+        font * qf = new_font();
+        char qname[] = "ML/FONTS/barlow-quick.RBF";
+        if (qf && rbf_font_load(qname, qf, 0))
+            quick_value_font = qf;
+        else if (qf)
+            free(qf);
     }
 
     font_small = *fontspec_font(FONT_SMALL);

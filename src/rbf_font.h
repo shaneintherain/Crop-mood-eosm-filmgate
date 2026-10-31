@@ -64,6 +64,8 @@ extern int rbf_str_width(font *rbf_font, const char *str);
 extern int rbf_str_clipped_width(font *rbf_font, const char *str, int maxlen);
 extern int rbf_strlen_clipped(font *rbf_font, const char *str, int maxlen);
 extern int rbf_draw_string(font *rbf_font, int x, int y, const char *str, int cl);
+/* large Quick Menu value font, or 0 if not loaded */
+extern font * rbf_quick_value_font(void);
 //-------------------------------------------------------------------
 
 /* to be called at startup, before init funcs */

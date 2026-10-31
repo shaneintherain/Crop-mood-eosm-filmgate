@@ -10,6 +10,11 @@ void menu_grid_close(void);
 void menu_grid_return(void);
 /** Skip grid launcher and show the selected category menu (after select_menu_by_name). */
 void menu_grid_enter_launched(void);
+/* No home screen: open straight on the last page, switch pages from the tab strip. */
+void menu_grid_open_page(void);
+int  menu_grid_page_count(void);
+int  menu_grid_page_index(void);
+void menu_grid_switch_page(int idx);
 void menu_grid_draw(void);
 /** Returns 0 if handled, 1 if caller should continue normal menu key handling. */
 int menu_grid_handle_key(int button_code, int *needs_full_redraw);

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Create the Jost Medium bitmap font used by the FilmGate menus.
+"""Create the bitmap UI fonts used by the FilmGate menus and info bars.
+
+Face: Barlow Semi Condensed SemiBold (SIL OFL, data/fonts/source/BARLOW-OFL.txt).
+The output files keep their old jost-*.rbf names so the camera code that loads
+them by name is unchanged; set SOURCE back to jost-medium.ttf (and the em sizes
+below back to 24/25/21/25/29) to return to Jost.
 
 The camera's RBF renderer is monochrome, so glyphs are drawn without
 anti-aliasing (PIL font mode "1").  Every glyph sits in a 40 px tall cell with
@@ -11,24 +16,26 @@ import struct
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "data" / "fonts" / "source" / "jost-medium.ttf"
+SOURCE = ROOT / "data" / "fonts" / "source" / "BarlowSemiCondensed-SemiBold.ttf"
 FIRST, LAST = 32, 131   # ASCII plus the ML symbol codes 0x80..0x83
-TRACKING = 1         # extra pixel between letters
+TRACKING = 0         # extra pixel between letters (Jost used 1)
 
-# name -> (file, rbf title, cell height, Jost em size, max glyph width, cap-centre row)
+# name -> (file, rbf title, cell height, em size, max glyph width, cap-centre row)
 PROFILES = {
     # menus: 40 px cell (menu code sizes rows from this), caps centred at 0.45 * 40
-    "menu": ("jost-medium.rbf", b"Jost Medium EOSM", 40, 24, 32, 18),
+    "menu": ("jost-medium.rbf", b"Barlow SC Menu EOSM", 40, 27, 32, 18),
     # live-view info bars: 28 px cell, the same height as the Canon-style font it replaces
-    "info": ("jost-info.rbf", b"Jost Info EOSM", 28, 25, 28, 13),
+    "info": ("jost-info.rbf", b"Barlow SC Info EOSM", 28, 27, 28, 13),
     # replaces the 23 px stock font (FONT_MED): the top info bar and other small text
-    "small": ("jost-small.rbf", b"Jost Small EOSM", 23, 21, 24, 10),
+    "small": ("jost-small.rbf", b"Barlow SC Small EOSM", 23, 21, 24, 10),
     # replace the stock 28 px / 32 px fonts (FONT_MED_LARGE / FONT_LARGE): on-screen alerts,
     # audio meter values, warnings.  Same cell height and bytes per row as the fonts they
     # replace, so every layout stays the same.  The ML symbols 0x84..0x9F (warning sign,
     # play icon, ...) are copied from the stock font, since Jost has no such pictures.
-    "medlarge": ("jost-medlarge.rbf", b"Jost MedLarge EOSM", 28, 25, 28, 13, "argnor28.rbf"),
-    "large": ("jost-large.rbf", b"Jost Large EOSM", 32, 29, 34, 14, "argnor32.rbf"),
+    "medlarge": ("jost-medlarge.rbf", b"Barlow SC MedLarge EOSM", 28, 27, 28, 13, "argnor28.rbf"),
+    "large": ("jost-large.rbf", b"Barlow SC Large EOSM", 32, 31, 34, 14, "argnor32.rbf"),
+    # Quick Menu values: large, loaded privately (not a font slot), 46 px cell
+    "quick": ("barlow-quick.rbf", b"Barlow SC Quick EOSM", 46, 42, 40, 20),
 }
 
 

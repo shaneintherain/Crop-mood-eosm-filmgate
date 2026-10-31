@@ -3,6 +3,7 @@
 #include <menu.h>
 #include <bmp.h>
 #include <lvinfo.h>
+#include "cropmarks.h"
 #include <lens.h>
 #include <fps.h>
 #include "iso-gain.h"
@@ -791,7 +792,41 @@ void lvinfo_display(int top, int bottom)
             /* While recording, Canon draws its own red dot a little lower right of ours.
              * Cover it with a small solid block so only one dot is visible. */
             if (RECORDING)
-                bmp_fill(COLOR_BLACK, TOTAL_WIDTH - 44, top_y, 44, 44);
+            {
+                const int bx = TOTAL_WIDTH - 44, by = top_y, bw = 44, bh = 44;
+                /* Bar rows: black, like the rest of the bar (as in standby).  Below the bar,
+                 * where Canon's dot would show: the frame as it is (line + picture). */
+                if (film_canvas_restore_area(bx, by + 32, bw, bh - 32)) { bmp_fill(COLOR_BLACK, bx, by, bw, 32); } else {
+                bmp_fill(COLOR_BLACK, bx, by, bw, bh);
+                /* The block can cut through the white frame line: find where the line
+                 * enters the block (left side and bottom side, checked at three points
+                 * so text is not mistaken for it) and draw those pieces back. */
+                int hrow0 = -1, hrow1 = -1, vcol0 = -1, vcol1 = -1;
+                for (int r = by; r < by + bh; r++)
+                    if (bmp_getpixel(bx - 1, r) == COLOR_WHITE &&
+                        bmp_getpixel(bx - 5, r) == COLOR_WHITE &&
+                        bmp_getpixel(bx - 9, r) == COLOR_WHITE)
+                    {
+                        if (hrow0 < 0) hrow0 = r;
+                        hrow1 = r;
+                    }
+                for (int c = bx; c < bx + bw; c++)
+                    if (bmp_getpixel(c, by + bh) == COLOR_WHITE &&
+                        bmp_getpixel(c, by + bh + 4) == COLOR_WHITE &&
+                        bmp_getpixel(c, by + bh + 8) == COLOR_WHITE)
+                    {
+                        if (vcol0 < 0) vcol0 = c;
+                        vcol1 = c;
+                    }
+                if (hrow0 >= 0 && hrow1 - hrow0 < 4)
+                    bmp_fill(COLOR_WHITE, bx, hrow0, (vcol1 >= 0 && vcol1 - vcol0 < 4 ? vcol1 + 1 : bx + bw) - bx, hrow1 - hrow0 + 1);
+                if (vcol0 >= 0 && vcol1 - vcol0 < 4)
+                {
+                    int top = (hrow0 >= 0 && hrow1 - hrow0 < 4) ? hrow0 : by;
+                    bmp_fill(COLOR_WHITE, vcol0, top, vcol1 - vcol0 + 1, by + bh - top);
+                }
+                }
+            }
             /* True disc / ring, built row by row so it is as round as the pixels allow */
             const int r = 12;
             const int ring = RECORDING ? r + 1 : 2;   /* ring width; solid when recording */
