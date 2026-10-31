@@ -508,8 +508,20 @@ void idle_powersave_step()
                     if (!canon_gui_front_buffer_disabled())
                         idle_kill_flicker();
                 }
-                else if (canon_gui_front_buffer_disabled())
-                    idle_stop_killing_flicker();
+                else if (liveview_canon_ui_open() || lv_disp_mode != 0 || !DISPLAY_IS_ON)
+                {
+                    /* Canon is showing a screen of its own: let it be seen */
+                    if (canon_gui_front_buffer_disabled())
+                        idle_stop_killing_flicker();
+                }
+                else
+                {
+                    /* Live View is only pausing or switching (x1 <-> x5 rebuild after a mode
+                     * change, start-up): keep Canon's overlay layer off, so its x5 magnification
+                     * box and arrows are never drawn on screen in the first place. */
+                    if (!canon_gui_front_buffer_disabled())
+                        idle_kill_flicker();
+                }
             }
             static int prev_idle = 0;
             if (!idle && prev_idle != idle) redraw();

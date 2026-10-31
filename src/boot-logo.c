@@ -8,6 +8,7 @@
 #include "raw.h"
 #include "propvalues.h"
 #include "state-object.h"
+#include "powersave.h"
 
 #if 0 /* superseded by the color startup bitmap below */
 struct boot_logo_span { uint16_t y; uint16_t x; uint16_t width; };
@@ -1722,6 +1723,11 @@ static void boot_logo_task(void *unused)
         boot_logo_handoff_pending = 0;
         BMP_LOCK( boot_logo_release_canvas(); )
         boot_logo_active = 0;
+#ifdef CONFIG_KILL_FLICKER
+        /* keep Canon's overlay layer off while Live View finishes settling, the same as after
+         * closing a menu, so the x5 magnification box and arrows do not flash at the hand-over */
+        idle_kill_flicker_after_menu();
+#endif
 
         /* Releasing the canvas wipes everything drawn during the splash (e.g. the Film Format
          * bars); redraw like closing a menu does.  Not during power-off, and not if a
