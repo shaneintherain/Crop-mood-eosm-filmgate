@@ -3,6 +3,7 @@
 #include <string.h>
 #include "film-formats.h"
 
+#define ABS_DIFF(a, b) ((a) > (b) ? (a) - (b) : (b) - (a))
 #define COUNT(x) ((int)(sizeof(x) / sizeof((x)[0])))
 static int failures = 0, checks = 0;
 #define CHECK(cond, ...) do { checks++; if (!(cond)) { failures++; printf("FAIL: " __VA_ARGS__); printf("\n"); } } while (0)
@@ -43,9 +44,11 @@ int main(void)
         int rw = 0, rh = 0;
         CHECK(fr->w > 0 && fr->h > 0, "frame %d (%s): empty size", i, fr->name);
         /* multiples of 16; the full-width CROP MOOD frames are 1736 (a multiple of 8, like the original presets) */
+        /* multiples of 8 (mlv_lite rounds to 8); 1:1 frames multiples of 16 */
+        CHECK(fr->w % 8 == 0, "frame %d (%s): width %d is not a multiple of 8", i, fr->name, fr->w);
         if (fr->w == 1736)
             CHECK(i >= film_formats[FILM_CM_FIRST].first, "frame %d (%s): only CROP MOOD frames may be 1736 wide", i, fr->name);
-        else
+        else if (fr->readout != FILM_RO_1X3)
             CHECK(fr->w % 16 == 0, "frame %d (%s): width %d is not a multiple of 16", i, fr->name, fr->w);
         CHECK(fr->h % 2 == 0, "frame %d (%s): height %d is odd", i, fr->name, fr->h);
         CHECK(fr->name[0] && fr->gate[0] && fr->mode[0] && fr->frame[0], "frame %d has an empty text", i);
@@ -63,17 +66,24 @@ int main(void)
         }
     }
 
-    /* frames of one format share the width (only the height / crop differs).  FILM formats
-     * also share one readout; VIDEO sizes may use a different readout per frame */
+    /* frames of one format that share a readout share the width (only the height / crop differs);
+     * a format may mix readouts (S16, 16mm: tall frames in 1x3, the rest at 1:1), then the
+     * desqueezed widths agree within 1 % (or the frame is a 4:3 cut of a 3:2 sensor: 1" 4:3) */
     for (int f = 0; f < FILM_FORMAT_COUNT; f++)
         for (int k = 1; k < film_formats[f].count; k++)
         {
-            const struct film_frame * a = &film_frames[film_formats[f].first];
-            const struct film_frame * b = &film_frames[film_formats[f].first + k];
-            if (!film_is_video(f))
-                CHECK(!strcmp(a->mode, b->mode) && a->readout == b->readout, "format %s: frames use different readouts", film_formats[f].name);
-            if (f != 1) /* anamorphic: 2x and 1.33x have different squeezed widths */
+            int ia = film_formats[f].first, ib = film_formats[f].first + k;
+            const struct film_frame * a = &film_frames[ia];
+            const struct film_frame * b = &film_frames[ib];
+            CHECK(!strcmp(a->mode, b->mode) == (a->readout == b->readout), "format %s: mode text and readout disagree", film_formats[f].name);
+            if (f == 1) continue;                       /* anamorphic: 2x and 1.33x have different squeezed widths */
+            if (strstr(b->frame, "4:3 Crop") != NULL)   /* 4:3 cut of a 3:2 sensor (1"): narrower on purpose */
+                continue;
+            if (a->readout == b->readout)
                 CHECK(a->w == b->w, "format %s: frames have different widths", film_formats[f].name);
+            else if (strstr(b->frame, "4:3") == NULL)
+                CHECK(ABS_DIFF(film_frame_desq_w(ia), film_frame_desq_w(ib)) * 100 <= film_frame_desq_w(ia),
+                      "format %s: desqueezed widths %d and %d differ", film_formats[f].name, film_frame_desq_w(ia), film_frame_desq_w(ib));
         }
 
     /* the two standards */
@@ -92,16 +102,17 @@ int main(void)
         {
             const struct film_frame * fr = &film_frames[film_formats[f].first + k];
             /* video sizes are 16:9, 4:3, 1.85:1 or 2.35:1 */
-            int r1000 = fr->w * 1000 / fr->h;
+            int r1000 = film_frame_desq_w(film_formats[f].first + k) * 1000 / fr->h;
             CHECK((r1000 > 1740 && r1000 < 1790) || (r1000 > 1320 && r1000 < 1355) ||
                   (r1000 > 1840 && r1000 < 1870) || (r1000 > 2330 && r1000 < 2360),
                   "video frame %s: odd aspect ratio %d/1000", fr->name, r1000);
-            /* none of them may need more than the physical sensor: 4.30 um per pixel (1" type is 13.2 mm = 3069 px) */
-            CHECK(fr->w <= 3069, "video frame %s wider than a 1\" sensor", fr->name);
+            /* none of them may need more than the physical sensor: 4.30 um per pixel (1" type is 13.2 mm = 3069 px;
+             * 1" 16:9 in 1x3 is 1024 x 3 = 3072, 0.01 mm over) */
+            CHECK(film_frame_desq_w(film_formats[f].first + k) <= 3072, "video frame %s wider than a 1\" sensor", fr->name);
         }
     /* the sensor widths, in order (largest first) */
     for (int f = FILM_FILM_COUNT + 1; f < FILM_CM_FIRST; f++)
-        CHECK(film_frames[film_formats[f].first].w < film_frames[film_formats[f - 1].first].w,
+        CHECK(film_frame_desq_w(film_formats[f].first) < film_frame_desq_w(film_formats[f - 1].first),
               "video size %s is not smaller than %s", film_formats[f].name, film_formats[f - 1].name);
 
     /* film_step(): the quick menu never leaves the selected standard */
@@ -142,15 +153,21 @@ int main(void)
         CHECK(film_pick(FILM_RO_25K, 8, 1, &fr) == 9 && fr == 0, "1/2\" has no 2.5K frame: 2.5K -> 1/2.3\" 16:9");
         CHECK(film_pick(FILM_RO_1440, 7, 5, &fr) == 7 && fr == 0, "2/3\" on 1440p must be its 16:9 frame (it has no other)");
         /* a format that cannot use the readout is replaced by the first one that can */
-        CHECK(film_pick(FILM_RO_3K, 3, 0, &fr) == 2 && fr == 0, "3K from 16mm -> S16");
-        CHECK(film_pick(FILM_RO_3K, 9, 0, &fr) == 2 && fr == 0, "3K from 1/2.3\" -> S16 (first format with that readout)");
-        CHECK(film_pick(FILM_RO_3K, 6, 0, &fr) == 6 && fr == 0, "1\" is kept on 3K");
-        CHECK(film_pick(FILM_RO_3K, 2, 0, &fr) == 2 && fr == 0, "S16 is kept on 3K");
+        CHECK(film_pick(FILM_RO_3K, 3, 0, &fr) == 2 && fr == 3, "3K from 16mm -> S16 2.35:1");
+        CHECK(film_pick(FILM_RO_3K, 9, 0, &fr) == 2 && fr == 3, "3K from 1/2.3\" -> S16 2.35:1 (the only 3K frame)");
+        CHECK(film_pick(FILM_RO_3K, 6, 0, &fr) == 2 && fr == 3, "1\" has no 3K frame any more: 3K -> S16 2.35:1");
+        CHECK(film_pick(FILM_RO_3K, 2, 0, &fr) == 2 && fr == 3, "S16 on 3K: saved 1x3 frame repaired to 2.35:1");
+        CHECK(film_pick(FILM_RO_1X3, 2, 2, &fr) == 2 && fr == 2, "S16 1.85:1 (1x3) is kept on the 1x3 readout");
+        CHECK(film_pick(FILM_RO_1X3, 3, 2, &fr) == 3 && fr == 0, "16mm on 1x3: saved 1:1 frame repaired to Actual");
+        CHECK(film_pick(FILM_RO_1X3, 6, 1, &fr) == 6 && fr == 1, "1\" 4:3 is kept on the 1x3 readout");
+        CHECK(film_pick(FILM_RO_1620, 7, 0, &fr) == 7 && fr == 1, "1620p -> 2/3\" 4:3");
+        CHECK(film_pick(FILM_RO_1440, 7, 1, &fr) == 7 && fr == 0, "1440p from 2/3\" 4:3 -> 2/3\" 16:9");
         CHECK(film_pick(FILM_RO_1280, 2, 0, &fr) == 4 && fr == 0, "1280p from S16 -> S8");
         CHECK(film_pick(FILM_RO_25K, 0, 0, &fr) == 9 && fr == 0, "2.5K from A35 -> 1/2.3\" 16:9");
         CHECK(film_pick(FILM_RO_3X3, 12, 2, &fr) == 12 && fr == 2, "CROP MOOD 3x3 2.35:1 is kept on the 3x3 readout");
         CHECK(film_pick(FILM_RO_3X3, 13, 0, &fr) == 0 && fr == 0, "3x3 readout from 1x3 -> A35");
-        CHECK(film_pick(FILM_RO_1X3, 0, 0, &fr) == 13 && fr == 0, "1x3 readout -> CROP MOOD 1x3");
+        CHECK(film_pick(FILM_RO_1X3, 0, 0, &fr) == 2 && fr == 0, "1x3 readout from A35 -> S16 Actual (first format with it)");
+        CHECK(film_pick(FILM_RO_1X3, 13, 0, &fr) == 13 && fr == 0, "CROP MOOD 1x3 is kept on the 1x3 readout");
         /* every frame of every format maps back to itself */
         for (int f = 0; f < FILM_FORMAT_COUNT; f++)
             for (int k = 0; k < film_formats[f].count; k++)
@@ -189,7 +206,7 @@ int main(void)
      * film_align_height() must leave every film frame unchanged, for every data format */
     static const int bpps[] = { 14, 12, 10 };
     for (int i = 1; i < FILM_FRAME_COUNT; i++)
-        if (film_frames[i].readout != FILM_RO_1X3)   /* 1x3: mlv_lite records the readout itself, not a window */
+        if (i != film_formats[FILM_CM_FIRST + 1].first)   /* CROP MOOD 1x3: mlv_lite records the readout itself, not a window */
         for (int c = 0; c < 2; c++)
             for (int b = 0; b < 3; b++)
             {

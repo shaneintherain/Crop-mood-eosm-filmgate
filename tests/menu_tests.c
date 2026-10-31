@@ -67,7 +67,10 @@ int main(void)
     slim_mode_ui = 1; crop_preset_ar_menu = 3; slim_unified_preset = 1;
     CHECK(slim_film_sync() == -1, "1x3 2.35:1 Higher is not a CROP MOOD format (Highest only)");
     slim_unified_preset = 0;
-    CHECK(slim_film_sync() == 13, "1x3 2.35:1 Highest is CROP MOOD 1x3");
+    slim_film_fmt = 13;
+    CHECK(slim_film_sync() == 13, "1x3 2.35:1 Highest keeps CROP MOOD 1x3 when that was picked");
+    slim_film_fmt = 0;
+    CHECK(slim_film_sync() == 2, "1x3 2.35:1 Highest from A35 -> S16 Actual (the first 1x3 frame)");
     crop_preset_ar_menu = 0;
     slim_mode_ui = 3;
     CHECK(slim_film_sync() == -1, "Full-Res LV is not a film format");
@@ -114,7 +117,9 @@ int main(void)
             { 2912, 1238, 0, 333 },                                                  /* S16, 3K 860 clocks */
             { 2384, 1340, 0, 307 },                                                  /* 16mm, 1440p 732 clocks */
             { 1344,  930, 0, 164 },                                                  /* S8, 1280p 566 clocks */
-            { 3056, 1300, 0, 349 },                                                  /* 1", 3K */
+            { 2032, 1536, 0, 304 },                                                  /* 2/3" 4:3, 1620p 634 clocks */
+            {  968, 1720, 0, 280 }, {  792, 1736, 0, 282 },                          /* S16 / 16mm Actual, 1x3 520 clocks */
+            { 1024, 1728, 0, 281 }, {  912, 2044, 0, 332 },                          /* 1" 16:9 / 4:3, 1x3 */
             { 1424,  800, 0, 179 },                                                  /* 1/2.3", 2.5K 716 clocks */
             { 1736, 1152, 0, 190 }, { 1736,  976, 0, 161 },                          /* CROP MOOD 3x3, 528 clocks */
             { 1736,  736, 5, 120 },                                                  /* CROP MOOD 3x3 2.35:1 at 48 fps */

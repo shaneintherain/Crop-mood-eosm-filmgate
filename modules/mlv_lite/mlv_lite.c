@@ -678,13 +678,24 @@ int crop_rec_cropmarks()
  *   2.35  3072x1308 : y = 15/64
  * The film window is centred in the readout, so the frame is centred on the screen.
  * Only calibrated for the camera LCD; other outputs use the generic model. */
+/* does the current sampling match the film frame's readout?  1:1 / 3x3 frames need square
+ * pixels; 1x3 frames need the 1x3 mode (squeeze 1/3: 3 columns binned per pixel) */
+static int film_frame_sampling_ok(int f)
+{
+    if (f <= 0 || f >= COUNT(film_frames))
+        return 0;
+    if (film_readouts[film_frames[f].readout].bin_x == 3)
+        return squeeze_factor > 0.30f && squeeze_factor < 0.36f;
+    return squeeze_factor == 1.0f;
+}
+
 static int film_frame_possible(void)
 {
     /* The EOS M crop_rec presets run in Canon's x5 zoom state (lv_dispsize == 5),
      * so x5 must be accepted here; x10 (focus zoom) is not. */
     return crop_rec_film_format() > 0 &&
            (lv_dispsize == 1 || lv_dispsize == 5) &&
-           squeeze_factor == 1.0f &&
+           film_frame_sampling_ok(crop_rec_film_format()) &&
            (is_LCD_Output() || is_480p_Output() || is_1080i_Full_Output() || is_1080i_Info_Output() ||
             ext_monitor_hdmi /* any other HDMI mode (720p ...): generic placement, not measured */);
 }
@@ -703,7 +714,9 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     const struct film_readout * ro = &film_readouts[film_frames[f].readout];
     int rw = ro->w, kn = ro->kn, kd = ro->kd;
 
-    int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
+    /* frame size in the 720x480 layer: the readout's preview is fit_w wide (720, or 608 for the
+     * 1620p one); 1x3 previews are desqueezed by the camera, so the same rule holds for them */
+    int nw = res_x * ro->fit_w / rw;
     int nh = res_y * kn / kd;
 
     /* 48 fps (A35 frames) reads a shorter sensor readout than the 1160-row one the scales above were
@@ -850,7 +863,7 @@ static void refresh_cropmarks_if_changed(void)
             | (raw_video_enabled ? 1 << 12 : 0)
             | ((is_LCD_Output() ? 1 : 0) << 13)
             | ((is_480p_Output() ? 1 : 0) << 14)
-            | ((ext_monitor_hdmi ? 1 : 0) << 11);
+            | ((ext_monitor_hdmi ? 1 : 0) << 5);   /* bit 5: the film frame index (up to 63) uses bits 6..11 */
     sig ^= (res_x * 7 + res_y * 13 + skip_x * 17 + skip_y * 19) << 15;
 
     if (sig != last_sig)
@@ -1072,9 +1085,9 @@ void update_resolution_params()
     int den = aspect_ratio_presets_den[aspect_ratio_index];
     res_y = calc_res_y(res_x, max_res_y, num, den, squeeze_factor);
 
-    /* Film Format override (square pixels only) */
+    /* Film Format override (square pixels, or 1x3 for the 1x3 frames) */
     int film_idx = film_format_effective();
-    if (film_idx > 0 && squeeze_factor == 1.0f)
+    if (film_idx > 0 && film_frame_sampling_ok(film_idx))
     {
         int fw = film_frames[film_idx].w;
         int fh = film_frames[film_idx].h;

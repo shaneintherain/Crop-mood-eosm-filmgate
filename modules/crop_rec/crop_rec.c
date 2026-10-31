@@ -4459,7 +4459,7 @@ static int slim_film_menu_readout(void)
                 case 1: return slim_unified_preset == 0 ? FILM_RO_3K : -1; /* 2.8K Higher is legacy */
                 case 2: return FILM_RO_1440;
                 case 3: return FILM_RO_1280;
-                case 4: return -1;          /* 1620p 4:3 is not a film format (no 2/3" 4:3 frame) */
+                case 4: return FILM_RO_1620; /* 1620p 4:3: 2/3" 4:3 */
             }
     }
     return -1;
@@ -4497,6 +4497,7 @@ static int slim_film_active_readout(void)
             case 2: return FILM_RO_3K;
             case 3: return FILM_RO_1440;
             case 4: return FILM_RO_1280;
+            case 6: return FILM_RO_1620;
         }
     }
     return -1;
@@ -4533,14 +4534,13 @@ int crop_rec_video_standard()
 int crop_rec_film_format()
 {
     int frame;
-    int ro = slim_film_active_readout();
-    /* CROP MOOD 1x3 records the whole (squeezed) readout: for mlv_lite it is a plain crop_rec
-     * mode, not a window cut from the readout (its film window code is for square pixels) */
-    if (ro == FILM_RO_1X3)
-        return 0;
-    int fmt = film_pick(ro, slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
+    int fmt = film_pick(slim_film_active_readout(), slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
     if (fmt < 0)
         return 0; /* not a film format */
+    /* CROP MOOD 1x3 records the whole (squeezed) readout, as the original preset did: for
+     * mlv_lite it is a plain crop_rec mode, not a window cut from the readout */
+    if (film_is_cm(fmt) && film_frames[film_frame_index(fmt, frame)].readout == FILM_RO_1X3)
+        return 0;
     return film_frame_index(fmt, frame);
 }
 
@@ -4852,6 +4852,7 @@ static int slim_line_clocks(void)
         case FILM_RO_1280: return 0x235 + 1;
         case FILM_RO_25K:  return 0x2CB + 1;
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest */
+        case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
     }
     return 0;
 }
@@ -4955,6 +4956,7 @@ static void slim_film_apply(int fmt)
         case FILM_RO_1280: slim_mode_ui = 0; slim_1x1_ar = 3; break;         /* 3:2 */
         case FILM_RO_25K:  slim_mode_ui = 0; slim_1x1_ar = 0; break;         /* 2.33:1 */
         case FILM_RO_1X3:  slim_mode_ui = 1; crop_preset_ar_menu = 3; break; /* 1x3 Highest 2.35:1 */
+        case FILM_RO_1620: slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
         default:           slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
     }
     slim_crop_apply_mode();
@@ -5021,7 +5023,7 @@ static MENU_UPDATE_FUNC(slim_crop_mode_update)
                 ? "1x3: full sensor width, desqueeze 3x horizontally in post. The preview is desqueezed."
                 : "3x3: full sensor width, binned 3x3.");
         else if (film_is_video(fmt))
-            MENU_SET_HELP("Video sensor size at 1:1. Sets the sensor readout and the recorded window.");
+            MENU_SET_HELP("Video sensor size. Sets the sensor readout and the recorded window.");
         else
             MENU_SET_HELP("Film gate. Sets the sensor readout and the recorded window.");
     }
@@ -5088,7 +5090,7 @@ static void slim_crop_shown_res(int *w, int *h)
     {
         int fmt = slim_film_active() >= 0 ? slim_film_active() : slim_film_sync();
         int i = film_frame_index(fmt, slim_film_frame_get(fmt));
-        *w = film_frames[i].w;
+        *w = film_frame_desq_w(i);   /* 1x3: the picture after desqueezing */
         *h = film_frames[i].h;
     }
 }
@@ -5103,16 +5105,21 @@ static MENU_UPDATE_FUNC(slim_crop_preset_update)
         int film_fmt = slim_film_sync();
         if (film_fmt >= 0)
         {
-            MENU_SET_NAME("Recorded Size");
-            {
-                int i = film_frame_index(film_fmt, slim_film_frame_get(film_fmt));
-                MENU_SET_VALUE("%dx%d", film_frames[i].w, film_frames[i].h);
-                /* Readout speed on the same row, like the shutter row shows angle and speed together */
-                int t = slim_readout_x10();
-                if (t > 0)
-                    MENU_SET_RINFO("%d.%d ms", t / 10, t % 10);
-            }
-            MENU_SET_HELP("Size of the recorded picture, and the time the sensor takes to read it out top to bottom (rolling shutter; lower is better). Calculated, not measured. Read-only.");
+            int i = film_frame_index(film_fmt, slim_film_frame_get(film_fmt));
+            int bin = film_readouts[film_frames[i].readout].bin_x;
+            /* 1x3 frames: the size of the picture after desqueezing, and the row says so;
+             * the sampling and the file size are in the help line at the bottom */
+            MENU_SET_NAME(bin > 1 ? "Desqueezed Size" : "Recorded Size");
+            MENU_SET_VALUE("%dx%d", film_frame_desq_w(i), film_frames[i].h);
+            /* Readout speed on the same row, like the shutter row shows angle and speed together */
+            int t = slim_readout_x10();
+            if (t > 0)
+                MENU_SET_RINFO("%d.%d ms", t / 10, t % 10);
+            if (bin > 1)
+                MENU_SET_HELP("1x3 sampling: the file is %dx%d; stretch it %dx horizontally in post. Readout time calculated.", film_frames[i].w, film_frames[i].h, bin);
+            else
+                MENU_SET_HELP("%s sampling. Size of the recorded picture and its readout time (rolling shutter; lower is better). Calculated.",
+                              film_frames[i].readout == FILM_RO_3X3 ? "3x3" : "1:1");
             MENU_SET_ENABLED(0);
             return;
         }

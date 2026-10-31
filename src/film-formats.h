@@ -21,7 +21,7 @@
 #ifndef _FILM_FORMATS_H_
 #define _FILM_FORMATS_H_
 
-#define FILM_FRAME_COUNT   28   /* entries in film_frames[], including OFF at index 0 */
+#define FILM_FRAME_COUNT   34   /* entries in film_frames[], including OFF at index 0 */
 #define FILM_FORMAT_COUNT  14   /* Film Formats in the Movie menu (all three standards) */
 #define FILM_FILM_COUNT    6    /* the first six are the FILM standard */
 #define FILM_VIDEO_COUNT   6    /* the next six are the VIDEO standard */
@@ -29,26 +29,29 @@
 
 /* Sensor readouts the formats are cut from (the crop_rec 1:1 / 3x3 modes).  kn/kd is the
  * scale of one readout pixel on the camera's 720x480 LCD layer (used for the black-bar frame). */
-enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_COUNT };
+enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_1620, FILM_RO_COUNT };
 
 struct film_readout
 {
     int w;                  /* readout width  (pixels) */
     int h;                  /* readout height (pixels) */
-    int kn;                 /* LCD scale numerator   */
+    int kn;                 /* LCD scale numerator   (rows -> LCD lines) */
     int kd;                 /* LCD scale denominator */
+    int bin_x;              /* columns per recorded pixel: 1 (1:1, 3x3) or 3 (1x3: desqueeze 3x in post) */
+    int fit_w;              /* width of the readout's preview on the 720 px LCD layer */
 };
 
 static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unused)) =
 {
-    { 1736, 1160, 90, 217 },    /* 3x3 3:2   (measured on the camera) */
-    { 3072, 1308, 15,  64 },    /* 1:1 3K    (measured) */
-    { 2560, 1440,  9,  32 },    /* 1:1 1440p (measured) */
-    { 1920, 1280,  3,   8 },    /* 1:1 1280p (measured) */
-    { 2520, 1080,  2,   7 },    /* 1:1 2.5K  (720 / 2520; not yet measured) */
-    { 1736, 2214,  9,  65 },    /* 1x3 2.35:1 (squeezed 3x; the preview is desqueezed by the camera:
-                                 * 2214 rows show as ~306 lines.  Not used for a black-bar frame:
-                                 * mlv_lite treats 1x3 as a plain crop_rec mode) */
+    { 1736, 1160, 90, 217, 1, 720 },    /* 3x3 3:2   (measured on the camera) */
+    { 3072, 1308, 15,  64, 1, 720 },    /* 1:1 3K    (measured) */
+    { 2560, 1440,  9,  32, 1, 720 },    /* 1:1 1440p (measured) */
+    { 1920, 1280,  3,   8, 1, 720 },    /* 1:1 1280p (measured) */
+    { 2520, 1080,  2,   7, 1, 720 },    /* 1:1 2.5K  (720 / 2520; not yet measured) */
+    { 1736, 2214,  9,  65, 3, 720 },    /* 1x3 2.35:1: squeezed 3x, the camera desqueezes the preview:
+                                         * 5208 columns -> 720 px, 2214 rows -> ~306 lines (centred) */
+    { 2160, 1620,  9,  32, 1, 608 },    /* 1:1 4:3 1620p: preview at the 1440p scale, 84 % of the width
+                                         * (crop_rec_preview_fit, LCD and 1080i); not yet measured */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */
@@ -62,6 +65,8 @@ struct film_frame
     const char * frame;     /* text of the Movie menu "Frame" row */
     int readout;            /* FILM_RO_*: the sensor readout it is cut from */
 };
+/* w is what the file holds; for 1x3 frames the picture is w * 3 wide after desqueezing
+ * (see film_frame_desq_w) */
 
 static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unused)) =
 {
@@ -73,9 +78,14 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     /* Academy 35 anamorphic (same readout, squeezed windows) */
     { "A35 Anamorphic 2x",  1376, 1152, "2x anamorphic gate (1.18:1), full sensor height", "3x3 3:2 1736x1160", "2x 1.18:1", FILM_RO_3X3 },
     { "A35 Anamorphic 1.33x",1536,1152, "1.33x anamorphic gate (4:3)",       "3x3 3:2 1736x1160", "1.33x 4:3", FILM_RO_3X3 },
-    /* Super 16 */
+    /* Super 16: the tall frames in 1x3 (1:1 cannot read that many rows at 24 fps), 2.35:1 at 1:1.
+     * 1x3 widths: 968 x 3 = 2904 (gate 2912); heights multiples of 8 (uncompressed alignment) */
+    { "Super 16 Actual",     968, 1720, "12.52x7.41mm gate (1x3: 2904x1720 desqueezed)", "1x3 2.35:1 1736x2214", "Actual",      FILM_RO_1X3 },
+    { "Super 16 16:9 Crop",  968, 1632, "Super 16 gate width, cropped to 16:9 (1x3)",    "1x3 2.35:1 1736x2214", "16:9 Crop",   FILM_RO_1X3 },
+    { "Super 16 1.85:1 Crop",968, 1568, "Super 16 gate width, cropped to 1.85:1 (1x3)",  "1x3 2.35:1 1736x2214", "1.85:1 Crop", FILM_RO_1X3 },
     { "Super 16 2.35:1 Crop",2912,1238, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest", "2.35:1 Crop", FILM_RO_3K },
-    /* 16mm */
+    /* 16mm: Actual in 1x3 (792 x 3 = 2376, gate 2386), the crops at 1:1 */
+    { "16mm Actual",         792, 1736, "10.26x7.49mm gate (1x3: 2376x1736 desqueezed)", "1x3 2.35:1 1736x2214", "Actual",      FILM_RO_1X3 },
     { "16mm 16:9 Crop",     2384, 1340, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440", "16:9 Crop", FILM_RO_1440 },
     { "16mm 1.85:1 Crop",   2384, 1288, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440", "1.85:1 Crop", FILM_RO_1440 },
     { "16mm 2.35:1 Crop",   2384, 1012, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440", "2.35:1 Crop", FILM_RO_1440 },
@@ -86,10 +96,13 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     { "8mm Actual",         1040,  764, "4.5x3.3mm gate",                    "1:1 3:2 1920x1280", "Actual", FILM_RO_1280 },
     { "8mm 16:9 Crop",      1040,  584, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280", "16:9 Crop", FILM_RO_1280 },
     /* ---- VIDEO standard: video sensor sizes at 1:1 pixel scale (4.30 um per pixel) ---- */
-    /* 1" type (13.2 x 8.8 mm): the full width fits the 3K readout but only 1308 rows exist, so 2.35:1 */
-    { "1\" 2.35:1 Crop",    3056, 1300, "1\" sensor width (13.2 mm), cropped to 2.35:1",  "1:1 2.35:1 3072x1308 Highest", "2.35:1 Crop", FILM_RO_3K },
+    /* 1" type (13.2 x 8.8 mm, 3:2), in 1x3 (1:1 cannot read that many rows of that width at 24 fps):
+     * 16:9 uses the full width (1024 x 3 = 3072), 4:3 the full height (8.8 mm) with the sides cropped */
+    { "1\" 16:9 Crop",      1024, 1728, "1\" sensor width (13.2 mm), cropped to 16:9 (1x3: 3072x1728)", "1x3 2.35:1 1736x2214", "16:9 Crop", FILM_RO_1X3 },
+    { "1\" 4:3 Crop",        912, 2044, "1\" sensor height (8.8 mm), cropped to 4:3 (1x3: 2736x2044)",  "1x3 2.35:1 1736x2214", "4:3 Crop",  FILM_RO_1X3 },
     /* 2/3" (8.8 x 6.6 mm) */
     { "2/3\" 16:9 Crop",    2032, 1144, "2/3\" sensor width (8.8 mm), cropped to 16:9",   "1:1 16:9 2560x1440",  "16:9 Crop",  FILM_RO_1440 },
+    { "2/3\" 4:3",          2032, 1536, "2/3\" sensor (8.8 x 6.6 mm), 4:3",              "1:1 4:3 2160x1620",   "4:3",        FILM_RO_1620 },
     /* 1/2" (6.4 x 4.8 mm) */
     /* both 1/2" frames use the 1280p readout, so the 16:9 window is as wide as the 4:3 one on the screen (it was cut from 2.5K, which previews smaller) */
     { "1/2\" 16:9 Crop",    1472,  828, "1/2\" sensor width (6.4 mm), cropped to 16:9",   "1:1 3:2 1920x1280",   "16:9 Crop", FILM_RO_1280 },
@@ -128,20 +141,20 @@ static const struct film_format film_formats[FILM_FORMAT_COUNT] __attribute__((u
 {
     { "Academy 35mm",   "A35",     1, 3 },
     { "A35 Anamorphic", "A35-ANA", 4, 2 },
-    { "S16",            "S16",     6, 1 },
-    { "16mm",           "16mm",    7, 3 },
-    { "S8",             "S8",     10, 2 },
-    { "8mm",            "8mm",    12, 2 },
+    { "S16",            "S16",     6, 4 },
+    { "16mm",           "16mm",   10, 4 },
+    { "S8",             "S8",     14, 2 },
+    { "8mm",            "8mm",    16, 2 },
     /* VIDEO standard */
-    { "1\"",            "1\"",    14, 1 },
-    { "2/3\"",          "2/3\"",  15, 1 },
-    { "1/2\"",          "1/2\"",  16, 2 },
-    { "1/2.3\"",        "1/2.3\"",18, 2 },
-    { "1/3\"",          "1/3\"",  20, 2 },
-    { "1/4\"",          "1/4\"",  22, 2 },
+    { "1\"",            "1\"",    18, 2 },
+    { "2/3\"",          "2/3\"",  20, 2 },
+    { "1/2\"",          "1/2\"",  22, 2 },
+    { "1/2.3\"",        "1/2.3\"",24, 2 },
+    { "1/3\"",          "1/3\"",  26, 2 },
+    { "1/4\"",          "1/4\"",  28, 2 },
     /* CROP MOOD standard */
-    { "3x3",            "3x3",    24, 3 },
-    { "1x3",            "1x3",    27, 1 },
+    { "3x3",            "3x3",    30, 3 },
+    { "1x3",            "1x3",    33, 1 },
 };
 
 /* index into film_frames[] for a Film Format and a Frame choice (out-of-range input is clamped) */
@@ -152,6 +165,12 @@ static inline int film_frame_index(int fmt, int frame)
     if (frame < 0) frame = 0;
     if (frame >= film_formats[fmt].count) frame = film_formats[fmt].count - 1;
     return film_formats[fmt].first + frame;
+}
+
+/* picture width after desqueezing (1x3 frames are stored 3x narrower) */
+static inline int film_frame_desq_w(int idx)
+{
+    return film_frames[idx].w * film_readouts[film_frames[idx].readout].bin_x;
 }
 
 static inline int film_is_video(int fmt)
