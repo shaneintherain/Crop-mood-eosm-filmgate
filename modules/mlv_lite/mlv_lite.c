@@ -897,15 +897,31 @@ static int film_bars_missing(int full)
     xp = MIN(xp, BMP_W_PLUS - 1);
     yp = MIN(yp, BMP_H_PLUS - 1);
 
-    if (x - xa >= 8)
-        return bmp_getpixel((xa + x) / 2, y + h / 2) != COLOR_BLACK;           /* left   */
-    if (xp - (x + w) >= 8)
-        return bmp_getpixel((x + w + xp) / 2, y + h / 2) != COLOR_BLACK;       /* right  */
-    if (y - ya >= 8)
-        return bmp_getpixel(x + w / 2, (ya + y) / 2) != COLOR_BLACK;           /* top    */
-    if (yp - (y + h) >= 8)
-        return bmp_getpixel(x + w / 2, (y + h + yp) / 2) != COLOR_BLACK;       /* bottom */
-    return 0;   /* no bars to check */
+    if (!full)
+    {
+        /* idle (Live View info bars on screen): probe only the first wide bar, as before */
+        if (x - xa >= 8)
+            return bmp_getpixel((xa + x) / 2, y + h / 2) != COLOR_BLACK;           /* left   */
+        if (xp - (x + w) >= 8)
+            return bmp_getpixel((x + w + xp) / 2, y + h / 2) != COLOR_BLACK;       /* right  */
+        if (y - ya >= 8)
+            return bmp_getpixel(x + w / 2, (ya + y) / 2) != COLOR_BLACK;           /* top    */
+        if (yp - (y + h) >= 8)
+            return bmp_getpixel(x + w / 2, (y + h + yp) / 2) != COLOR_BLACK;       /* bottom */
+        return 0;
+    }
+
+    /* Kill Global Draw while recording: check every bar that is wide enough, not just the
+     * first: the top and bottom strips can be wiped while the side bars stay (16mm, 2/3") */
+    if (x - xa >= 8 &&
+        bmp_getpixel((xa + x) / 2, y + h / 2) != COLOR_BLACK) return 1;            /* left   */
+    if (xp - (x + w) >= 8 &&
+        bmp_getpixel((x + w + xp) / 2, y + h / 2) != COLOR_BLACK) return 1;        /* right  */
+    if (y - ya >= 8 &&
+        bmp_getpixel(x + w / 2, (ya + y) / 2) != COLOR_BLACK) return 1;            /* top    */
+    if (yp - (y + h) >= 8 &&
+        bmp_getpixel(x + w / 2, (y + h + yp) / 2) != COLOR_BLACK) return 1;        /* bottom */
+    return 0;
 }
 
 static void film_frame_settle_redraw(void)
