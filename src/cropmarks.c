@@ -592,9 +592,10 @@ static void FAST default_movie_cropmarks()
             if(draw || (x < x1 || x > x2))
             {
                 /* default cropmarks are black */
-                /* border pixels should be brighter, to be visible in dark */
-                int border = (x > x1-2 && x < x2+2 && y > y1-2 && y < y2+2);
-                newcolor = border ? COLOR_GRAY(70) : COLOR_BLACK;
+                /* border: a 2 px white line just outside the frame (a 1 px grey one
+                 * looked dotted on the EOS M screen) */
+                int border = (x > x1-3 && x < x2+3 && y > y1-3 && y < y2+3);
+                newcolor = border ? COLOR_WHITE : COLOR_BLACK;
             }
             
             if (newcolor)

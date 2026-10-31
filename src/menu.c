@@ -172,6 +172,16 @@ static int slim_touch_scroll_repeat_ms;
 static int slim_touch_grid_back_x1, slim_touch_grid_back_y1;
 static int slim_touch_grid_back_x2, slim_touch_grid_back_y2;
 
+/* Tab strip (Exposure / Monitoring / Movie / Settings) in the page header.
+ * slim_tab_focus: the D-pad is on the tab strip (Up from the first row); Left/Right then
+ * switch pages, Down / SET go back to the rows.  Touch boxes are filled when drawn. */
+#define SLIM_TAB_COUNT 4
+static int slim_tab_focus = 0;
+static int slim_tab_x1[SLIM_TAB_COUNT], slim_tab_x2[SLIM_TAB_COUNT];
+static int slim_tab_y1, slim_tab_y2;
+static int slim_tab_current = -1;   /* page index shown, -1 = not a tab page (e.g. Custom) */
+#define SLIM_ROW_SEL(entry) ((entry)->selected && !slim_tab_focus)
+
 static void slim_touch_scroll_repeat(int timer, void *opaque);
 static int slim_touch_handle_scroll(int x, int y, int pressed);
 static int slim_touch_handle_grid_back(int x, int y);
@@ -3012,7 +3022,7 @@ entry_print(
     {
         /* Film Edge: the selected row is a solid cream block (like the quick menu),
          * other rows get a thin divider line. Drawn before the text. */
-        if (entry->selected)
+        if (SLIM_ROW_SEL(entry))
             bmp_fill(UI_SEL, 10, y, 666, h - 1);
         else
             bmp_fill(UI_LINE, 10, y + h - 1, 666, 1);
@@ -3022,12 +3032,12 @@ entry_print(
     {
         /* Canon Gothic — native camera UI font (smoother than RBF bitmap fonts). */
         /* Film Edge: selected row black on cream, other rows in softer grey. */
-        int fg = entry->selected ? UI_SEL_TEXT : UI_TEXT;
+        int fg = SLIM_ROW_SEL(entry) ? UI_SEL_TEXT : UI_TEXT;
         /* read-only rows use enabled=0 and stay muted. */
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? UI_SEL_MUTED : UI_MUTED;
-        fnt = slim_ui_font_spec(fg, entry->selected ? UI_SEL : UI_BG);
+            fg = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_MUTED;
+        fnt = slim_ui_font_spec(fg, SLIM_ROW_SEL(entry) ? UI_SEL : UI_BG);
     }
 #endif
 
@@ -3056,11 +3066,11 @@ skip_name:
     /* Slim chrome: Canon font for the whole row (~camera UI size/weight). */
     if (slim_style && !customize_mode && !junkie_mode)
     {
-        int fg = entry->selected ? UI_SEL_TEXT : UI_TEXT;
+        int fg = SLIM_ROW_SEL(entry) ? UI_SEL_TEXT : UI_TEXT;
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? UI_SEL_MUTED : UI_MUTED;
-        fnt = slim_ui_font_spec(fg, entry->selected ? UI_SEL : UI_BG);
+            fg = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_MUTED;
+        fnt = slim_ui_font_spec(fg, SLIM_ROW_SEL(entry) ? UI_SEL : UI_BG);
     }
 
     /* Keep dial arrows visible on locked rows, but draw the entire control
@@ -3079,11 +3089,11 @@ skip_name:
     int draw_right_arrow = draw_tri_arrows;
     int arrow_color = UI_ARROW;
     if (draw_tri_arrows && slim_locked)
-        arrow_color = entry->selected ? UI_SEL_MUTED : UI_MUTED;
-    else if (draw_tri_arrows && entry->selected)
+        arrow_color = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_MUTED;
+    else if (draw_tri_arrows && SLIM_ROW_SEL(entry))
         arrow_color = UI_SEL_TEXT;
     /* degree rings follow the value text, not the (dimmer) arrows */
-    int ring_color = entry->selected ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
+    int ring_color = SLIM_ROW_SEL(entry) ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
                                      : (slim_locked ? UI_MUTED : UI_TEXT);
     int fonth = fontspec_font(fnt)->height;
     int tri_h = MAX(fonth - 4, 18); /* match value glyph height */
@@ -3230,7 +3240,7 @@ skip_name:
     /* Value colours: light blue (117) on the selected (navy) row, black on the others;
      * read-only rows keep the muted colour chosen above. */
     if (slim_style && !customize_mode && !junkie_mode && !slim_locked)
-        value_fnt = entry->selected
+        value_fnt = SLIM_ROW_SEL(entry)
             ? slim_ui_font_spec(UI_SEL_TEXT, UI_SEL)
             : slim_ui_font_spec(UI_TEXT, UI_BG);
 #endif
@@ -4868,17 +4878,29 @@ void menus_display(
             /* divider under the whole header */
             bmp_fill(UI_LINE, orig_x, y + header_h - 1, 720, 1);
 
+            slim_tab_current = -1;
             if (is_tab)
             {
                 int tx = SLIM_MENU_TITLE_X;
-                for (int t = 0; t < COUNT(slim_tabs); t++)
+                slim_tab_y1 = y;
+                slim_tab_y2 = y + header_h;
+                for (int t = 0; t < COUNT(slim_tabs) && t < SLIM_TAB_COUNT; t++)
                 {
                     int on = streq(title_caps, slim_tabs[t]);
-                    uint32_t tf = slim_ui_font_spec(on ? UI_TEXT : UI_DIM, bgu);
+                    if (on) slim_tab_current = t;
+                    /* D-pad on the tab strip: the open tab becomes an orange block */
+                    int block = on && slim_tab_focus;
+                    int tbg = block ? UI_SEL : bgu;
+                    uint32_t tf = slim_ui_font_spec(block ? UI_SEL_TEXT : on ? UI_TEXT : UI_DIM, tbg);
                     int tw = bmp_string_width(tf, slim_tabs[t]);
+                    if (block)
+                        bmp_fill(UI_SEL, tx - 8, y + 4, tw + 16, header_h - 8);
                     bmp_printf(tf, tx, title_y, "%s", slim_tabs[t]);
-                    if (on)
+                    if (on && !block)
                         bmp_fill(UI_SEL, tx, y + header_h - 4, tw, 4);
+                    /* touch box: the label plus half the gap on each side */
+                    slim_tab_x1[t] = tx - 13;
+                    slim_tab_x2[t] = tx + tw + 13;
                     tx += tw + 26;
                 }
             }
@@ -4889,15 +4911,19 @@ void menus_display(
             }
         }
 
-        /* Return-to-grid control in every launched category header. */
-        slim_draw_arrow_left(690, y + header_h / 2,
-            MAX(slim_ui_font_height() - 4, 18), COLOR_WHITE);
-        /* EOS M touch X coordinates top out near 616; keep the visual arrow
-         * at the right while making its touch box reachable and generous. */
-        slim_touch_grid_back_x1 = 500;
-        slim_touch_grid_back_x2 = 718;
-        slim_touch_grid_back_y1 = y;
-        slim_touch_grid_back_y2 = y + header_h;
+        slim_touch_grid_back_x1 = slim_touch_grid_back_x2 = 0;
+        if (slim_tab_current < 0)
+        {
+            /* not a tab page (Custom): back arrow closes the menu */
+            slim_draw_arrow_left(690, y + header_h / 2,
+                MAX(slim_ui_font_height() - 4, 18), COLOR_WHITE);
+            /* EOS M touch X coordinates top out near 616; keep the visual arrow
+             * at the right while making its touch box reachable and generous. */
+            slim_touch_grid_back_x1 = 500;
+            slim_touch_grid_back_x2 = 718;
+            slim_touch_grid_back_y1 = y;
+            slim_touch_grid_back_y2 = y + header_h;
+        }
 
         content_y = header_h + 12;
     }
@@ -6090,10 +6116,14 @@ int handle_ml_menu_touch(struct event * event)
                 {
                     if (!slim_touch_handle_grid_back(x, y))
                     {
-                        /* Header arrow returned to the launcher. */
+                        /* tab strip (or the Custom page's back arrow) handled it */
                     }
-                    else if (slim_touch_handle_scroll(x, y, 1))
-                        slim_touch_handle_menu_arrow(x, y);
+                    else
+                    {
+                        slim_tab_focus = 0;   /* touching a row leaves the tab strip */
+                        if (slim_touch_handle_scroll(x, y, 1))
+                            slim_touch_handle_menu_arrow(x, y);
+                    }
                 }
             }
 #endif
@@ -6191,17 +6221,29 @@ static int slim_touch_handle_scroll(int x, int y, int pressed)
 
 static int slim_touch_handle_grid_back(int x, int y)
 {
+    /* tab strip: touching a page name opens that page */
+    if (slim_tab_current >= 0 && !submenu_level && !edit_mode &&
+        y >= slim_tab_y1 && y < slim_tab_y2)
+    {
+        for (int t = 0; t < SLIM_TAB_COUNT; t++)
+        {
+            if (x >= slim_tab_x1[t] && x < slim_tab_x2[t])
+            {
+                slim_tab_focus = 0;
+                if (t != slim_tab_current)
+                    menu_grid_switch_page(t);
+                menu_redraw_full();
+                return 0;
+            }
+        }
+        return 0;   /* elsewhere on the header: nothing */
+    }
+
     if (!slim_touch_grid_back_x2 || x < slim_touch_grid_back_x1 ||
         x >= slim_touch_grid_back_x2 || y < slim_touch_grid_back_y1 ||
         y >= slim_touch_grid_back_y2)
         return 1;
-    if (menu_custom_is_active())
-        gui_stop_menu();
-    else
-    {
-        menu_grid_return();
-        menu_redraw();
-    }
+    gui_stop_menu();
     return 0;
 }
 
@@ -6408,6 +6450,64 @@ handle_ml_menu_keys(struct event * event)
     }
 #endif
     
+#ifdef CONFIG_SLIM_MENUS
+    /* Tab strip with the D-pad: Up on the first row moves onto the tabs; there Left/Right
+     * switch pages and Down / SET go back to the rows. */
+    if (menu_grid_is_launched() && slim_tab_current >= 0 && !submenu_level && !edit_mode &&
+        !menu_lv_transparent_mode && !menu_help_active)
+    {
+        if (slim_tab_focus)
+        {
+            int n = menu_grid_page_count();
+            switch (button_code)
+            {
+                case BGMT_PRESS_LEFT:
+                case BGMT_WHEEL_LEFT:
+                    menu_grid_switch_page((slim_tab_current + n - 1) % n);
+                    menu_redraw_full();
+                    keyrepeat_ack(button_code);
+                    return 0;
+                case BGMT_PRESS_RIGHT:
+                case BGMT_WHEEL_RIGHT:
+                    menu_grid_switch_page((slim_tab_current + 1) % n);
+                    menu_redraw_full();
+                    keyrepeat_ack(button_code);
+                    return 0;
+                case BGMT_PRESS_DOWN:
+                case BGMT_WHEEL_DOWN:
+                case BGMT_PRESS_SET:
+                    slim_tab_focus = 0;
+                    menu_redraw_full();
+                    keyrepeat_ack(button_code);
+                    return 0;
+                case BGMT_PRESS_UP:
+                case BGMT_WHEEL_UP:
+                    keyrepeat_ack(button_code);
+                    return 0;
+                default:
+                    /* any other button leaves the tab strip and works as usual */
+                    slim_tab_focus = 0;
+                    menu_damage = 1;
+                    break;
+            }
+        }
+        else if (button_code == BGMT_PRESS_UP || button_code == BGMT_WHEEL_UP)
+        {
+            struct menu_entry * first = menu ? menu->children : 0;
+            while (first && !entry_is_slim_navigable(first))
+                first = first->next;
+            struct menu_entry * cur = get_selected_menu_entry(menu);
+            if (!first || cur == first)
+            {
+                slim_tab_focus = 1;
+                menu_redraw_full();
+                keyrepeat_ack(button_code);
+                return 0;
+            }
+        }
+    }
+#endif
+
     switch( button_code )
     {
     case BGMT_MENU:
@@ -6434,7 +6534,10 @@ handle_ml_menu_keys(struct event * event)
             }
             else
             {
-                menu_grid_return();
+                /* no home screen: MENU closes the menu */
+                slim_tab_focus = 0;
+                give_semaphore(gui_sem);
+                break;
             }
             menu_needs_full_redraw = 1;
             break;
@@ -7056,8 +7159,9 @@ static void menu_open()
     }
     else
     {
-        menu_grid_open();
+        menu_grid_open_page();   /* no home screen: straight to the last page used */
     }
+    slim_tab_focus = 0;
 #endif
     if (lv) menu_zebras_mirror_dirty = 1;
 

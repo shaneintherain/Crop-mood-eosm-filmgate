@@ -2661,7 +2661,9 @@ static void draw_film_bars(void)
         bmp_fill(COLOR_BLACK, BMP_W_MINUS, y2, BMP_W_PLUS - BMP_W_MINUS, BMP_H_PLUS - y2);             /* bottom */
         bmp_fill(COLOR_BLACK, BMP_W_MINUS, y1, x1 - BMP_W_MINUS, y2 - y1);                             /* left   */
         bmp_fill(COLOR_BLACK, x2, y1, BMP_W_PLUS - x2, y2 - y1);                                       /* right  */
-        bmp_draw_rect(COLOR_GRAY(70), x1, y1, x2 - x1, y2 - y1);                                       /* edge   */
+        /* edge: 2 px white line just outside the frame, the same as the normal frame line */
+        bmp_draw_rect(COLOR_WHITE, x1 - 1, y1 - 1, x2 - x1 + 2, y2 - y1 + 2);
+        bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 4, y2 - y1 + 4);
     }
 }
 

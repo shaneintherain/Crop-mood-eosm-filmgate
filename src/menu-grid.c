@@ -225,6 +225,28 @@ static void menu_grid_launch(int idx)
     grid_sel = idx;
 }
 
+/* Open the menu straight on the page used last (no home screen). */
+void menu_grid_open_page(void)
+{
+    grid_sel = COERCE(grid_sel, 0, GRID_COUNT - 1);
+    select_menu_by_name((char *) grid_tiles[grid_sel].menu_name, 0);
+    grid_active = 0;
+    grid_launched = 1;
+}
+
+int menu_grid_page_count(void) { return GRID_COUNT; }
+int menu_grid_page_index(void) { return grid_sel; }
+
+/* Tab strip: show another page, keeping the row that page had selected. */
+void menu_grid_switch_page(int idx)
+{
+    if (idx < 0 || idx >= GRID_COUNT) return;
+    grid_sel = idx;
+    select_menu_by_name((char *) grid_tiles[idx].menu_name, 0);
+    grid_active = 0;
+    grid_launched = 1;
+}
+
 int menu_grid_handle_touch(int x, int y)
 {
     if (!grid_active)
