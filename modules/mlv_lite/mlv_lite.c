@@ -882,6 +882,38 @@ static int kill_gd_frame_rect(int * x, int * y, int * w, int * h)
  *           Global Draw, which draws the bars over all of it.
  * A bar can be thin on one side (e.g. the A35 1.33x frame is almost full height and starts at
  * x = 2 on HDMI), so every bar that is at least 8 pixels wide is tried, left one first. */
+/* Put back what belongs under the on-screen recording status (x, y, w, h): transparent where the
+ * picture is, black where the frame bars are, and the frame line.  Lets the status be drawn
+ * without a box of its own. */
+static void status_area_restore(int x, int y, int w, int h)
+{
+    bmp_fill(COLOR_EMPTY, x, y, w, h);
+
+    /* bars are on screen only with Kill Global Draw while recording, or with Global Draw on */
+    if (!((kill_gd && RAW_IS_RECORDING) || get_global_draw()))
+        return;
+
+    int fx, fy, fw, fh;
+    if (!kill_gd_frame_rect(&fx, &fy, &fw, &fh))
+        return;
+
+    int x2 = x + w, y2 = y + h;
+    int fx2 = fx + fw, fy2 = fy + fh;
+    /* rows above / below the frame: all bar */
+    if (y < fy)  bmp_fill(COLOR_BLACK, x, y, w, MIN(y2, fy) - y);
+    if (y2 > fy2) bmp_fill(COLOR_BLACK, x, MAX(y, fy2), w, y2 - MAX(y, fy2));
+    /* rows level with the frame: bars left and right of it */
+    int my1 = MAX(y, fy), my2 = MIN(y2, fy2);
+    if (my2 > my1)
+    {
+        if (x < fx)   bmp_fill(COLOR_BLACK, x, my1, MIN(x2, fx) - x, my2 - my1);
+        if (x2 > fx2) bmp_fill(COLOR_BLACK, MAX(x, fx2), my1, x2 - MAX(x, fx2), my2 - my1);
+    }
+    /* the 2 px frame line, as draw_film_bars() draws it */
+    bmp_draw_rect(COLOR_WHITE, fx - 1, fy - 1, fw + 2, fh + 2);
+    bmp_draw_rect(COLOR_WHITE, fx - 2, fy - 2, fw + 4, fh + 4);
+}
+
 static int film_bars_missing(int full)
 {
     int x, y, w, h;
@@ -2457,6 +2489,12 @@ void show_recording_status()
                 int len = strlen(status);
                 snprintf(status + len, sizeof(status) - len, "               ");
 
+                /* No box behind the text (it showed the picture through the black bars):
+                 * put back what belongs under the status first (picture inside the frame,
+                 * black bars and frame line outside), then draw outlined text on top. */
+                int rl_h = 5 + font_med.height + font_small.height * num_threads + 4;
+                BMP_LOCK( status_area_restore(rl_x, rl_y, 720 - 4 - rl_x, rl_h); )
+
                 /* Draw the movie camera icon */
                 rl_icon_width = bfnt_draw_char(
                     ICON_ML_MOVIE,
@@ -2466,7 +2504,7 @@ void show_recording_status()
 
                 /* Display the Status */
                 bmp_printf(
-                    FONT(FONT_MED, COLOR_WHITE, COLOR_BG_DARK),
+                    SHADOW_FONT(FONT(FONT_MED, COLOR_WHITE, COLOR_BLACK)),
                     rl_x+rl_icon_width+5, rl_y+5,
                     status
                 );
@@ -2484,7 +2522,7 @@ void show_recording_status()
                             if (idle_percent[thread]) { STR_APPEND(msg, ", %d%% idle", idle_percent[thread]); }
                             else { STR_APPEND(msg,", %dms idle", idle_time[thread]); }
                         }
-                        bmp_printf (FONT(FONT_SMALL, COLOR_WHITE, COLOR_BG_DARK), rl_x+rl_icon_width+5, rl_y+5+font_med.height+font_small.height*thread, "%s  ", msg);
+                        bmp_printf (SHADOW_FONT(FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK)), rl_x+rl_icon_width+5, rl_y+5+font_med.height+font_small.height*thread, "%s  ", msg);
                     }
                 }
             }
