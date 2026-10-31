@@ -11,18 +11,25 @@
 /* Order of Settings panel rows. Entries fill these placeholders by name. */
 static struct menu_entry custom_menu_placeholders[] =
 {
-    { .name = "Screen Layout",       .placeholder = 1 },
-    { .name = "INFO Button",         .placeholder = 1 },
-    { .name = "SET Button",          .placeholder = 1 },
-    { .name = "Up/Down Button",      .placeholder = 1 },
+    /* recording */
     { .name = "Half-Shutter Record",  .placeholder = 1 },
-    { .name = "HDMI Output",         .placeholder = 1 },
-    { .name = "HDMI Resolution",     .placeholder = 1 },
     { .name = "SD Overclock",        .placeholder = 1 },
     { .name = "SD Access Mode",      .placeholder = 1 },
     { .name = "Small Hacks",         .placeholder = 1 },
     { .name = "More Hacks",          .placeholder = 1 },
     { .name = "Card Benchmark",      .placeholder = 1 },
+    /* exposure, set once */
+    { .name = "Shutter range",       .placeholder = 1 },
+    { .name = "Shutter tuning",      .placeholder = 1 },
+    { .name = "Expo Override",       .placeholder = 1 },
+    /* buttons */
+    { .name = "INFO Button",         .placeholder = 1 },
+    { .name = "SET Button",          .placeholder = 1 },
+    { .name = "Up/Down Button",      .placeholder = 1 },
+    /* display */
+    { .name = "Screen Layout",       .placeholder = 1 },
+    { .name = "HDMI Output",         .placeholder = 1 },
+    { .name = "HDMI Resolution",     .placeholder = 1 },
 };
 
 static void custom_menu_init(void)

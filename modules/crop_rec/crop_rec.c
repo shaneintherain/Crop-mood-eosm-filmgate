@@ -8168,7 +8168,7 @@ static unsigned int crop_rec_init()
 
         /* Flat Movie-page crop settings (no Crop Mode submenu / Customize Buttons). */
         menu_add("Movie", crop_rec_menu_eosm, COUNT(crop_rec_menu_eosm));
-        menu_add("Expo", expo_shutter_range_eosm, COUNT(expo_shutter_range_eosm));
+        menu_add("Settings", expo_shutter_range_eosm, COUNT(expo_shutter_range_eosm));   /* set once */
         menu_add("Settings", slim_info_button_menu, COUNT(slim_info_button_menu));
         menu_add("Settings", slim_more_hacks_menu, COUNT(slim_more_hacks_menu));
         lvinfo_add_items(info_items, COUNT(info_items));

@@ -5243,6 +5243,13 @@ static void zebra_init()
 #endif
     precompute_yuv2rgb();
     menu_add( "Overlay", zebra_menus, COUNT(zebra_menus) );
+    #ifdef CONFIG_SLIM_MENUS
+    /* Monitoring page grouped by use: focus, then exposure tools
+     * (Zebras, False Color, Waveform, Histogram, Spot Meter), then framing and look. */
+    menu_move_entry_after("Overlay", "Zebras", "Focus Assist");
+    menu_move_entry_after("Overlay", "False Color", "Zebras");
+    menu_move_entry_after("Overlay", "Waveform", "False Color");
+    #endif
     menu_add( "Debug", livev_dbg_menus, COUNT(livev_dbg_menus) );
     //~ menu_add( "Movie", movie_menus, COUNT(movie_menus) );
     //~ menu_add( "Config", cfg_menus, COUNT(cfg_menus) );
