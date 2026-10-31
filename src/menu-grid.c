@@ -66,8 +66,8 @@ typedef struct
 
 /* Cell order follows the Movie tab, then exposure:
  *   top row:    Format, Frame, FPS, Bits
- *   bottom row: Shutter, ISO, WB, Aperture */
-enum { QS_FORMAT, QS_FRAME, QS_FPS, QS_BITS, QS_SHUTTER, QS_ISO, QS_WB, QS_APERTURE };
+ *   bottom row: ISO, Shutter, WB, Aperture */
+enum { QS_FORMAT, QS_FRAME, QS_FPS, QS_BITS, QS_ISO, QS_SHUTTER, QS_WB, QS_APERTURE };
 
 static const quick_screen_item_t quick_screen_items[QUICK_SCREEN_COUNT] =
 {
@@ -75,8 +75,8 @@ static const quick_screen_item_t quick_screen_items[QUICK_SCREEN_COUNT] =
     [QS_FRAME]    = { "Movie", "Aspect Ratio",  "Movie", "Aspect Ratio"     },
     [QS_FPS]      = { "Movie", "Frame Rate",    "Movie", "Frame Rate"       },
     [QS_BITS]     = { "Movie", "Bit Depth",     "Movie", "Bit Depth"        },
-    [QS_SHUTTER]  = { "Expo",  "Shutter",       "Expo",  "Shutter"          },
     [QS_ISO]      = { "Expo",  "ISO",           "Expo",  "ISO"              },
+    [QS_SHUTTER]  = { "Expo",  "Shutter",       "Expo",  "Shutter"          },
     [QS_WB]       = { "Expo",  "White Balance", "Expo",  "White Balance"    },
     [QS_APERTURE] = { "Expo",  "Aperture",      "Expo",  "Aperture"         },
 };
@@ -157,6 +157,32 @@ static void grid_draw_ml_icon(int icon, int cx, int cy, int color)
     int x = cx - iw / 2;
     int y = cy - ih / 2;
     bfnt_draw_char_scaled(icon, x, y, color, NO_BG_ERASE, scale);
+}
+
+/* 8 directions, unit vectors x1000 (0, 45, 90 ... degrees) */
+static const int16_t dir8_x[8] = { 1000, 707, 0, -707, -1000, -707, 0, 707 };
+static const int16_t dir8_y[8] = { 0, 707, 1000, 707, 0, -707, -1000, -707 };
+
+/* Exposure tile: a sun (ring and eight short rounded rays) */
+static void grid_draw_sun(int cx, int cy, int color)
+{
+    fill_circle(cx, cy, 15, color);
+    for (int i = 0; i < 8; i++)
+        for (int t = 24; t <= 33; t++)
+            fill_circle(cx + dir8_x[i] * t / 1000, cy + dir8_y[i] * t / 1000, 2, color);
+}
+
+/* Settings tile: a gear (round body, eight teeth, hole in the middle) */
+static void grid_draw_gear(int cx, int cy, int color, int bg)
+{
+    fill_circle(cx, cy, 25, color);
+    for (int i = 0; i < 8; i++)
+    {
+        int tx = cx + dir8_x[i] * 28 / 1000;
+        int ty = cy + dir8_y[i] * 28 / 1000;
+        fill_circle(tx, ty, 6, color);
+    }
+    fill_circle(cx, cy, 10, bg);
 }
 
 int menu_grid_is_active(void)   { return grid_active; }
@@ -638,12 +664,10 @@ void menu_quick_screen_draw(void)
 {
     int index;
     film_palette_apply();
-    bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
-    bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, 48);
-    bmp_printf(slim_ui_font_spec(COLOR_WHITE, COLOR_PEN_NAVY), 16, 4, "QUICK MENU");
-    /* Bottom bar, same position and colour as the other menu pages. The two
-     * rows of cells sit evenly (8 px) between the title bar and this bar. */
-    bmp_fill(COLOR_PEN_NAVY, 0, 430, 720, 50);
+    bmp_fill(UI_BG, 0, 0, 720, 480);
+    bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), 16, 4, "QUICK MENU");
+    /* divider under the title; the bottom 50 px stay plain background, like the other pages */
+    bmp_fill(UI_LINE, 0, 47, 720, 1);
 
     /* Menu task owns the screen here, so dynamic availability is safe to
      * evaluate. Never leave the yellow selector on a disabled control. */
@@ -670,26 +694,21 @@ void menu_quick_screen_draw(void)
         int box_w = QUICK_SCREEN_CELL_W - 12;
         int box_h = 168;
         int arrow_color;
-        int label_bg = selected ? COLOR_PEN_NAVY : COLOR_PEN_BG;
+        int tile_bg = selected ? UI_SEL : UI_TILE;
+        int label_bg = tile_bg;
         static const char * const labels[QUICK_SCREEN_COUNT] =
             { [QS_FORMAT] = "FORMAT", [QS_FRAME] = "FRAME", [QS_FPS] = "FPS", [QS_BITS] = "BITS",
               [QS_SHUTTER] = "SHUTTER", [QS_ISO] = "ISO", [QS_WB] = "WB", [QS_APERTURE] = "APERTURE" };
 
         /* Film Edge cell: thin outline, or the whole box solid cream when selected */
-        if (selected)
-        {
-            rr_tile(box_x, box_y, box_w, box_h, COLOR_PEN_LIGHT, COLOR_PEN_NAVY);
-        }
-        else
-        {
-            rr_tile(box_x, box_y, box_w, box_h, COLOR_PEN_SKY, COLOR_PEN_BG);
-        }
+        /* dark look: solid tile, orange when selected, no outline */
+        rr_tile(box_x, box_y, box_w, box_h, tile_bg, tile_bg);
 
-        color = !enabled ? COLOR_PEN_MUTED : selected ? COLOR_WHITE : COLOR_PEN_NAVY;
-        arrow_color = selected ? COLOR_WHITE : enabled ? COLOR_PEN_MUTED : COLOR_PEN_LINE;
+        color = !enabled ? UI_MUTED : selected ? UI_SEL_TEXT : UI_TEXT;
+        arrow_color = selected ? UI_SEL_TEXT : enabled ? UI_ARROW : UI_LINE;
 
         bmp_printf(
-            FONT(FONT_SMALL, selected ? COLOR_WHITE : COLOR_PEN_MUTED, label_bg),
+            FONT(FONT_SMALL, selected ? UI_SEL_TEXT : UI_DIM, label_bg),
             cx - (int)strlen(labels[index]) * 4, box_y + 6, "%s", labels[index]);
 
         width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value);
@@ -699,12 +718,12 @@ void menu_quick_screen_draw(void)
             /* too long for the cell: use a smaller font so it never spills over */
             int w2 = bmp_string_width(FONT_MED_LARGE, value);
             bmp_printf(
-                FONT(FONT_MED_LARGE, color, selected ? COLOR_PEN_NAVY : COLOR_PEN_BG),
+                FONT(FONT_MED_LARGE, color, tile_bg),
                 cx - w2 / 2, value_y + 6, "%s", value);
         }
         else
         bmp_printf(
-            slim_ui_font_spec(color, selected ? COLOR_PEN_NAVY : COLOR_PEN_BG),
+            slim_ui_font_spec(color, tile_bg),
             value_x, value_y, "%s", value);
         if (draw_degree)
         {
@@ -715,10 +734,10 @@ void menu_quick_screen_draw(void)
         }
         quick_screen_arrow(cx, up_tip_y, 1,
             !enabled ? arrow_color :
-            quick_screen_feedback == index * 2 ? COLOR_PEN_SKY : arrow_color);
+            quick_screen_feedback == index * 2 ? COLOR_WHITE : arrow_color);
         quick_screen_arrow(cx, down_tip_y, 0,
             !enabled ? arrow_color :
-            quick_screen_feedback == index * 2 + 1 ? COLOR_PEN_SKY : arrow_color);
+            quick_screen_feedback == index * 2 + 1 ? COLOR_WHITE : arrow_color);
     }
 }
 
@@ -877,7 +896,7 @@ int menu_quick_screen_handle_key(int button_code)
 void menu_grid_draw(void)
 {
     film_palette_apply();
-    bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
+    bmp_fill(UI_BG, 0, 0, 720, 480);
 
     int label_h = slim_ui_font_height();
 
@@ -886,18 +905,11 @@ void menu_grid_draw(void)
         int x, y, w, h;
         grid_cell_rect(i, &x, &y, &w, &h);
         int selected = (i == grid_sel);
-        int fg = selected ? COLOR_WHITE : COLOR_PEN_NAVY;
+        int fg = selected ? UI_SEL_TEXT : UI_TEXT;
+        int tile_bg = selected ? UI_SEL : UI_TILE;
 
-        /* Film Edge: outlined tile; the selected tile is solid cream */
-        /* square corners and a thin outline, the same as the quick menu cells */
-        if (selected)
-        {
-            rr_tile(x, y, w, h, COLOR_PEN_LIGHT, COLOR_PEN_NAVY);
-        }
-        else
-        {
-            rr_tile(x, y, w, h, COLOR_PEN_SKY, COLOR_PEN_BG);
-        }
+        /* dark look: solid tile, orange when selected, the same as the quick menu cells */
+        rr_tile(x, y, w, h, tile_bg, tile_bg);
 
         /* Shared bottom baseline for all four labels. */
         int label_y = y + h - GRID_LABEL_PAD - label_h;
@@ -912,9 +924,14 @@ void menu_grid_draw(void)
         int icon_zone_top = y + 10;
         int icon_zone_bot = label_y - GRID_ICON_GAP;
         int icon_cy = (icon_zone_top + icon_zone_bot) / 2;
-        grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, selected ? COLOR_WHITE : COLOR_PEN_NAVY);
+        if (grid_tiles[i].icon == ICON_ML_EXPO)
+            grid_draw_sun(x + w / 2, icon_cy, fg);
+        else if (grid_tiles[i].icon == ICON_ML_PREFS)
+            grid_draw_gear(x + w / 2, icon_cy, fg, tile_bg);
+        else
+            grid_draw_ml_icon(grid_tiles[i].icon, x + w / 2, icon_cy, fg);
 
-        bmp_printf(slim_ui_font_spec(fg, selected ? COLOR_PEN_NAVY : COLOR_PEN_BG), label_x, label_y, "%s", label);
+        bmp_printf(slim_ui_font_spec(fg, tile_bg), label_x, label_y, "%s", label);
     }
 }
 

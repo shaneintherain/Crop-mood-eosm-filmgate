@@ -1537,13 +1537,28 @@ static const struct boot_logo_span boot_logo_spans[] = {
 /* The artwork is generated already centred on (360, 240). */
 #define BOOT_LOGO_Y 0
 
-/* Light start-up screen with navy bars, matching the menus. */
-#define BOOT_LOGO_BAR_H 48
+/* Dark start-up screen, matching the menus.  Everything below this row is the
+ * bottom strip that the splash task keeps opaque (only the small credit is drawn there). */
+#define BOOT_LOGO_STRIP_Y 345
 
-static void boot_logo_bars(void)
+/* span levels 26..32 -> fixed palette entries (see generate_boot_logo.py) */
+static const uint8_t boot_logo_colors[8] = {
+    COLOR_GRAY(35), COLOR_GRAY(70), COLOR_WHITE, COLOR_ORANGE,
+    COLOR_GRAY(25), COLOR_GRAY(55), COLOR_GRAY(22), COLOR_WHITE
+};
+
+static void boot_logo_draw_spans(int y_min)
 {
-    bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, BOOT_LOGO_BAR_H);
-    bmp_fill(COLOR_PEN_NAVY, 0, 480 - BOOT_LOGO_BAR_H, 720, BOOT_LOGO_BAR_H);
+    for (unsigned int i = 0; i < BOOT_LOGO_SPANS; i++)
+    {
+        const struct boot_logo_span *s = &boot_logo_spans[i];
+        if (s->y < y_min) continue;
+        bmp_fill(boot_logo_colors[(s->color - 26) & 7],
+            BOOT_LOGO_X + s->x * BOOT_LOGO_SCALE,
+            BOOT_LOGO_Y + s->y * BOOT_LOGO_SCALE,
+            s->width * BOOT_LOGO_SCALE,
+            BOOT_LOGO_SCALE);
+    }
 }
 
 extern int ml_started;
@@ -1553,19 +1568,8 @@ static void boot_logo_draw(void)
     film_palette_apply();
     /* Keep splash writes inside ML's normal LCD canvas.  The surrounding
      * 960x540 backing surface is changed by Canon during LV/zoom switches. */
-    bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
-    boot_logo_bars();
-    /* span colours 26..29 = light blue, sky blue, navy, sky blue (fixed palette entries) */
-    static const uint8_t logo_colors[4] = { COLOR_PEN_LIGHT, COLOR_PEN_SKY, COLOR_PEN_NAVY, COLOR_PEN_SKY };
-    for (unsigned int i = 0; i < BOOT_LOGO_SPANS; i++)
-    {
-        const struct boot_logo_span *s = &boot_logo_spans[i];
-        bmp_fill(logo_colors[(s->color - 26) & 3],
-            BOOT_LOGO_X + s->x * BOOT_LOGO_SCALE,
-            BOOT_LOGO_Y + s->y * BOOT_LOGO_SCALE,
-            s->width * BOOT_LOGO_SCALE,
-            BOOT_LOGO_SCALE);
-    }
+    bmp_fill(UI_BG, 0, 0, 720, 480);
+    boot_logo_draw_spans(0);
 }
 
 static volatile int boot_logo_active = 0;
@@ -1658,17 +1662,19 @@ static void boot_logo_task(void *unused)
             /* Canon rebuilds its overlay layer while Live View settles (zoom x1/x5); that wipes
              * the splash and the live picture (black in the crop modes) shows through, e.g. the
              * blue bars turning black.  If a few sample points no longer match, draw it all again. */
-            if ((bmp_getpixel(4, 4) != COLOR_PEN_NAVY ||
-                 bmp_getpixel(4, 480 - 4) != COLOR_PEN_NAVY ||
-                 bmp_getpixel(4, 100) != COLOR_PEN_BG) &&
+            if ((bmp_getpixel(4, 4) != UI_BG ||
+                 bmp_getpixel(4, 480 - 4) != UI_BG ||
+                 bmp_getpixel(4, 100) != UI_BG) &&
                 get_ms_clock() >= last_full_redraw + 200)   /* at most 5 times a second */
             {
                 last_full_redraw = get_ms_clock();
                 boot_logo_draw();
             }
-            bmp_fill(COLOR_PEN_BG, 0, 345, 720, 480 - BOOT_LOGO_BAR_H - 345);
-            bmp_fill(COLOR_PEN_NAVY, 0, 480 - BOOT_LOGO_BAR_H, 720, BOOT_LOGO_BAR_H);
-            bmp_fill(COLOR_PEN_NAVY, 0, 0, 720, BOOT_LOGO_BAR_H);
+            /* keep the strip opaque around the small credit (rows 438..451, right side),
+             * without repainting the credit itself, so it does not flicker */
+            bmp_fill(UI_BG, 0, BOOT_LOGO_STRIP_Y, 720, 438 - BOOT_LOGO_STRIP_Y);
+            bmp_fill(UI_BG, 0, 438, 580, 14);
+            bmp_fill(UI_BG, 0, 452, 720, 480 - 452);
         )
         msleep(20);
     }

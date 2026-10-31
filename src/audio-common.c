@@ -358,7 +358,7 @@ draw_meter(
     const int32_t db_peak = audio_level_to_db( level->peak );
     
     // levels go from -40 to 0
-    /* Solid bar: light cyan, amber from -12 dB, red from -3 dB, on a navy track.
+    /* Solid bar: white, amber from -12 dB, red from -3 dB, on a dark grey track.
      * Every pixel is drawn exactly once per refresh (no clearing first), so it does not flicker.
      * No peak-hold marker: the bar simply follows the level. */
     const int bar_x0 = x_origin + AUDIO_METER_OFFSET * 4;
@@ -367,7 +367,7 @@ draw_meter(
     const int amber_x = w - 12 * w / 40;
     const int red_x = w - 3 * w / 40;
     const int edges[5] = { 0, amber_x, red_x, w, w };
-    static const uint8_t lit_color[3] = { COLOR_PEN_CYAN, 19, COLOR_RED };
+    static const uint8_t lit_color[3] = { COLOR_WHITE, 19, COLOR_RED };
     for (int band = 0; band < 3; band++)
     {
         int x0 = edges[band], x1 = edges[band + 1];
@@ -375,7 +375,7 @@ draw_meter(
         if (xl > x0)
             bmp_fill(lit_color[band], bar_x0 + x0, y_origin + 1, xl - x0, (int) meter_height - 2);
         if (x1 > xl)
-            bmp_fill(COLOR_PEN_NAVY, bar_x0 + xl, y_origin + 1, x1 - xl, (int) meter_height - 2);
+            bmp_fill(UI_PILL, bar_x0 + xl, y_origin + 1, x1 - xl, (int) meter_height - 2);
     }
 
     // Write the current level

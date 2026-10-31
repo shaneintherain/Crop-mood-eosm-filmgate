@@ -55,7 +55,7 @@
 #define MENU_HELP_Y_POS_2 458
 #define MENU_WARNING_Y_POS (menu_lv_transparent_mode ? 425 : 458)
 
-#define MENU_BG_COLOR_HEADER_FOOTER COLOR_PEN_NAVY
+#define MENU_BG_COLOR_HEADER_FOOTER UI_BG
 
 extern int bmp_color_scheme;
 #define MENU_BAR_COLOR COLOR_CREAM
@@ -3013,21 +3013,21 @@ entry_print(
         /* Film Edge: the selected row is a solid cream block (like the quick menu),
          * other rows get a thin divider line. Drawn before the text. */
         if (entry->selected)
-            bmp_fill(COLOR_PEN_NAVY, 10, y, 666, h - 1);
+            bmp_fill(UI_SEL, 10, y, 666, h - 1);
         else
-            bmp_fill(COLOR_PEN_LINE, 10, y + h - 1, 666, 1);
+            bmp_fill(UI_LINE, 10, y + h - 1, 666, 1);
     }
 
     if (slim_style && !customize_mode && !junkie_mode)
     {
         /* Canon Gothic — native camera UI font (smoother than RBF bitmap fonts). */
         /* Film Edge: selected row black on cream, other rows in softer grey. */
-        int fg = entry->selected ? COLOR_WHITE : COLOR_PEN_NAVY;
+        int fg = entry->selected ? UI_SEL_TEXT : UI_TEXT;
         /* read-only rows use enabled=0 and stay muted. */
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? COLOR_PEN_SKY : COLOR_PEN_MUTED;
-        fnt = slim_ui_font_spec(fg, entry->selected ? COLOR_PEN_NAVY : COLOR_PEN_BG);
+            fg = entry->selected ? UI_SEL_MUTED : UI_MUTED;
+        fnt = slim_ui_font_spec(fg, entry->selected ? UI_SEL : UI_BG);
     }
 #endif
 
@@ -3056,11 +3056,11 @@ skip_name:
     /* Slim chrome: Canon font for the whole row (~camera UI size/weight). */
     if (slim_style && !customize_mode && !junkie_mode)
     {
-        int fg = entry->selected ? COLOR_WHITE : COLOR_PEN_NAVY;
+        int fg = entry->selected ? UI_SEL_TEXT : UI_TEXT;
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
-            fg = entry->selected ? COLOR_PEN_SKY : COLOR_PEN_MUTED;
-        fnt = slim_ui_font_spec(fg, entry->selected ? COLOR_PEN_NAVY : COLOR_PEN_BG);
+            fg = entry->selected ? UI_SEL_MUTED : UI_MUTED;
+        fnt = slim_ui_font_spec(fg, entry->selected ? UI_SEL : UI_BG);
     }
 
     /* Keep dial arrows visible on locked rows, but draw the entire control
@@ -3077,11 +3077,14 @@ skip_name:
         !junkie_mode;
     int draw_left_arrow = draw_tri_arrows;
     int draw_right_arrow = draw_tri_arrows;
-    int arrow_color = COLOR_PEN_NAVY;
+    int arrow_color = UI_ARROW;
     if (draw_tri_arrows && slim_locked)
-        arrow_color = COLOR_PEN_MUTED;
+        arrow_color = entry->selected ? UI_SEL_MUTED : UI_MUTED;
     else if (draw_tri_arrows && entry->selected)
-        arrow_color = COLOR_WHITE;
+        arrow_color = UI_SEL_TEXT;
+    /* degree rings follow the value text, not the (dimmer) arrows */
+    int ring_color = entry->selected ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
+                                     : (slim_locked ? UI_MUTED : UI_TEXT);
     int fonth = fontspec_font(fnt)->height;
     int tri_h = MAX(fonth - 4, 18); /* match value glyph height */
     int arrow_slot_w = (tri_h * 6) / 10 + 1;
@@ -3228,8 +3231,8 @@ skip_name:
      * read-only rows keep the muted colour chosen above. */
     if (slim_style && !customize_mode && !junkie_mode && !slim_locked)
         value_fnt = entry->selected
-            ? slim_ui_font_spec(COLOR_PEN_LIGHT, COLOR_PEN_NAVY)
-            : slim_ui_font_spec(COLOR_BLACK, COLOR_PEN_BG);
+            ? slim_ui_font_spec(UI_SEL_TEXT, UI_SEL)
+            : slim_ui_font_spec(UI_TEXT, UI_BG);
 #endif
     bmp_printf(
         value_fnt,
@@ -3245,8 +3248,8 @@ skip_name:
         int deg_x = x_value + bmp_string_width(fnt, info->value) + 2;
         int deg_y = y + y_font_offset + MAX(fonth / 5, 4);
         int deg_r = MAX(fonth / 10, 3);
-        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, arrow_color);
-        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, arrow_color);
+        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, ring_color);
+        draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, ring_color);
     }
     if (draw_right_arrow)
     {
@@ -3276,8 +3279,8 @@ skip_name:
                 int deg_x = rx + bmp_string_width(fnt, info->rinfo) + 2;
                 int deg_y = y + y_font_offset + MAX(fonth / 5, 4);
                 int deg_r = MAX(fonth / 10, 3);
-                draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, arrow_color);
-                draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, arrow_color);
+                draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r, ring_color);
+                draw_circle(deg_x + deg_r, deg_y + deg_r, deg_r - 1, ring_color);
             }
         }
     }
@@ -3450,7 +3453,7 @@ skip_name:
                     if (len > 700) break;
                     STR_APPEND(help2_buf, "%s%s", pickbox_string(entry, i), i < entry->max ? " / " : ".");
                 }
-                help_color = COLOR_PEN_SKY;
+                help_color = UI_DIM;
                 help2 = help2_buf;
             }
         }
@@ -3515,7 +3518,7 @@ menu_post_display()
     if (cfg_preset && !submenu_level)
     {
         bmp_printf(
-            SHADOW_FONT(FONT(FONT_MED, COLOR_GRAY(40), COLOR_PEN_BG)) | FONT_ALIGN_RIGHT,
+            SHADOW_FONT(FONT(FONT_MED, COLOR_GRAY(40), UI_BG)) | FONT_ALIGN_RIGHT,
             715, 480-50-font_med.height+4,
             "%s", cfg_preset
         );
@@ -4657,9 +4660,9 @@ show_hidden_items(struct menu * menu, int force_clear)
         if (is_menu_active("Help")) hidden_pos_y -= font_med.height;
         if (hidden_count)
         {
-            bmp_fill(COLOR_PEN_BG, 0, hidden_pos_y, 720, 19);
+            bmp_fill(UI_BG, 0, hidden_pos_y, 720, 19);
             bmp_printf(
-                SHADOW_FONT(FONT(FONT_MED, customize_mode ? MENU_WARNING_COLOR : COLOR_ORANGE , COLOR_PEN_BG)), 
+                SHADOW_FONT(FONT(FONT_MED, customize_mode ? MENU_WARNING_COLOR : COLOR_ORANGE , UI_BG)), 
                  10, hidden_pos_y, 
                  hidden_msg
             );
@@ -4719,12 +4722,12 @@ show_vscroll(struct menu * parent){
         int bar_w = 24;
 
         /* Minimal scrollbar: orange thumb and white Canon-style arrows only. */
-        bmp_fill(COLOR_PEN_NAVY, x + 9, y, 6, size);
+        bmp_fill(UI_DIM, x + 9, y, 6, size);
         int arrow_size = MAX(slim_ui_font_height() - 4, 18);
         slim_draw_scroll_arrow_up(x + bar_w / 2, y_lo + arrow_size / 2 + 2,
-            arrow_size, COLOR_PEN_NAVY);
+            arrow_size, UI_DIM);
         slim_draw_scroll_arrow_down(x + bar_w / 2, h_bot - arrow_size / 2 - 2,
-            arrow_size, COLOR_PEN_NAVY);
+            arrow_size, UI_DIM);
         slim_touch_scroll_x1 = x;
         slim_touch_scroll_x2 = x + bar_w;
         slim_touch_scroll_up_y1 = y_lo;
@@ -4826,10 +4829,10 @@ void menus_display(
     int x = orig_x + junkie_mode ? 2 : 150;
     int icon_spacing = junkie_mode ? 716 / num_tabs : (720 - 150) / num_tabs;
     
-    int bgs = COLOR_PEN_BG;
+    int bgs = UI_BG;
     int bgu = MENU_BG_COLOR_HEADER_FOOTER;
     int fgu = COLOR_WHITE;
-    int fgs = COLOR_PEN_NAVY;
+    int fgs = UI_SEL;
 
     if (customize_mode) fgs = get_customize_color();
 
@@ -4855,12 +4858,36 @@ void menus_display(
             snprintf(title_caps, sizeof(title_caps), "%s", slim_menu_display_name(sel->name));
             for (char *c = title_caps; *c; c++)
                 if (*c >= 'a' && *c <= 'z') *c -= 32;
-            bmp_printf(slim_ui_font_spec(COLOR_WHITE, bgu),
-                SLIM_MENU_TITLE_X, title_y, "%s", title_caps);
-        }
+            /* Tab strip: the four main pages side by side, the open one in white with an
+             * orange underline, the others dimmed.  Other pages (Custom) keep a plain title. */
+            static const char * const slim_tabs[] = { "EXPOSURE", "MONITORING", "MOVIE", "SETTINGS" };
+            int is_tab = 0;
+            for (int t = 0; t < COUNT(slim_tabs); t++)
+                if (streq(title_caps, slim_tabs[t])) is_tab = 1;
 
-        /* Blue accent along the bottom edge of the grey bar */
-        bmp_fill(COLOR_PEN_SKY, orig_x, y + header_h - 2, 720, 2);
+            /* divider under the whole header */
+            bmp_fill(UI_LINE, orig_x, y + header_h - 1, 720, 1);
+
+            if (is_tab)
+            {
+                int tx = SLIM_MENU_TITLE_X;
+                for (int t = 0; t < COUNT(slim_tabs); t++)
+                {
+                    int on = streq(title_caps, slim_tabs[t]);
+                    uint32_t tf = slim_ui_font_spec(on ? UI_TEXT : UI_DIM, bgu);
+                    int tw = bmp_string_width(tf, slim_tabs[t]);
+                    bmp_printf(tf, tx, title_y, "%s", slim_tabs[t]);
+                    if (on)
+                        bmp_fill(UI_SEL, tx, y + header_h - 4, tw, 4);
+                    tx += tw + 26;
+                }
+            }
+            else
+            {
+                bmp_printf(slim_ui_font_spec(UI_TEXT, bgu),
+                    SLIM_MENU_TITLE_X, title_y, "%s", title_caps);
+            }
+        }
 
         /* Return-to-grid control in every launched category header. */
         slim_draw_arrow_left(690, y + header_h / 2,
@@ -5041,9 +5068,9 @@ submenu_display(struct menu * submenu)
         )
     {
         w = 720-2*bx;
-        bmp_fill(MENU_BG_COLOR_HEADER_FOOTER,  bx,  by, w, 40);
-        bmp_fill(COLOR_PEN_BG,  bx,  by + 40, w, h-40);
-        bmp_printf(slim_ui_font_spec(COLOR_WHITE, MENU_BG_COLOR_HEADER_FOOTER),  bx + 15,  by+2, "%s", submenu->name);
+        bmp_fill(UI_TILE,  bx,  by, w, 40);
+        bmp_fill(UI_BG,  bx,  by + 40, w, h-40);
+        bmp_printf(slim_ui_font_spec(UI_TEXT, UI_TILE),  bx + 15,  by+2, "%s", submenu->name);
 
         for (int i = 0; i < 5; i++)
             bmp_draw_rect(45,  bx-i,  by-i, w+i*2, h+i*2);
@@ -5062,7 +5089,7 @@ submenu_display(struct menu * submenu)
             bmp_draw_rect(COLOR_BLACK,  bx-i,  by-i, w+i*2, h+i*2);
 */            
 
-        submenu_key_hint(720-bx-45, by+5, COLOR_WHITE, MENU_BG_COLOR_HEADER_FOOTER, ICON_ML_Q_BACK);
+        submenu_key_hint(720-bx-45, by+5, COLOR_WHITE, UI_TILE, ICON_ML_Q_BACK);
 
     }
                                                    /* titlebar + padding difference for large submenus */
@@ -5639,7 +5666,7 @@ menu_redraw_do()
             {
 #ifdef CONFIG_SLIM_MENUS
                 /* Full screen — no grey header/footer reclaim strip. */
-                bmp_fill(COLOR_PEN_BG, 0, 0, 720, 480);
+                bmp_fill(UI_BG, 0, 0, 720, 480);
 #else
                 bmp_fill(COLOR_BLACK, 0, 40, 720, 400 );
 #endif
@@ -7527,9 +7554,9 @@ static void draw_longpress_indicator(struct longpress * longpress)
         int y = y0 + sin_table[MOD(i, 12)];
 
         /* blues, matching the menus */
-        int color = (!pressed)  ? COLOR_PEN_SKY   :  /* button just released */
-                    (n >= 25/2) ? COLOR_PEN_LIGHT :  /* long press event fired */
-                                  COLOR_PEN_SKY   ;  /* on the way to long press */
+        int color = (!pressed)  ? UI_DIM   :  /* button just released */
+                    (n >= 25/2) ? UI_SEL   :  /* long press event fired */
+                                  UI_DIM   ;  /* on the way to long press */
         fill_circle(x, y, 2, color);
     }
 }

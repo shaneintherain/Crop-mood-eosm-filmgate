@@ -2249,7 +2249,7 @@ static int update_status(char * buffer, int buffer_size)
     /* Calculate the stats */
     int fps = fps_get_current_x1000();  /* FPS x1000 */
     if (fps == 0)
-        return COLOR_PEN_NAVY;
+        return UI_PILL;
 
     int p = pre_recorded_frames();      /* pre-recorded frames */
     int r = (frame_count - 1 - p);      /* recorded frames */
@@ -2307,8 +2307,8 @@ static int update_status(char * buffer, int buffer_size)
         }
         else if (predicted_frames_left > 10000)
         {
-            /* assume continuous recording: navy box, no alarm */
-            return COLOR_PEN_NAVY;
+            /* assume continuous recording: dark grey box, no alarm */
+            return UI_PILL;
         }
         else if (RAW_IS_RECORDING)
         {
@@ -2318,15 +2318,15 @@ static int update_status(char * buffer, int buffer_size)
             }
 
             /* warning - recording not continuous.
-             * navy, then amber (under 30 s), then bright red (under 10 s). */
+             * dark grey, then amber (under 30 s), then bright red (under 10 s). */
             return (time_left < 10) ? COLOR_RED :
                    (time_left < 30) ? 19 /* amber (palette 19) */ :
-                                      COLOR_PEN_NAVY;
+                                      UI_PILL;
         }
         else
         {
             /* preparing, finishing */
-            return COLOR_PEN_NAVY;
+            return UI_PILL;
         }
     } 
     else 
