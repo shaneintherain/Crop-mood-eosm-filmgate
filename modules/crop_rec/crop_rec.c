@@ -3626,6 +3626,8 @@ static int patch_active = 0;
 #define EOSM_LV_GUARD_CONTENT_SAMPLES 3
 static volatile int eosm_lv_guard_pending = 1;
 static volatile int eosm_lv_guard_busy = 0;
+/* set when the only reason for the current guard pass is that a recording stopped */
+static volatile int eosm_lv_guard_after_rec = 0;
 
 static int eosm_lv_guard_started;
 static int eosm_lv_guard_state;
@@ -3664,6 +3666,7 @@ int crop_rec_lv_transition_busy(void)
 
 static void eosm_lv_guard_request(void)
 {
+    eosm_lv_guard_after_rec = 0;   /* any other request: full rebuild, as before */
     eosm_lv_guard_pending = 1;
     eosm_lv_guard_busy = 1;
     eosm_lv_guard_started = 0;
@@ -6492,6 +6495,22 @@ static int eosm_lv_guard_step(int menu_shown, int mlv_busy)
             if (!eosm_lv_guard_pipeline_ready())
                 return 1;
 
+            /* Recording just stopped and Canon kept the x5 preview with the selected
+             * geometry: skip the x1 -> x5 rebuild (it blanks the screen for about a second)
+             * and go straight to the same checks that follow a rebuild.  If any check fails,
+             * those checks still do a controlled rebuild. */
+            if (eosm_lv_guard_after_rec && lv_dispsize == 5 &&
+                eosm_lv_guard_selected_geometry_ready() && !crop_rec_needs_lv_refresh())
+            {
+                eosm_lv_guard_after_rec = 0;
+                eosm_lv_guard_state = EOSM_LV_GUARD_VALIDATE;
+                eosm_lv_guard_started = now;
+                eosm_lv_guard_stable_frames = 0;
+                eosm_lv_guard_quiet_since = 0;
+                return 1;
+            }
+            eosm_lv_guard_after_rec = 0;
+
             /* Always rebuild x5 in a controlled way. This makes menu exits,
              * record-stop and boot use exactly the same known-good path,
              * instead of trusting whatever preview state Canon left behind. */
@@ -6850,7 +6869,13 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
     if ((lv && !eosm_lv_was_active) ||
         (eosm_recording_was_active && !RECORDING) ||
         (eosm_display_mode != -1 && eosm_display_mode != lv_disp_mode))
+    {
         eosm_lv_guard_request();
+        /* recording stop alone: the guard may skip the x1 -> x5 rebuild if x5 is still right */
+        if (eosm_recording_was_active && !RECORDING && lv && eosm_lv_was_active &&
+            eosm_display_mode == lv_disp_mode)
+            eosm_lv_guard_after_rec = 1;
+    }
     eosm_lv_was_active = lv;
     eosm_recording_was_active = RECORDING;
     eosm_display_mode = lv_disp_mode;
