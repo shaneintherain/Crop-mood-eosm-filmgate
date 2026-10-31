@@ -262,17 +262,24 @@ static int entry_is_slim_style(struct menu_entry * entry, int in_submenu)
 }
 
 /* Filled ◄ — tip points left (narrow on left, flat base on right). */
+/* Arrows are drawn at 3/4 of the slot size (slots and touch boxes keep the full size);
+ * the flat base stays where it was, next to the value. */
+#define SLIM_ARROW_SCALE(h) MAX(((h) * 3) / 4, 6)
 static void slim_draw_arrow_left(int tip_x, int cy, int height, int color)
 {
     int depth = MAX((height * 6) / 10, 2);
-    bmp_draw_antialiased_triangle(tip_x, cy, 0, depth, height, color);
+    int h2 = SLIM_ARROW_SCALE(height);
+    int depth2 = MAX((h2 * 6) / 10, 2);
+    bmp_draw_antialiased_triangle(tip_x + depth - depth2, cy, 0, depth2, h2, color);
 }
 
 /* Filled ► — tip points right (flat base on left, narrow on right). */
 static void slim_draw_arrow_right(int tip_x, int cy, int height, int color)
 {
     int depth = MAX((height * 6) / 10, 2);
-    bmp_draw_antialiased_triangle(tip_x, cy, 1, depth, height, color);
+    int h2 = SLIM_ARROW_SCALE(height);
+    int depth2 = MAX((h2 * 6) / 10, 2);
+    bmp_draw_antialiased_triangle(tip_x - depth + depth2, cy, 1, depth2, h2, color);
 }
 #endif
 
@@ -6069,6 +6076,7 @@ static int slim_touch_handle_menu_arrow(int x, int y)
 
 static void slim_draw_scroll_arrow_up(int cx, int cy, int size, int color)
 {
+    size = SLIM_ARROW_SCALE(size);
     int depth = MAX((size * 6) / 10, 2);
     bmp_draw_antialiased_triangle(cx, cy - MAX(size / 2, 1), 2,
         depth, MAX(size / 2, 1), color);
@@ -6076,6 +6084,7 @@ static void slim_draw_scroll_arrow_up(int cx, int cy, int size, int color)
 
 static void slim_draw_scroll_arrow_down(int cx, int cy, int size, int color)
 {
+    size = SLIM_ARROW_SCALE(size);
     int depth = MAX((size * 6) / 10, 2);
     bmp_draw_antialiased_triangle(cx, cy + MAX(size / 2, 1), 3,
         depth, MAX(size / 2, 1), color);

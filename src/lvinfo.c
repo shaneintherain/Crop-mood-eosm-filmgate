@@ -3,6 +3,7 @@
 #include <menu.h>
 #include <bmp.h>
 #include <lvinfo.h>
+#include "cropmarks.h"
 #include <lens.h>
 #include <fps.h>
 #include "iso-gain.h"
@@ -793,6 +794,9 @@ void lvinfo_display(int top, int bottom)
             if (RECORDING)
             {
                 const int bx = TOTAL_WIDTH - 44, by = top_y, bw = 44, bh = 44;
+                /* With a film frame on screen, the block is black only outside the frame:
+                 * the frame line and the picture inside it are put back as they were. */
+                if (film_canvas_restore_area(bx, by, bw, bh)) { } else {
                 bmp_fill(COLOR_BLACK, bx, by, bw, bh);
                 /* The block can cut through the white frame line: find where the line
                  * enters the block (left side and bottom side, checked at three points
@@ -820,6 +824,7 @@ void lvinfo_display(int top, int bottom)
                 {
                     int top = (hrow0 >= 0 && hrow1 - hrow0 < 4) ? hrow0 : by;
                     bmp_fill(COLOR_WHITE, vcol0, top, vcol1 - vcol0 + 1, by + bh - top);
+                }
                 }
             }
             /* True disc / ring, built row by row so it is as round as the pixels allow */

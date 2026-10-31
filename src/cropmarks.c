@@ -661,6 +661,37 @@ int film_canvas_paint(int fill_outside)
     return 1;
 }
 
+/* Repaint one small area of the screen exactly as the film frame shows it: black outside the
+ * frame, the 2 px white line, transparent (picture) inside.  Used to clean up after something
+ * drawn over the frame (e.g. the block behind the record dot).  Returns 0 if the frame is not
+ * known / not current, so the caller can fall back to something else. */
+static void fill_clipped(int color, int ax1, int ay1, int ax2, int ay2, int bx1, int by1, int bx2, int by2)
+{
+    int x1 = MAX(ax1, bx1), y1 = MAX(ay1, by1);
+    int x2 = MIN(ax2, bx2), y2 = MIN(ay2, by2);
+    if (x2 >= x1 && y2 >= y1)
+        bmp_fill(color, x1, y1, x2 - x1 + 1, y2 - y1 + 1);
+}
+
+int film_canvas_restore_area(int x, int y, int w, int h)
+{
+    if (cropmarks_x == -1 || cropmarks_y == -1) return 0;
+    if (cropmark_cache_dirty || cropmarks_x != cropmarks_mirror_x || cropmarks_y != cropmarks_mirror_y)
+        return 0;
+    if (!bmp_vram() || w <= 0 || h <= 0) return 0;
+    int x1 = (cropmarks_x >> 16);
+    int x2 = (cropmarks_x & 0xFFFF);
+    int y1 = (cropmarks_y >> 16);
+    int y2 = (cropmarks_y & 0xFFFF);
+    if (x2 <= x1 || y2 <= y1) return 0;
+
+    int ax2 = x + w - 1, ay2 = y + h - 1;
+    bmp_fill(COLOR_BLACK, x, y, w, h);
+    fill_clipped(COLOR_WHITE, x, y, ax2, ay2, x1 - 2, y1 - 2, x2 + 2, y2 + 2);
+    fill_clipped(COLOR_EMPTY, x, y, ax2, ay2, x1, y1, x2, y2);
+    return 1;
+}
+
 void set_movie_cropmarks(int x, int y, int w, int h)
 {
     x = COERCE(x, os.x0+1, os.x_max-1);

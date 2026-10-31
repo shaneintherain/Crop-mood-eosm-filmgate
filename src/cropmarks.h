@@ -24,5 +24,6 @@ void crop_set_dirty(int redraw_timeout);
  * @return 1 if done, 0 if there are no movie cropmarks (caller should clear and redraw instead)
  */
 int film_canvas_paint(int fill_outside);
+int film_canvas_restore_area(int x, int y, int w, int h);
 
 #endif
