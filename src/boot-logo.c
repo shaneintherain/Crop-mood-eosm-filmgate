@@ -1537,15 +1537,41 @@ static const struct boot_logo_span boot_logo_spans[] = {
 /* The artwork is generated already centred on (360, 240). */
 #define BOOT_LOGO_Y 0
 
-/* Dark start-up screen, matching the menus.  Everything below this row is the
- * bottom strip that the splash task keeps opaque (only the small credit is drawn there). */
+/* Dark "film strip" start-up screen, matching the menus.  Everything below
+ * BOOT_LOGO_STRIP_Y is the bottom strip the splash task keeps opaque; it holds the
+ * small credit (rows 400..413, right side) and the bottom sprocket band. */
 #define BOOT_LOGO_STRIP_Y 345
+#define BOOT_LOGO_BAND_H 42
+#define BOOT_LOGO_BAND_COLOR COLOR_GRAY(5)
+#define BOOT_LOGO_HOLE_COLOR COLOR_GRAY(22)
 
-/* span levels 26..32 -> fixed palette entries (see generate_boot_logo.py) */
+/* span levels 26..31 -> fixed palette entries (see generate_boot_logo.py) */
 static const uint8_t boot_logo_colors[8] = {
     COLOR_GRAY(35), COLOR_GRAY(70), COLOR_WHITE, COLOR_ORANGE,
-    COLOR_GRAY(25), COLOR_GRAY(55), COLOR_GRAY(22), COLOR_WHITE
+    COLOR_GRAY(25), COLOR_GRAY(60), COLOR_WHITE, COLOR_WHITE
 };
+
+/* A dark band with a row of sprocket holes (20x14, corners rounded by one pixel).
+ * Every pixel is written once with its final colour, so redrawing it does not flicker. */
+static void boot_logo_band(int y0)
+{
+    bmp_fill(BOOT_LOGO_BAND_COLOR, 0, y0, 720, 14);
+    bmp_fill(BOOT_LOGO_BAND_COLOR, 0, y0 + 28, 720, BOOT_LOGO_BAND_H - 28);
+    for (int r = 0; r < 14; r++)
+    {
+        int y = y0 + 14 + r;
+        int inset = (r == 0 || r == 13) ? 1 : 0;   /* rounded corners */
+        int x = 0;
+        for (int hx = 14; hx < 720; hx += 40)
+        {
+            bmp_fill(BOOT_LOGO_BAND_COLOR, x, y, hx + inset - x, 1);
+            bmp_fill(BOOT_LOGO_HOLE_COLOR, hx + inset, y, MIN(20 - 2 * inset, 720 - hx - inset), 1);
+            x = hx + 20 - inset;
+        }
+        if (x < 720)
+            bmp_fill(BOOT_LOGO_BAND_COLOR, x, y, 720 - x, 1);
+    }
+}
 
 static void boot_logo_draw_spans(int y_min)
 {
@@ -1568,7 +1594,9 @@ static void boot_logo_draw(void)
     film_palette_apply();
     /* Keep splash writes inside ML's normal LCD canvas.  The surrounding
      * 960x540 backing surface is changed by Canon during LV/zoom switches. */
-    bmp_fill(UI_BG, 0, 0, 720, 480);
+    bmp_fill(UI_BG, 0, BOOT_LOGO_BAND_H, 720, 480 - 2 * BOOT_LOGO_BAND_H);
+    boot_logo_band(0);
+    boot_logo_band(480 - BOOT_LOGO_BAND_H);
     boot_logo_draw_spans(0);
 }
 
@@ -1662,19 +1690,20 @@ static void boot_logo_task(void *unused)
             /* Canon rebuilds its overlay layer while Live View settles (zoom x1/x5); that wipes
              * the splash and the live picture (black in the crop modes) shows through, e.g. the
              * blue bars turning black.  If a few sample points no longer match, draw it all again. */
-            if ((bmp_getpixel(4, 4) != UI_BG ||
-                 bmp_getpixel(4, 480 - 4) != UI_BG ||
+            if ((bmp_getpixel(4, 4) != BOOT_LOGO_BAND_COLOR ||
+                 bmp_getpixel(4, 480 - 4) != BOOT_LOGO_BAND_COLOR ||
                  bmp_getpixel(4, 100) != UI_BG) &&
                 get_ms_clock() >= last_full_redraw + 200)   /* at most 5 times a second */
             {
                 last_full_redraw = get_ms_clock();
                 boot_logo_draw();
             }
-            /* keep the strip opaque around the small credit (rows 438..451, right side),
+            /* keep the strip opaque around the small credit (rows 400..413, right side),
              * without repainting the credit itself, so it does not flicker */
-            bmp_fill(UI_BG, 0, BOOT_LOGO_STRIP_Y, 720, 438 - BOOT_LOGO_STRIP_Y);
-            bmp_fill(UI_BG, 0, 438, 580, 14);
-            bmp_fill(UI_BG, 0, 452, 720, 480 - 452);
+            bmp_fill(UI_BG, 0, BOOT_LOGO_STRIP_Y, 720, 400 - BOOT_LOGO_STRIP_Y);
+            bmp_fill(UI_BG, 0, 400, 580, 14);
+            bmp_fill(UI_BG, 0, 414, 720, 480 - BOOT_LOGO_BAND_H - 414);
+            boot_logo_band(480 - BOOT_LOGO_BAND_H);
         )
         msleep(20);
     }
