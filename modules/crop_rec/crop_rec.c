@@ -3628,6 +3628,9 @@ static volatile int eosm_lv_guard_pending = 1;
 static volatile int eosm_lv_guard_busy = 0;
 /* set when the only reason for the current guard pass is that a recording stopped */
 static volatile int eosm_lv_guard_after_rec = 0;
+/* temporary diagnostic: what the record-stop shortcut decided (0 none, 1 skipped the rebuild,
+ * 2 zoom was not x5, 3 geometry not ready, 4 refresh needed) */
+static volatile int eosm_lv_guard_skip_code = 0;
 
 static int eosm_lv_guard_started;
 static int eosm_lv_guard_state;
@@ -6499,6 +6502,10 @@ static int eosm_lv_guard_step(int menu_shown, int mlv_busy)
              * geometry: skip the x1 -> x5 rebuild (it blanks the screen for about a second)
              * and go straight to the same checks that follow a rebuild.  If any check fails,
              * those checks still do a controlled rebuild. */
+            if (eosm_lv_guard_after_rec)
+                eosm_lv_guard_skip_code = (lv_dispsize != 5) ? 2 :
+                    !eosm_lv_guard_selected_geometry_ready() ? 3 :
+                    crop_rec_needs_lv_refresh() ? 4 : 1;
             if (eosm_lv_guard_after_rec && lv_dispsize == 5 &&
                 eosm_lv_guard_selected_geometry_ready() && !crop_rec_needs_lv_refresh())
             {
@@ -6832,6 +6839,64 @@ static void slim_cover_hold_and_release(int hold_ms)
 }
 
 /* when closing ML menu, check whether we need to refresh the LiveView */
+/* ---- Temporary diagnostic (not for release): record-stop log, ML/LOGS/RECSTOP.TXT ----
+ * One line each time something below changes; written to the card after 6 s of quiet. */
+#define RSL_MAX 160
+#define RSL_N 15
+static int rsl[RSL_MAX][RSL_N + 1];
+static int rsl_n = 0, rsl_t0 = 0, rsl_last_change = 0;
+
+static void recstop_log_sample(int menu_shown, int mlv_busy)
+{
+    extern int kill_canon_gui_mode;
+    int now = get_ms_clock();
+    if (!rsl_t0) rsl_t0 = now;
+#ifdef CONFIG_EOSM
+    int g_pend = eosm_lv_guard_pending, g_busy = eosm_lv_guard_busy, g_state = eosm_lv_guard_state;
+    int g_after = eosm_lv_guard_after_rec, g_skip = eosm_lv_guard_skip_code;
+#else
+    int g_pend = -1, g_busy = -1, g_state = -1, g_after = -1, g_skip = -1;
+#endif
+    int cur[RSL_N] = { RECORDING, mlv_busy, lv, LV_NON_PAUSED ? 1 : 0, display_is_on() ? 1 : 0, lv_dispsize,
+                       lv_disp_mode, menu_shown, g_pend, g_busy, g_state, g_after, g_skip,
+                       kill_canon_gui_mode, canon_gui_front_buffer_disabled() };
+    static int prev[RSL_N] = { -1 };
+    int changed = 0;
+    for (int i = 0; i < RSL_N; i++) if (cur[i] != prev[i]) changed = 1;
+    if (changed)
+    {
+        if (rsl_n < RSL_MAX)
+        {
+            rsl[rsl_n][0] = now - rsl_t0;
+            for (int i = 0; i < RSL_N; i++) rsl[rsl_n][i + 1] = cur[i];
+            rsl_n++;
+        }
+        for (int i = 0; i < RSL_N; i++) prev[i] = cur[i];
+        rsl_last_change = now;
+    }
+    if (rsl_n && now - rsl_last_change > 6000 && !RECORDING)
+    {
+        FIO_CreateDirectory("ML/LOGS");
+        FILE *fh = FIO_CreateFileOrAppend("ML/LOGS/RECSTOP.TXT");
+        char *buf = fh ? malloc(4096) : 0;
+        if (buf)
+        {
+            int len = snprintf(buf, 4096, "\n== record-stop log\n# ms rec busy lv lvrun disp zoom dmode menu pend gbusy state after skip kill fboff\n");
+            for (int i = 0; i < rsl_n; i++)
+            {
+                for (int k = 0; k <= RSL_N; k++)
+                    len += snprintf(buf + len, 4096 - len, k ? " %d" : "%6d", rsl[i][k]);
+                len += snprintf(buf + len, 4096 - len, "\n");
+                if (len > 4096 - 200) { FIO_WriteFile(fh, buf, len); len = 0; }
+            }
+            if (len) FIO_WriteFile(fh, buf, len);
+            free(buf);
+        }
+        if (fh) FIO_CloseFile(fh);
+        rsl_n = 0;
+    }
+}
+
 static unsigned int crop_rec_polling_cbr(unsigned int unused)
 {
     /* touch/Movie-tab shortcuts inject Q+SET into an open menu — not used on slim. */
@@ -6863,6 +6928,7 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 #endif
 
     int menu_shown = gui_menu_shown();
+    recstop_log_sample(menu_shown, mlv_busy);   /* temporary diagnostic */
 #ifdef CONFIG_EOSM
     /* Cover every path back into Movie Live View, including Canon menus
      * (which may not set gui_menu_shown), recording stop and boot. */
