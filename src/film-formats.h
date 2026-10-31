@@ -8,7 +8,8 @@
  *              camera can read out in a stable video mode.
  * The window is centered inside the current crop_rec readout (see the 'mode' column).
  *
- * Widths are multiples of 16 and heights are even, so film_align_res_y() in
+ * Widths are multiples of 16 (8 for the full-width CROP MOOD frames, 1736) and heights
+ * are even, so mlv_lite (width rounded down to 8) and film_align_res_y() in
  * mlv_lite leaves them unchanged and the "Recorded Size" shown in the Movie menu is
  * exactly what is written.  tests/film_tests.c checks this (and the rest of this table)
  * on a computer.
@@ -20,13 +21,15 @@
 #ifndef _FILM_FORMATS_H_
 #define _FILM_FORMATS_H_
 
-#define FILM_FRAME_COUNT   24   /* entries in film_frames[], including OFF at index 0 */
-#define FILM_FORMAT_COUNT  12   /* Film Formats in the Movie menu (both standards) */
-#define FILM_FILM_COUNT    6    /* the first six are the FILM standard; the rest are VIDEO */
+#define FILM_FRAME_COUNT   28   /* entries in film_frames[], including OFF at index 0 */
+#define FILM_FORMAT_COUNT  14   /* Film Formats in the Movie menu (all three standards) */
+#define FILM_FILM_COUNT    6    /* the first six are the FILM standard */
+#define FILM_VIDEO_COUNT   6    /* the next six are the VIDEO standard */
+#define FILM_CM_FIRST      (FILM_FILM_COUNT + FILM_VIDEO_COUNT)   /* the rest are CROP MOOD */
 
 /* Sensor readouts the formats are cut from (the crop_rec 1:1 / 3x3 modes).  kn/kd is the
  * scale of one readout pixel on the camera's 720x480 LCD layer (used for the black-bar frame). */
-enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_COUNT };
+enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_COUNT };
 
 struct film_readout
 {
@@ -43,6 +46,9 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
     { 2560, 1440,  9,  32 },    /* 1:1 1440p (measured) */
     { 1920, 1280,  3,   8 },    /* 1:1 1280p (measured) */
     { 2520, 1080,  2,   7 },    /* 1:1 2.5K  (720 / 2520; not yet measured) */
+    { 1736, 2214,  9,  65 },    /* 1x3 2.35:1 (squeezed 3x; the preview is desqueezed by the camera:
+                                 * 2214 rows show as ~306 lines.  Not used for a black-bar frame:
+                                 * mlv_lite treats 1x3 as a plain crop_rec mode) */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */
@@ -97,6 +103,14 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     /* 1/4" (3.6 x 2.7 mm) */
     { "1/4\" 16:9 Crop",     832,  468, "1/4\" sensor width (3.6 mm), cropped to 16:9",   "1:1 2.33:1 2520x1080", "16:9 Crop", FILM_RO_25K },
     { "1/4\" 4:3",           832,  624, "1/4\" sensor (3.6 x 2.7 mm), 4:3",              "1:1 2.33:1 2520x1080", "4:3", FILM_RO_25K },
+    /* ---- CROP MOOD standard: the legacy Crop Mood modes that span the full sensor width ---- */
+    /* 3x3: whole sensor, binned 3x3; frames cut from the 3:2 readout (48 fps: the 738-row one).
+     * 1736 wide (the full readout; a multiple of 8, not 16, like the original Crop Mood presets) */
+    { "Crop Mood 3x3 3:2",   1736, 1152, "full sensor width, 3x3 binning, 3:2",    "3x3 3:2 1736x1160", "3:2",    FILM_RO_3X3 },
+    { "Crop Mood 3x3 16:9",  1736,  976, "full sensor width, 3x3 binning, 16:9",   "3x3 3:2 1736x1160", "16:9",   FILM_RO_3X3 },
+    { "Crop Mood 3x3 2.35:1",1736,  736, "full sensor width, 3x3 binning, 2.35:1", "3x3 3:2 1736x1160", "2.35:1", FILM_RO_3X3 },
+    /* 1x3: full sensor width, 3 columns binned (desqueeze 3x horizontally: 5208x2214) */
+    { "Crop Mood 1x3 2.35:1",1736, 2214, "full sensor width, 1x3 binning (desqueeze 3x to 5208x2214)", "1x3 2.35:1 1736x2214", "2.35:1", FILM_RO_1X3 },
 };
 
 /* The Film Formats: the first FILM_FILM_COUNT are the FILM standard, the rest the VIDEO
@@ -125,6 +139,9 @@ static const struct film_format film_formats[FILM_FORMAT_COUNT] __attribute__((u
     { "1/2.3\"",        "1/2.3\"",18, 2 },
     { "1/3\"",          "1/3\"",  20, 2 },
     { "1/4\"",          "1/4\"",  22, 2 },
+    /* CROP MOOD standard */
+    { "3x3",            "3x3",    24, 3 },
+    { "1x3",            "1x3",    27, 1 },
 };
 
 /* index into film_frames[] for a Film Format and a Frame choice (out-of-range input is clamped) */
@@ -139,16 +156,39 @@ static inline int film_frame_index(int fmt, int frame)
 
 static inline int film_is_video(int fmt)
 {
-    return fmt >= FILM_FILM_COUNT;
+    return fmt >= FILM_FILM_COUNT && fmt < FILM_CM_FIRST;
+}
+
+/* CROP MOOD standard (legacy full-width 3x3 / 1x3 modes) */
+static inline int film_is_cm(int fmt)
+{
+    return fmt >= FILM_CM_FIRST;
+}
+
+/* the standard a Film Format belongs to: 0 = FILM, 1 = VIDEO, 2 = CROP MOOD */
+static inline int film_standard(int fmt)
+{
+    return film_is_cm(fmt) ? 2 : film_is_video(fmt) ? 1 : 0;
+}
+
+/* first Film Format and number of formats of a standard (0, 1, 2) */
+static inline int film_standard_first(int std)
+{
+    return std == 2 ? FILM_CM_FIRST : std == 1 ? FILM_FILM_COUNT : 0;
+}
+
+static inline int film_standard_count(int std)
+{
+    return std == 2 ? FILM_FORMAT_COUNT - FILM_CM_FIRST : std == 1 ? FILM_VIDEO_COUNT : FILM_FILM_COUNT;
 }
 
 /* Next / previous Film Format, staying inside the current standard: FILM formats cycle
- * among themselves and VIDEO sizes among themselves, so the quick menu never has to page
- * through both lists.  dir < 0 steps back, otherwise forward. */
+ * among themselves, VIDEO sizes among themselves and CROP MOOD modes among themselves, so the quick menu never has to page
+ * through all the lists.  dir < 0 steps back, otherwise forward. */
 static inline int film_step(int fmt, int dir)
 {
-    int base = film_is_video(fmt) ? FILM_FILM_COUNT : 0;
-    int n = film_is_video(fmt) ? FILM_FORMAT_COUNT - FILM_FILM_COUNT : FILM_FILM_COUNT;
+    int base = film_standard_first(film_standard(fmt));
+    int n = film_standard_count(film_standard(fmt));
     int pos = fmt - base + (dir < 0 ? -1 : 1);
     if (pos < 0) pos = n - 1;
     if (pos >= n) pos = 0;

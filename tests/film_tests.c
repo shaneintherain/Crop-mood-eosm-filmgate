@@ -42,7 +42,11 @@ int main(void)
         const struct film_frame * fr = &film_frames[i];
         int rw = 0, rh = 0;
         CHECK(fr->w > 0 && fr->h > 0, "frame %d (%s): empty size", i, fr->name);
-        CHECK(fr->w % 16 == 0, "frame %d (%s): width %d is not a multiple of 16", i, fr->name, fr->w);
+        /* multiples of 16; the full-width CROP MOOD frames are 1736 (a multiple of 8, like the original presets) */
+        if (fr->w == 1736)
+            CHECK(i >= film_formats[FILM_CM_FIRST].first, "frame %d (%s): only CROP MOOD frames may be 1736 wide", i, fr->name);
+        else
+            CHECK(fr->w % 16 == 0, "frame %d (%s): width %d is not a multiple of 16", i, fr->name, fr->w);
         CHECK(fr->h % 2 == 0, "frame %d (%s): height %d is odd", i, fr->name, fr->h);
         CHECK(fr->name[0] && fr->gate[0] && fr->mode[0] && fr->frame[0], "frame %d has an empty text", i);
         CHECK(readout_of(fr->mode, &rw, &rh), "frame %d (%s): no readout size in '%s'", i, fr->name, fr->mode);
@@ -73,9 +77,17 @@ int main(void)
         }
 
     /* the two standards */
-    CHECK(FILM_FILM_COUNT == 6 && FILM_FORMAT_COUNT == 12, "6 FILM + 6 VIDEO formats expected");
-    CHECK(!film_is_video(0) && !film_is_video(5) && film_is_video(6) && film_is_video(11), "film_is_video boundaries");
-    for (int f = FILM_FILM_COUNT; f < FILM_FORMAT_COUNT; f++)
+    CHECK(FILM_FILM_COUNT == 6 && FILM_VIDEO_COUNT == 6 && FILM_FORMAT_COUNT == 14, "6 FILM + 6 VIDEO + 2 CROP MOOD formats expected");
+    CHECK(!film_is_video(0) && !film_is_video(5) && film_is_video(6) && film_is_video(11) && !film_is_video(12) && !film_is_video(13), "film_is_video boundaries");
+    CHECK(!film_is_cm(11) && film_is_cm(12) && film_is_cm(13), "film_is_cm boundaries");
+    CHECK(film_standard(0) == 0 && film_standard(6) == 1 && film_standard(12) == 2, "film_standard");
+    /* CROP MOOD: full sensor width only (3x3 and 1x3 both read 1736 columns = 5208 / 3) */
+    for (int f = FILM_CM_FIRST; f < FILM_FORMAT_COUNT; f++)
+        for (int k = 0; k < film_formats[f].count; k++)
+            CHECK(film_frames[film_formats[f].first + k].w == 1736, "CROP MOOD frame %s is not full width", film_frames[film_formats[f].first + k].name);
+    CHECK(film_formats[12].count == 3 && film_formats[13].count == 1, "CROP MOOD: 3x3 has 3:2 / 16:9 / 2.35:1, 1x3 has 2.35:1");
+    CHECK(film_frames[film_formats[13].first].readout == FILM_RO_1X3, "1x3 uses the 1x3 readout");
+    for (int f = FILM_FILM_COUNT; f < FILM_CM_FIRST; f++)
         for (int k = 0; k < film_formats[f].count; k++)
         {
             const struct film_frame * fr = &film_frames[film_formats[f].first + k];
@@ -88,7 +100,7 @@ int main(void)
             CHECK(fr->w <= 3069, "video frame %s wider than a 1\" sensor", fr->name);
         }
     /* the sensor widths, in order (largest first) */
-    for (int f = FILM_FILM_COUNT + 1; f < FILM_FORMAT_COUNT; f++)
+    for (int f = FILM_FILM_COUNT + 1; f < FILM_CM_FIRST; f++)
         CHECK(film_frames[film_formats[f].first].w < film_frames[film_formats[f - 1].first].w,
               "video size %s is not smaller than %s", film_formats[f].name, film_formats[f - 1].name);
 
@@ -100,17 +112,18 @@ int main(void)
             for (int i = 0; i < 2 * FILM_FORMAT_COUNT; i++)
             {
                 n = film_step(n, dir);
-                CHECK(n >= 0 && n < FILM_FORMAT_COUNT && film_is_video(n) == film_is_video(f),
+                CHECK(n >= 0 && n < FILM_FORMAT_COUNT && film_standard(n) == film_standard(f),
                       "film_step from %d (dir %d) left its standard: %d", f, dir, n);
             }
             /* a full lap through the standard visits every format of it exactly once */
-            int seen = 0, count = film_is_video(f) ? FILM_FORMAT_COUNT - FILM_FILM_COUNT : FILM_FILM_COUNT;
+            int seen = 0, count = film_standard_count(film_standard(f));
             n = f;
             for (int i = 0; i < count; i++) { n = film_step(n, dir); seen |= 1 << n; }
             CHECK(n == f && __builtin_popcount(seen) == count, "film_step lap from %d (dir %d) does not cover the standard", f, dir);
         }
     CHECK(film_step(5, 1) == 0 && film_step(0, -1) == 5, "FILM list wraps A35 <-> 8mm");
     CHECK(film_step(11, 1) == 6 && film_step(6, -1) == 11, "VIDEO list wraps 1\" <-> 1/4\"");
+    CHECK(film_step(12, 1) == 13 && film_step(13, 1) == 12 && film_step(12, -1) == 13, "CROP MOOD list: 3x3 <-> 1x3");
 
     /* film_pick(): readout -> format and frame */
     {
@@ -135,6 +148,9 @@ int main(void)
         CHECK(film_pick(FILM_RO_3K, 2, 0, &fr) == 2 && fr == 0, "S16 is kept on 3K");
         CHECK(film_pick(FILM_RO_1280, 2, 0, &fr) == 4 && fr == 0, "1280p from S16 -> S8");
         CHECK(film_pick(FILM_RO_25K, 0, 0, &fr) == 9 && fr == 0, "2.5K from A35 -> 1/2.3\" 16:9");
+        CHECK(film_pick(FILM_RO_3X3, 12, 2, &fr) == 12 && fr == 2, "CROP MOOD 3x3 2.35:1 is kept on the 3x3 readout");
+        CHECK(film_pick(FILM_RO_3X3, 13, 0, &fr) == 0 && fr == 0, "3x3 readout from 1x3 -> A35");
+        CHECK(film_pick(FILM_RO_1X3, 0, 0, &fr) == 13 && fr == 0, "1x3 readout -> CROP MOOD 1x3");
         /* every frame of every format maps back to itself */
         for (int f = 0; f < FILM_FORMAT_COUNT; f++)
             for (int k = 0; k < film_formats[f].count; k++)
@@ -173,6 +189,7 @@ int main(void)
      * film_align_height() must leave every film frame unchanged, for every data format */
     static const int bpps[] = { 14, 12, 10 };
     for (int i = 1; i < FILM_FRAME_COUNT; i++)
+        if (film_frames[i].readout != FILM_RO_1X3)   /* 1x3: mlv_lite records the readout itself, not a window */
         for (int c = 0; c < 2; c++)
             for (int b = 0; b < 3; b++)
             {

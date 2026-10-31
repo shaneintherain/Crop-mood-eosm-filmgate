@@ -63,7 +63,12 @@ int main(void)
     slim_mode_ui = 2; crop_preset_ar_menu = 0;                       /* 3x3 16:9 high fps */
     CHECK(slim_film_sync() == -1, "3x3 high fps is not a film format");
     slim_mode_ui = 1;
-    CHECK(slim_film_sync() == -1, "1x3 is not a film format");
+    CHECK(slim_film_sync() == -1, "1x3 16:9 is not a film format");
+    slim_mode_ui = 1; crop_preset_ar_menu = 3; slim_unified_preset = 1;
+    CHECK(slim_film_sync() == -1, "1x3 2.35:1 Higher is not a CROP MOOD format (Highest only)");
+    slim_unified_preset = 0;
+    CHECK(slim_film_sync() == 13, "1x3 2.35:1 Highest is CROP MOOD 1x3");
+    crop_preset_ar_menu = 0;
     slim_mode_ui = 3;
     CHECK(slim_film_sync() == -1, "Full-Res LV is not a film format");
 
@@ -75,7 +80,8 @@ int main(void)
         {
             set_state(f, k);
             slim_film_apply(f);
-            g_preset = (slim_mode_ui == 2) ? CROP_PRESET_3X3 : CROP_PRESET_1X1;
+            g_preset = (slim_mode_ui == 2) ? CROP_PRESET_3X3 : (slim_mode_ui == 1) ? CROP_PRESET_1X3 : CROP_PRESET_1X1;
+            crop_preset_1x3_res_menu = slim_unified_preset;
             int mask = slim_crop_fps_mask();
             int ro = film_frames[film_frame_index(f, k)].readout;
             CHECK(mask & 1, "format %d frame %d: 23.976 must always be offered", f, k);
@@ -110,6 +116,9 @@ int main(void)
             { 1344,  930, 0, 164 },                                                  /* S8, 1280p 566 clocks */
             { 3056, 1300, 0, 349 },                                                  /* 1", 3K */
             { 1424,  800, 0, 179 },                                                  /* 1/2.3", 2.5K 716 clocks */
+            { 1736, 1152, 0, 190 }, { 1736,  976, 0, 161 },                          /* CROP MOOD 3x3, 528 clocks */
+            { 1736,  736, 5, 120 },                                                  /* CROP MOOD 3x3 2.35:1 at 48 fps */
+            { 1736, 2214, 0, 360 },                                                  /* CROP MOOD 1x3, 520 clocks */
         };
         for (unsigned n = 0; n < sizeof(exp) / sizeof(exp[0]); n++)
         {

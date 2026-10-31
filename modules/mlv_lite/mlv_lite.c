@@ -1086,7 +1086,9 @@ void update_resolution_params()
             fw = max_res_x;
         }
 
-        res_x = fw & ~15;
+        /* multiple of 8 (raw_pixblock); every film frame is already a multiple of 16, except the
+         * full-width CROP MOOD frames (1736, as in the original Crop Mood presets) */
+        res_x = fw & ~7;
         res_y = film_align_res_y(res_x, fh, max_res_y);
     }
 

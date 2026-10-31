@@ -4450,6 +4450,8 @@ static int slim_film_menu_readout(void)
     {
         case 2: /* 3x3 3:2 */
             return crop_preset_ar_menu == 4 ? FILM_RO_3X3 : -1;
+        case 1: /* 1x3 Highest 2.35:1 (CROP MOOD) */
+            return (crop_preset_ar_menu == 3 && slim_unified_preset == 0) ? FILM_RO_1X3 : -1;
         case 0:
             switch (slim_1x1_ar)
             {
@@ -4485,6 +4487,8 @@ static int slim_film_active_readout(void)
         return -1;
     if (CROP_PRESET_MENU == CROP_PRESET_3X3)
         return crop_preset_3x3_res_menu == 2 ? FILM_RO_3X3 : -1;
+    if (CROP_PRESET_MENU == CROP_PRESET_1X3)
+        return (crop_preset_1x3_res_menu == 0 && crop_preset_ar_menu == 3) ? FILM_RO_1X3 : -1;
     if (CROP_PRESET_MENU == CROP_PRESET_1X1)
     {
         switch (crop_preset_1x1_res_menu)
@@ -4528,7 +4532,12 @@ int crop_rec_video_standard()
 int crop_rec_film_format()
 {
     int frame;
-    int fmt = film_pick(slim_film_active_readout(), slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
+    int ro = slim_film_active_readout();
+    /* CROP MOOD 1x3 records the whole (squeezed) readout: for mlv_lite it is a plain crop_rec
+     * mode, not a window cut from the readout (its film window code is for square pixels) */
+    if (ro == FILM_RO_1X3)
+        return 0;
+    int fmt = film_pick(ro, slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
     if (fmt < 0)
         return 0; /* not a film format */
     return film_frame_index(fmt, frame);
@@ -4841,6 +4850,7 @@ static int slim_line_clocks(void)
         case FILM_RO_1440: return 0x2DB + 1;
         case FILM_RO_1280: return 0x235 + 1;
         case FILM_RO_25K:  return 0x2CB + 1;
+        case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest */
     }
     return 0;
 }
@@ -4943,15 +4953,16 @@ static void slim_film_apply(int fmt)
         case FILM_RO_1440: slim_mode_ui = 0; slim_1x1_ar = 2; break;         /* 16:9 */
         case FILM_RO_1280: slim_mode_ui = 0; slim_1x1_ar = 3; break;         /* 3:2 */
         case FILM_RO_25K:  slim_mode_ui = 0; slim_1x1_ar = 0; break;         /* 2.33:1 */
+        case FILM_RO_1X3:  slim_mode_ui = 1; crop_preset_ar_menu = 3; break; /* 1x3 Highest 2.35:1 */
         default:           slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
     }
     slim_crop_apply_mode();
 }
 
-/* "Standard" row: FILM <-> VIDEO.  Each standard remembers the format last used in it
+/* "Standard" row: FILM -> VIDEO -> CROP MOOD.  Each standard remembers the format last used in it
  * (until the next start; then it begins at its first format). */
-static int slim_std_last[2] = { 0, FILM_FILM_COUNT };
-static int slim_standard_ui = 0;   /* 0 = FILM, 1 = VIDEO: only mirrors the saved format for the menu */
+static int slim_std_last[3] = { 0, FILM_FILM_COUNT, FILM_CM_FIRST };
+static int slim_standard_ui = 0;   /* 0 = FILM, 1 = VIDEO, 2 = CROP MOOD: only mirrors the saved format for the menu */
 
 static MENU_SELECT_FUNC(slim_crop_standard_select)
 {
@@ -4963,18 +4974,21 @@ static MENU_SELECT_FUNC(slim_crop_standard_select)
     cur = slim_film_sync();
     if (cur < 0)
         cur = slim_film_fmt;
-    std = film_is_video(cur) ? 1 : 0;
+    std = film_standard(cur);
     slim_std_last[std] = cur;
-    slim_film_apply(slim_std_last[1 - std]);
+    slim_film_apply(slim_std_last[(std + (delta < 0 ? 2 : 1)) % 3]);
 }
 
 static MENU_UPDATE_FUNC(slim_crop_standard_update)
 {
     slim_crop_sync_from_backend();
     slim_film_sync();
-    slim_standard_ui = film_is_video(slim_film_fmt) ? 1 : 0;
-    MENU_SET_VALUE("%s", slim_standard_ui ? "VIDEO" : "FILM");
-    MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 1\", 2/3\", 1/2\", 1/2.3\", 1/3\", 1/4\" sensor sizes.");
+    slim_standard_ui = film_standard(slim_film_fmt);
+    MENU_SET_VALUE("%s", slim_standard_ui == 2 ? "CROP MOOD" : slim_standard_ui ? "VIDEO" : "FILM");
+    if (slim_standard_ui == 2)
+        MENU_SET_HELP("CROP MOOD: the original full-width 3x3 and 1x3 modes.");
+    else
+        MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 1\", 2/3\", 1/2\", 1/2.3\", 1/3\", 1/4\" sensor sizes.");
     MENU_SET_ENABLED(1);
 }
 
@@ -4987,7 +5001,7 @@ static MENU_SELECT_FUNC(slim_crop_mode_select)
         fmt = 0; /* leaving a legacy mode: always start at A35, whichever way was pressed */
     else
     {
-        /* cycle inside the current standard (A35 .. 8mm, or 1" .. 1/4"), see film_step() */
+        /* cycle inside the current standard (A35 .. 8mm, 1" .. 1/4", or 3x3 / 1x3), see film_step() */
         fmt = film_step(fmt, delta);
     }
     slim_film_apply(fmt);
@@ -4997,11 +5011,15 @@ static MENU_UPDATE_FUNC(slim_crop_mode_update)
 {
     slim_crop_sync_from_backend();
     int fmt = slim_film_sync();
-    MENU_SET_NAME(film_is_video(slim_film_fmt) ? "Sensor Size" : "Film Format");
+    MENU_SET_NAME(film_is_cm(slim_film_fmt) ? "Mode" : film_is_video(slim_film_fmt) ? "Sensor Size" : "Film Format");
     if (fmt >= 0)
     {
         MENU_SET_VALUE("%s", film_formats[fmt].name);
-        if (film_is_video(fmt))
+        if (film_is_cm(fmt))
+            MENU_SET_HELP(film_frames[film_formats[fmt].first].readout == FILM_RO_1X3
+                ? "1x3: full sensor width, desqueeze 3x horizontally in post. The preview is desqueezed."
+                : "3x3: full sensor width, binned 3x3.");
+        else if (film_is_video(fmt))
             MENU_SET_HELP("Video sensor size at 1:1. Sets the sensor readout and the recorded window.");
         else
             MENU_SET_HELP("Film gate. Sets the sensor readout and the recorded window.");
@@ -5136,7 +5154,10 @@ static MENU_UPDATE_FUNC(slim_crop_ar_update)
         return;
     }
     MENU_SET_VALUE("%s", film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].frame);
-    MENU_SET_HELP("Frame inside the %s %s: Actual size or a crop.", film_formats[fmt].name, film_is_video(fmt) ? "sensor" : "gate");
+    if (film_is_cm(fmt))
+        MENU_SET_HELP("Shape of the full-width %s frame.", film_formats[fmt].name);
+    else
+        MENU_SET_HELP("Frame inside the %s %s: Actual size or a crop.", film_formats[fmt].name, film_is_video(fmt) ? "sensor" : "gate");
     MENU_SET_ENABLED(film_formats[fmt].count > 1);
 }
 
@@ -5555,11 +5576,11 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .priv       = &slim_standard_ui,
         .select     = slim_crop_standard_select,
         .update     = slim_crop_standard_update,
-        .max        = 1,
-        .choices    = CHOICES("FILM", "VIDEO"),
+        .max        = 2,
+        .choices    = CHOICES("FILM", "VIDEO", "CROP MOOD"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
-        .help       = "FILM or VIDEO sensor-size formats.",
+        .help       = "FILM, VIDEO sensor-size or CROP MOOD formats.",
     },
     {
         .name       = "Mode",
