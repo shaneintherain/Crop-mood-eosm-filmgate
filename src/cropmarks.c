@@ -23,6 +23,9 @@ static int crop_dirty = 0; // redraw cropmarks after some time (unit: 0.1s)
 
 static int cropmarks_x = -1;
 static int cropmarks_y = -1;
+/* the frame the cropmark mirror was last built for (see film_canvas_paint) */
+static int cropmarks_mirror_x = -1;
+static int cropmarks_mirror_y = -1;
 
 void crop_set_dirty(int value)
 {
@@ -621,11 +624,19 @@ static void FAST default_movie_cropmarks()
             }
         }
     }
+
+    cropmarks_mirror_x = crop_x;
+    cropmarks_mirror_y = crop_y;
 }
 
 int film_canvas_paint(int fill_outside)
 {
     if (cropmarks_x == -1 || cropmarks_y == -1) return 0;
+    /* Only paint the frame the crop marks are actually showing: the mirror must be built
+     * for this very frame (not stale, not about to be rebuilt).  Otherwise the bars painted
+     * here could disagree with the ones the crop marks keep up, and leave stray strips. */
+    if (cropmark_cache_dirty || cropmarks_x != cropmarks_mirror_x || cropmarks_y != cropmarks_mirror_y)
+        return 0;
     if (!bmp_vram()) return 0;
     int x1 = (cropmarks_x >> 16);
     int x2 = (cropmarks_x & 0xFFFF);

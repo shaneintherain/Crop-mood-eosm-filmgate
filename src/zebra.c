@@ -1576,6 +1576,7 @@ static void bvram_mirror_clear()
     ASSERT(bvram_mirror_start);
     BMP_LOCK( bzero32(bvram_mirror_start, BMP_VRAM_SIZE); )
     cropmark_cache_dirty = 1;
+    cropmarks_mirror_x = cropmarks_mirror_y = -1;
 }
 void bvram_mirror_init()
 {
