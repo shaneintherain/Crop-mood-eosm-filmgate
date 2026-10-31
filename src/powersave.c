@@ -6,6 +6,8 @@
 #include "shoot.h"
 #include "bmp.h"
 #include "lens.h"
+#include "cropmarks.h"
+#include "lvinfo.h"
 #include "../modules/crop_rec/crop_rec.h"
 
 /* Canon's powersave timer */
@@ -411,7 +413,16 @@ void idle_kill_flicker()
         clrscr();
         if (is_movie_mode())
         {
-            black_bars_50D();
+            /* With a Live View frame set, put the finished frame straight back (black outside,
+             * frame line, picture inside) instead of plain 16:9 bars: otherwise the picture
+             * shows without its frame bars until the crop marks are redrawn. */
+            if (!RECORDING && lv && (get_global_draw_setting() & 1) && film_canvas_paint(1))
+            {
+                crop_set_dirty(1);
+                lens_display_set_dirty();
+            }
+            else
+                black_bars_50D();
             if (RECORDING) {
                 fill_circle(os.x_max - 12, os.y0 + 28, 10, COLOR_RED);
             }
