@@ -4467,10 +4467,6 @@ static struct menu_entry expo_menus[] = {
         .edit_mode = EM_SHOW_LIVEVIEW,
 #endif
     },
-#ifdef CONFIG_SLIM_MENUS
-    MENU_PLACEHOLDER("Shutter range"),
-    MENU_PLACEHOLDER("Shutter tuning"),
-#endif
     #endif
     #ifdef FEATURE_EXPO_APERTURE
     {
@@ -4628,11 +4624,6 @@ static struct menu_entry expo_menus[] = {
     #endif
 
     MENU_PLACEHOLDER("Dual ISO"),
-#ifdef CONFIG_SLIM_MENUS
-#ifdef FEATURE_EXPO_OVERRIDE
-    MENU_PLACEHOLDER("Expo Override"),
-#endif
-#endif
 };
 
 #ifndef CONFIG_SLIM_MENUS
@@ -6660,6 +6651,10 @@ static void shoot_init()
     set_maindial_sem = create_named_semaphore("set_maindial_sem", 1);
 
     menu_add( "Expo", expo_menus, COUNT(expo_menus) );
+#ifdef CONFIG_SLIM_MENUS
+    /* Exposure page order: ISO, Shutter, Aperture, White Balance */
+    menu_move_entry_after("Expo", "White Balance", "Aperture");
+#endif
 #ifndef CONFIG_SLIM_MENUS
     menu_add( "Movie", expo_menus2, COUNT(expo_menus2) );
     menu_add( "Shoot", shoot_menus, COUNT(shoot_menus) );
@@ -6669,7 +6664,11 @@ static void shoot_init()
 
     #if defined(FEATURE_EXPO_OVERRIDE)
     extern struct menu_entry expo_override_menus[];
+#ifdef CONFIG_SLIM_MENUS
+    menu_add( "Settings", expo_override_menus, 1 );   /* set once: lives on Settings */
+#else
     menu_add( "Expo", expo_override_menus, 1 );
+#endif
     #endif
 
     #if defined(FEATURE_EXPSIM) && !defined(CONFIG_SLIM_MENUS)

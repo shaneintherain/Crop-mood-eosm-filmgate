@@ -64,17 +64,21 @@ typedef struct
     const char *adjust_entry;
 } quick_screen_item_t;
 
-/* Top-right cell is Bit Depth (10 / 12 / 14 bit), adjusted like Frame Rate. */
+/* Cell order follows the Movie tab, then exposure:
+ *   top row:    Format, Frame, FPS, Bits
+ *   bottom row: Shutter, ISO, WB, Aperture */
+enum { QS_FORMAT, QS_FRAME, QS_FPS, QS_BITS, QS_SHUTTER, QS_ISO, QS_WB, QS_APERTURE };
+
 static const quick_screen_item_t quick_screen_items[QUICK_SCREEN_COUNT] =
 {
-    { "Expo",  "White Balance", "Expo",  "White Balance"    },
-    { "Movie", "Mode",          "Movie", "Mode"             },
-    { "Movie", "Aspect Ratio",  "Movie", "Aspect Ratio"     },
-    { "Movie", "Bit Depth",     "Movie", "Bit Depth"        },
-    { "Movie", "Frame Rate",    "Movie", "Frame Rate"       },
-    { "Expo",  "Shutter",       "Expo",  "Shutter"          },
-    { "Expo",  "Aperture",      "Expo",  "Aperture"         },
-    { "Expo",  "ISO",           "Expo",  "ISO"              },
+    [QS_FORMAT]   = { "Movie", "Mode",          "Movie", "Mode"             },
+    [QS_FRAME]    = { "Movie", "Aspect Ratio",  "Movie", "Aspect Ratio"     },
+    [QS_FPS]      = { "Movie", "Frame Rate",    "Movie", "Frame Rate"       },
+    [QS_BITS]     = { "Movie", "Bit Depth",     "Movie", "Bit Depth"        },
+    [QS_SHUTTER]  = { "Expo",  "Shutter",       "Expo",  "Shutter"          },
+    [QS_ISO]      = { "Expo",  "ISO",           "Expo",  "ISO"              },
+    [QS_WB]       = { "Expo",  "White Balance", "Expo",  "White Balance"    },
+    [QS_APERTURE] = { "Expo",  "Aperture",      "Expo",  "Aperture"         },
 };
 
 static void quick_screen_feedback_clear(int timer, void *opaque)
@@ -493,7 +497,7 @@ static int quick_screen_value(
     enabled = info.enabled;
     *draw_degree = 0;
 
-    if (index == 5)
+    if (index == QS_SHUTTER)
     {
         if (quick_screen_shutter_speed)
         {
@@ -512,13 +516,13 @@ static int quick_screen_value(
             *draw_degree = angle[0] != '\0';
         }
     }
-    else if (index == 6)
+    else if (index == QS_APERTURE)
     {
         snprintf(buf, size, "F%s", raw_value);
         if (streq(raw_value, "0.0"))
             enabled = 0;
     }
-    else if (index == 7)
+    else if (index == QS_ISO)
     {
         if (gain_display())
         {
@@ -531,11 +535,11 @@ static int quick_screen_value(
     else
     {
         snprintf(buf, size, "%s", raw_value);
-        if (index == 1 && strstr(buf, "Anamorphic"))
+        if (index == QS_FORMAT && strstr(buf, "Anamorphic"))
             snprintf(buf, size, "A35-ANA");   /* full name is too long for the cell */
-        else if (index == 1 && streq(buf, "Academy 35mm"))
+        else if (index == QS_FORMAT && streq(buf, "Academy 35mm"))
             snprintf(buf, size, "A35");
-        if (index == 2)
+        if (index == QS_FRAME)
         {
             /* Frame cell: "16:9 Crop" -> "16:9" (the word Crop is not needed here) */
             int n = strlen(buf);
@@ -601,10 +605,10 @@ static int quick_screen_adjust(int index, int delta)
         return 0;
 
     quick_screen_feedback = index * 2 + (delta < 0);
-    /* Film Format (cell 1): Up goes towards A35, Down steps to the next smaller film
+    /* Film Format cell: Up goes towards A35, Down steps to the next smaller film
      * (A35 > A35-ANA > S16 > 16mm > S8 > 8mm).  The other cells keep Up = increase. */
     menu_adjust_value_by_name(
-        item->adjust_menu, item->adjust_entry, index == 1 ? -delta : delta);
+        item->adjust_menu, item->adjust_entry, index == QS_FORMAT ? -delta : delta);
     menu_redraw();
     delayed_call(220, quick_screen_feedback_clear, 0);
     delayed_call(500, quick_screen_refresh, 0);
@@ -668,7 +672,8 @@ void menu_quick_screen_draw(void)
         int arrow_color;
         int label_bg = selected ? COLOR_PEN_NAVY : COLOR_PEN_BG;
         static const char * const labels[QUICK_SCREEN_COUNT] =
-            { "WB", "FORMAT", "FRAME", "BITS", "FPS", "SHUTTER", "APERTURE", "ISO" };
+            { [QS_FORMAT] = "FORMAT", [QS_FRAME] = "FRAME", [QS_FPS] = "FPS", [QS_BITS] = "BITS",
+              [QS_SHUTTER] = "SHUTTER", [QS_ISO] = "ISO", [QS_WB] = "WB", [QS_APERTURE] = "APERTURE" };
 
         /* Film Edge cell: thin outline, or the whole box solid cream when selected */
         if (selected)
@@ -788,7 +793,7 @@ int menu_quick_screen_handle_touch(int x, int y)
         width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value) +
                 (draw_degree ? 12 : 0);
         text_x = cx - width / 2;
-        if (index == 5 &&
+        if (index == QS_SHUTTER &&
             x >= text_x && x <= text_x + width &&
             y >= value_y && y < down_tip_y - 40)
         {
@@ -799,7 +804,7 @@ int menu_quick_screen_handle_touch(int x, int y)
             menu_redraw();
             return 0;
         }
-        if (index == 0 &&
+        if (index == QS_WB &&
             x >= text_x && x <= text_x + width &&
             y >= value_y && y <= value_y + text_h)
         {

@@ -310,7 +310,10 @@ static void shutter_lock_step()
             is_menu_entry_selected("Expo", "Shutter tuning") ||
             is_menu_entry_selected("Movie", "Shutter fine-tuning") ||
             is_menu_entry_selected("Expo", "Shutter fine-tuning") ||
-            is_menu_entry_selected("Expo", "Expo override");
+            is_menu_entry_selected("Expo", "Expo override") ||
+            is_menu_entry_selected("Settings", "Shutter range") ||
+            is_menu_entry_selected("Settings", "Shutter tuning") ||
+            is_menu_entry_selected("Settings", "Expo Override");
 #ifdef CONFIG_EOSM
         if (exposure_menu)
             shutter_lock_value = shutter;

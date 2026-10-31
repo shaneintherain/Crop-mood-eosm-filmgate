@@ -1135,7 +1135,7 @@ static struct menu_entry dbg_menu[] = {
 static void lv_img_init()
 {
 #ifdef CONFIG_SLIM_MENUS
-    menu_add( "Expo", lv_img_menu, COUNT(lv_img_menu) );
+    menu_add( "Settings", lv_img_menu, COUNT(lv_img_menu) );   /* Shutter tuning: set once */
 #else
     menu_add( "Movie", lv_img_menu, COUNT(lv_img_menu) );
 #endif
