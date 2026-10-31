@@ -689,6 +689,9 @@ static int film_frame_possible(void)
             ext_monitor_hdmi /* any other HDMI mode (720p ...): generic placement, not measured */);
 }
 
+/* raw rows the recorded window sits higher than the centred frame at 48 fps (958-row readout), negative = up */
+#define FILM_48FPS_UP_ROWS_958 (-39)
+
 static int film_frame_rect(int * x, int * y, int * w, int * h)
 {
     if (!film_frame_possible())
@@ -703,8 +706,22 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
     int nh = res_y * kn / kd;
 
+    /* 48 fps (A35 frames) reads a shorter sensor readout than the 1160-row one the scales above were
+     * measured on, and the recorded window sits higher in it.  Measured on the camera: white boxes
+     * lined up with the LCD outline at 48 fps and recorded; with the outline moved up 21 rows the
+     * recorded box still sat 12 (16:9) and 24 (1.85:1) rows above the frame centre, so 18 more rows up
+     * (-39 in total).  2.35:1 (738-row readout) was only 4 rows off, inside the measuring error, so it
+     * is left at 0. */
+    int dy_rows = 0;
+    if (film_frames[f].readout == FILM_RO_3X3)
+    {
+        int fps = fps_get_current_x1000();
+        if (fps > 47000 && fps < 49000 && res_y > 738)
+            dy_rows = FILM_48FPS_UP_ROWS_958;
+    }
+
     *x = N2BM_X(360 - nw / 2);
-    *y = N2BM_Y(240 - nh / 2);
+    *y = N2BM_Y(240 - nh / 2 + dy_rows * kn / kd);
     *w = N2BM_X(nw) - N2BM_X(0);
     *h = N2BM_Y(nh) - N2BM_Y(0);
     return 1;
