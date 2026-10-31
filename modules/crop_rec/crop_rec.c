@@ -4515,11 +4515,12 @@ int crop_rec_shutter_record()
     return is_EOSM && Shutter_rec;
 }
 
-/* 1 when the active recording format is one of the FILM standard formats (shutter shown as an angle) */
+/* 1 when the active recording format is one of the FILM standard formats (shutter shown as an angle).
+ * VIDEO shows Gain, CROP MOOD shows ISO and shutter speed, as in the original Crop Mood. */
 int crop_rec_film_standard()
 {
     int fmt = slim_film_active();
-    return fmt >= 0 && !film_is_video(fmt);
+    return fmt >= 0 && film_standard(fmt) == 0;
 }
 
 /* 1 when the active recording format is one of the VIDEO standard sizes (ISO is shown as Gain) */
