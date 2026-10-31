@@ -483,6 +483,12 @@ static void draw_meters(void)
         return;
     }
 
+    /* While the top bar is being laid out again (e.g. when recording starts), the position
+     * can briefly be off the left edge.  On HDMI that area is visible and never cleared, so a
+     * frozen copy of the meters stayed there.  Only draw inside the screen. */
+    if (x0 < 0 || x0 + width > 720)
+        return;
+
     if (audio_tc_mode())
     {
         draw_timecode(x0, y0, width);

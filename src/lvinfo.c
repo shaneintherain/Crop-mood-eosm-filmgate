@@ -794,9 +794,9 @@ void lvinfo_display(int top, int bottom)
             if (RECORDING)
             {
                 const int bx = TOTAL_WIDTH - 44, by = top_y, bw = 44, bh = 44;
-                /* With a film frame on screen, the block is black only outside the frame:
-                 * the frame line and the picture inside it are put back as they were. */
-                if (film_canvas_restore_area(bx, by, bw, bh)) { } else {
+                /* Bar rows: black, like the rest of the bar (as in standby).  Below the bar,
+                 * where Canon's dot would show: the frame as it is (line + picture). */
+                if (film_canvas_restore_area(bx, by + 32, bw, bh - 32)) { bmp_fill(COLOR_BLACK, bx, by, bw, 32); } else {
                 bmp_fill(COLOR_BLACK, bx, by, bw, bh);
                 /* The block can cut through the white frame line: find where the line
                  * enters the block (left side and bottom side, checked at three points
