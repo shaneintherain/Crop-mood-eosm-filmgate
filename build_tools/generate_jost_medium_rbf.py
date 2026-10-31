@@ -34,6 +34,8 @@ PROFILES = {
     # play icon, ...) are copied from the stock font, since Jost has no such pictures.
     "medlarge": ("jost-medlarge.rbf", b"Barlow SC MedLarge EOSM", 28, 27, 28, 13, "argnor28.rbf"),
     "large": ("jost-large.rbf", b"Barlow SC Large EOSM", 32, 31, 34, 14, "argnor32.rbf"),
+    # Quick Menu values: large, loaded privately (not a font slot), 46 px cell
+    "quick": ("barlow-quick.rbf", b"Barlow SC Quick EOSM", 46, 42, 40, 20),
 }
 
 

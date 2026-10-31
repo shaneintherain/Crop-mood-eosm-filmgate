@@ -11,6 +11,7 @@
 #include "shoot.h"
 #include "fps.h"
 #include "slim-font.h"
+#include "rbf_font.h"
 
 extern void lens_display_set_dirty(void);
 
@@ -733,6 +734,26 @@ void menu_quick_screen_draw(void)
             FONT(FONT_SMALL, selected ? UI_SEL_TEXT : UI_DIM, label_bg),
             cx - (int)strlen(labels[index]) * 4, box_y + 6, "%s", labels[index]);
 
+        /* Values in the large Quick Menu font when it is loaded and the value fits;
+         * otherwise the menu font, and a smaller one for values that are still too long. */
+        font * qf = rbf_quick_value_font();
+        int qw = qf ? rbf_str_width(qf, value) : 0;
+        if (qf && qw + (draw_degree ? 16 : 0) <= box_w - 8)
+        {
+            width = qw;
+            value_x = cx - (width + (draw_degree ? 16 : 0)) / 2;
+            /* cap centre of this font is row 20; the menu font's is row 18 at value_y */
+            rbf_draw_string(qf, value_x, value_y - 2, value, FONT(0, color, tile_bg));
+            if (draw_degree)
+            {
+                int degree_x = value_x + width + 8;
+                int degree_y = value_y + 10;
+                draw_circle(degree_x, degree_y, 5, color);
+                draw_circle(degree_x, degree_y, 4, color);
+            }
+        }
+        else
+        {
         width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value);
         value_x = cx - (width + (draw_degree ? 12 : 0)) / 2;
         if (width > box_w - 8)
@@ -753,6 +774,7 @@ void menu_quick_screen_draw(void)
             int degree_y = value_y + 7;
             draw_circle(degree_x, degree_y, 4, color);
             draw_circle(degree_x, degree_y, 3, color);
+        }
         }
         quick_screen_arrow(cx, up_tip_y, 1,
             !enabled ? arrow_color :
@@ -831,8 +853,16 @@ int menu_quick_screen_handle_touch(int x, int y)
             index, &cx, &value_y, &up_tip_y, &down_tip_y);
         quick_screen_value(
             index, value, sizeof(value), &draw_degree);
-        width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value) +
-                (draw_degree ? 12 : 0);
+        {
+            /* same font choice as menu_quick_screen_draw() */
+            font * qf = rbf_quick_value_font();
+            int qw = qf ? rbf_str_width(qf, value) + (draw_degree ? 16 : 0) : 0;
+            if (qf && qw <= QUICK_SCREEN_CELL_W - 20)
+                width = qw;
+            else
+                width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value) +
+                        (draw_degree ? 12 : 0);
+        }
         text_x = cx - width / 2;
         if (index == QS_SHUTTER &&
             x >= text_x && x <= text_x + width &&

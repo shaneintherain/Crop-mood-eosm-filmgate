@@ -6453,60 +6453,21 @@ handle_ml_menu_keys(struct event * event)
 #endif
     
 #ifdef CONFIG_SLIM_MENUS
-    /* Tab strip with the D-pad: Up on the first row moves onto the tabs; there Left/Right
-     * switch pages and Down / SET go back to the rows. */
+    /* Page switching: turning the rear wheel left/right shows the previous/next page
+     * (Exposure, Monitoring, Movie, Settings).  The D-pad Left/Right still change the
+     * selected value, Up/Down move through the rows (wrapping at the top and bottom).
+     * Touching a page name in the tab strip also works. */
     if (menu_grid_is_launched() && slim_tab_current >= 0 && !submenu_level && !edit_mode &&
-        !menu_lv_transparent_mode && !menu_help_active)
+        !menu_lv_transparent_mode && !menu_help_active &&
+        (button_code == BGMT_WHEEL_LEFT || button_code == BGMT_WHEEL_RIGHT))
     {
-        if (slim_tab_focus)
-        {
-            int n = menu_grid_page_count();
-            switch (button_code)
-            {
-                case BGMT_PRESS_LEFT:
-                case BGMT_WHEEL_LEFT:
-                    menu_grid_switch_page((slim_tab_current + n - 1) % n);
-                    menu_redraw_full();
-                    keyrepeat_ack(button_code);
-                    return 0;
-                case BGMT_PRESS_RIGHT:
-                case BGMT_WHEEL_RIGHT:
-                    menu_grid_switch_page((slim_tab_current + 1) % n);
-                    menu_redraw_full();
-                    keyrepeat_ack(button_code);
-                    return 0;
-                case BGMT_PRESS_DOWN:
-                case BGMT_WHEEL_DOWN:
-                case BGMT_PRESS_SET:
-                    slim_tab_focus = 0;
-                    menu_redraw_full();
-                    keyrepeat_ack(button_code);
-                    return 0;
-                case BGMT_PRESS_UP:
-                case BGMT_WHEEL_UP:
-                    keyrepeat_ack(button_code);
-                    return 0;
-                default:
-                    /* any other button leaves the tab strip and works as usual */
-                    slim_tab_focus = 0;
-                    menu_damage = 1;
-                    break;
-            }
-        }
-        else if (button_code == BGMT_PRESS_UP || button_code == BGMT_WHEEL_UP)
-        {
-            struct menu_entry * first = menu ? menu->children : 0;
-            while (first && !entry_is_slim_navigable(first))
-                first = first->next;
-            struct menu_entry * cur = get_selected_menu_entry(menu);
-            if (!first || cur == first)
-            {
-                slim_tab_focus = 1;
-                menu_redraw_full();
-                keyrepeat_ack(button_code);
-                return 0;
-            }
-        }
+        int n = menu_grid_page_count();
+        int d = (button_code == BGMT_WHEEL_RIGHT) ? 1 : n - 1;
+        slim_tab_focus = 0;
+        menu_grid_switch_page((slim_tab_current + d) % n);
+        menu_redraw_full();
+        keyrepeat_ack(button_code);
+        return 0;
     }
 #endif
 

@@ -1594,6 +1594,16 @@ lens_set_kelvin(int k)
     msleep(20);
 }
 
+/* Auto white balance (the AUTO step between 15000K and 1500K in the menus) */
+void
+lens_set_wb_auto(void)
+{
+    int mode = WB_AUTO;
+    prop_request_change(PROP_WB_MODE_LV, &mode, 4);
+    prop_request_change(PROP_WB_MODE_PH, &mode, 4);
+    msleep(20);
+}
+
 void
 lens_set_kelvin_value_only(int k)
 {
