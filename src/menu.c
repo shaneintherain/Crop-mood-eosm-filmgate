@@ -4688,12 +4688,6 @@ show_vscroll(struct menu * parent){
     if (edit_mode)
         return;
 
-#ifdef CONFIG_SLIM_MENUS
-    /* Movie page: no vertical scroll indicator (list still scrolls). */
-    if (parent && parent->name && streq(parent->name, "Movie")
-        && menu_grid_is_launched() && !submenu_level)
-        return;
-#endif
     
     int pos = get_menu_selected_pos(parent);
     int max = get_menu_visible_count(parent);
