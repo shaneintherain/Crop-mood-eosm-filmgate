@@ -9,6 +9,8 @@
 #include "propvalues.h"
 #include "state-object.h"
 #include "powersave.h"
+#include "cropmarks.h"
+#include "shoot.h"
 
 #if 0 /* superseded by the color startup bitmap below */
 struct boot_logo_span { uint16_t y; uint16_t x; uint16_t width; };
@@ -1721,7 +1723,15 @@ static void boot_logo_task(void *unused)
         while (boot_logo_hud_mask != 3 && get_ms_clock() < hud_deadline)
             msleep(20);
         boot_logo_handoff_pending = 0;
-        BMP_LOCK( boot_logo_release_canvas(); )
+        /* Hand over straight to the Live View frame when there is one (black outside, frame
+         * line, picture inside), so the picture never shows without its frame bars. */
+        int painted = 0;
+        if (lv && is_movie_mode() && (get_global_draw_setting() & 1))
+        {
+            BMP_LOCK( painted = film_canvas_paint(0); )
+        }
+        if (!painted)
+            BMP_LOCK( boot_logo_release_canvas(); )
         boot_logo_active = 0;
 #ifdef CONFIG_KILL_FLICKER
         /* keep Canon's overlay layer off while Live View finishes settling, the same as after
@@ -1733,7 +1743,17 @@ static void boot_logo_task(void *unused)
          * bars); redraw like closing a menu does.  Not during power-off, and not if a
          * recording was started while the splash was still up. */
         if (!ml_shutdown_requested && !RECORDING)
-            redraw();
+        {
+            if (painted)
+            {
+                /* no clear-and-redraw: ML's layers draw on top of the painted frame */
+                crop_set_dirty(1);
+                lens_display_set_dirty();
+                menu_set_dirty();
+            }
+            else
+                redraw();
+        }
     }
 }
 

@@ -623,6 +623,33 @@ static void FAST default_movie_cropmarks()
     }
 }
 
+int film_canvas_paint(int fill_outside)
+{
+    if (cropmarks_x == -1 || cropmarks_y == -1) return 0;
+    if (!bmp_vram()) return 0;
+    int x1 = (cropmarks_x >> 16);
+    int x2 = (cropmarks_x & 0xFFFF);
+    int y1 = (cropmarks_y >> 16);
+    int y2 = (cropmarks_y & 0xFFFF);
+    if (x2 <= x1 || y2 <= y1) return 0;
+
+    if (fill_outside)
+    {
+        /* same area the Kill Global Draw bars cover (includes the HDMI margins) */
+        bmp_fill(COLOR_BLACK, BMP_W_MINUS, BMP_H_MINUS, BMP_W_PLUS - BMP_W_MINUS, y1 - BMP_H_MINUS);
+        bmp_fill(COLOR_BLACK, BMP_W_MINUS, y2 + 1, BMP_W_PLUS - BMP_W_MINUS, BMP_H_PLUS - y2 - 1);
+        bmp_fill(COLOR_BLACK, BMP_W_MINUS, y1, x1 - BMP_W_MINUS, y2 - y1 + 1);
+        bmp_fill(COLOR_BLACK, x2 + 1, y1, BMP_W_PLUS - x2 - 1, y2 - y1 + 1);
+    }
+    /* the picture area: transparent, so Live View shows */
+    bmp_fill(COLOR_EMPTY, x1, y1, x2 - x1 + 1, y2 - y1 + 1);
+    /* the frame line exactly as default_movie_cropmarks() draws it: 2 px just outside */
+    /* (bmp_draw_rect covers x0 .. x0 + w - 1, like bmp_fill) */
+    bmp_draw_rect(COLOR_WHITE, x1 - 1, y1 - 1, x2 - x1 + 3, y2 - y1 + 3);
+    bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 5, y2 - y1 + 5);
+    return 1;
+}
+
 void set_movie_cropmarks(int x, int y, int w, int h)
 {
     x = COERCE(x, os.x0+1, os.x_max-1);

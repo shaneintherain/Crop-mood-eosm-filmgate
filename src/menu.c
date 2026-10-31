@@ -40,6 +40,8 @@
 #include "debug.h"
 #include "lvinfo.h"
 #include "powersave.h"
+#include "cropmarks.h"
+#include "shoot.h"
 #include "gui-common.h"
 #include "module.h"
 #include "slim-font.h"
@@ -7193,6 +7195,31 @@ static void menu_close()
     menu_lv_transparent_mode = 0;
     
     close_canon_menu();
+#if defined(CONFIG_SLIM_MENUS) && defined(CONFIG_KILL_FLICKER)
+    /* x5 movie presets with Global Draw on: hand the screen straight back to the Live View
+     * frame (black outside, frame line, picture inside) instead of clearing it and letting
+     * Canon redraw its Live View screen first, which flashed the x5 box / arrows and the
+     * picture without its frame bars. */
+    {
+        extern int kill_canon_gui_mode;
+        int painted = 0;
+        if (lv && is_movie_mode() && !RECORDING && kill_canon_gui_mode == 1 &&
+            lv_disp_mode == 0 && (get_global_draw_setting() & 1))
+        {
+            BMP_LOCK( painted = film_canvas_paint(1); )
+        }
+        if (painted)
+        {
+            /* Canon's overlay layer stays off; ML redraws its own layers on top */
+            crop_set_dirty(1);
+            lens_display_set_dirty();
+            afframe_set_dirty();
+            bmp_on();
+            idle_kill_flicker_after_menu();
+            return;
+        }
+    }
+#endif
     canon_gui_enable_front_buffer(0);
     redraw();
     if (lv) bmp_on();
