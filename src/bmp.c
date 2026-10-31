@@ -362,8 +362,10 @@ bmp_fill(
 
     x = COERCE(x, BMP_W_MINUS, BMP_W_PLUS-1);
     y = COERCE(y, BMP_H_MINUS, BMP_H_PLUS-1);
-    w = COERCE(w, 0, BMP_W_PLUS-x-1);
-    h = COERCE(h, 0, BMP_H_PLUS-y-1);
+    /* up to and including the last column / row (BMP_W_PLUS-1, BMP_H_PLUS-1); the old "-1" here
+     * left the bottom row of the HDMI bitmap unpainted, so the picture showed through it */
+    w = COERCE(w, 0, BMP_W_PLUS-x);
+    h = COERCE(h, 0, BMP_H_PLUS-y);
 
     uint8_t* b = bmp_vram();
 
