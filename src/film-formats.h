@@ -97,9 +97,9 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     { "8mm 16:9 Crop",      1040,  584, "8mm gate width, cropped to 16:9",   "1:1 3:2 1920x1280", "16:9 Crop", FILM_RO_1280 },
     /* ---- VIDEO standard: video sensor sizes at 1:1 pixel scale (4.30 um per pixel) ---- */
     /* 1" type (13.2 x 8.8 mm, 3:2), in 1x3 (1:1 cannot read that many rows of that width at 24 fps):
-     * 16:9 uses the full width (1024 x 3 = 3072), 4:3 the full height (8.8 mm) with the sides cropped */
+     * full width, 1024 x 3 = 3072 (0.01 mm over 13.2 mm) */
+    { "1\" Actual",         1024, 2046, "1\" sensor (13.2 x 8.8 mm), 3:2 (1x3: 3072x2046)",            "1x3 2.35:1 1736x2214", "Actual",    FILM_RO_1X3 },
     { "1\" 16:9 Crop",      1024, 1728, "1\" sensor width (13.2 mm), cropped to 16:9 (1x3: 3072x1728)", "1x3 2.35:1 1736x2214", "16:9 Crop", FILM_RO_1X3 },
-    { "1\" 4:3 Crop",        912, 2044, "1\" sensor height (8.8 mm), cropped to 4:3 (1x3: 2736x2044)",  "1x3 2.35:1 1736x2214", "4:3 Crop",  FILM_RO_1X3 },
     /* 2/3" (8.8 x 6.6 mm) */
     { "2/3\" 16:9 Crop",    2032, 1144, "2/3\" sensor width (8.8 mm), cropped to 16:9",   "1:1 16:9 2560x1440",  "16:9 Crop",  FILM_RO_1440 },
     { "2/3\" 4:3",          2032, 1536, "2/3\" sensor (8.8 x 6.6 mm), 4:3",              "1:1 4:3 2160x1620",   "4:3",        FILM_RO_1620 },

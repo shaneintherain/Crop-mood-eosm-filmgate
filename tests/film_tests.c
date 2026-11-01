@@ -101,9 +101,9 @@ int main(void)
         for (int k = 0; k < film_formats[f].count; k++)
         {
             const struct film_frame * fr = &film_frames[film_formats[f].first + k];
-            /* video sizes are 16:9, 4:3, 1.85:1 or 2.35:1 */
+            /* video sizes are 16:9, 4:3, 3:2 (1" Actual), 1.85:1 or 2.35:1 */
             int r1000 = film_frame_desq_w(film_formats[f].first + k) * 1000 / fr->h;
-            CHECK((r1000 > 1740 && r1000 < 1790) || (r1000 > 1320 && r1000 < 1355) ||
+            CHECK((r1000 > 1740 && r1000 < 1790) || (r1000 > 1320 && r1000 < 1355) || (r1000 > 1490 && r1000 < 1510) ||
                   (r1000 > 1840 && r1000 < 1870) || (r1000 > 2330 && r1000 < 2360),
                   "video frame %s: odd aspect ratio %d/1000", fr->name, r1000);
             /* none of them may need more than the physical sensor: 4.30 um per pixel (1" type is 13.2 mm = 3069 px;
@@ -159,7 +159,7 @@ int main(void)
         CHECK(film_pick(FILM_RO_3K, 2, 0, &fr) == 2 && fr == 3, "S16 on 3K: saved 1x3 frame repaired to 2.35:1");
         CHECK(film_pick(FILM_RO_1X3, 2, 2, &fr) == 2 && fr == 2, "S16 1.85:1 (1x3) is kept on the 1x3 readout");
         CHECK(film_pick(FILM_RO_1X3, 3, 2, &fr) == 3 && fr == 0, "16mm on 1x3: saved 1:1 frame repaired to Actual");
-        CHECK(film_pick(FILM_RO_1X3, 6, 1, &fr) == 6 && fr == 1, "1\" 4:3 is kept on the 1x3 readout");
+        CHECK(film_pick(FILM_RO_1X3, 6, 1, &fr) == 6 && fr == 1, "1\" 16:9 is kept on the 1x3 readout");
         CHECK(film_pick(FILM_RO_1620, 7, 0, &fr) == 7 && fr == 1, "1620p -> 2/3\" 4:3");
         CHECK(film_pick(FILM_RO_1440, 7, 1, &fr) == 7 && fr == 0, "1440p from 2/3\" 4:3 -> 2/3\" 16:9");
         CHECK(film_pick(FILM_RO_1280, 2, 0, &fr) == 4 && fr == 0, "1280p from S16 -> S8");
