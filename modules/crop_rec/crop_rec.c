@@ -4524,6 +4524,29 @@ int crop_rec_film_standard()
     return fmt >= 0 && film_standard(fmt) == 0;
 }
 
+static void slim_crop_sync_from_backend(void);
+
+/* Bottom bar of the Movie menu: sampling of the frame picked in the menu, and the stretch needed in post */
+int crop_rec_menu_footer(char * buf, int size)
+{
+    if (!buf || size <= 0)
+        return 0;
+    slim_crop_sync_from_backend();
+    int fmt = slim_film_sync();
+    if (fmt < 0)
+        return 0;
+    int frame = slim_film_frame_get(fmt);
+    int i = film_frame_index(fmt, frame);
+    int ro = film_frames[i].readout;
+    if (film_readouts[ro].bin_x > 1)
+        snprintf(buf, size, "1x3 sampling  -  stretch 3x horizontally in post  (file %dx%d)", film_frames[i].w, film_frames[i].h);
+    else if (fmt == 1)  /* A35 Anamorphic: the lens squeezes, not the sensor */
+        snprintf(buf, size, "3x3 sampling  -  stretch %s horizontally in post (anamorphic lens)", frame == 0 ? "2x" : "1.33x");
+    else
+        snprintf(buf, size, "%s sampling  -  no stretch needed", ro == FILM_RO_3X3 ? "3x3" : "1:1");
+    return 1;
+}
+
 /* 1 when the active recording format is one of the VIDEO standard sizes (ISO is shown as Gain) */
 int crop_rec_video_standard()
 {
@@ -5572,6 +5595,7 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
     (void *)&crop_rec_film_format,
     (void *)&crop_rec_film_standard,
     (void *)&crop_rec_video_standard,
+    (void *)&crop_rec_menu_footer,
     (void *)&crop_rec_shutter_record,
     (void *)&crop_rec_lv_transition_busy,
     (void *)&crop_rec_lv_transition_diag,

@@ -2590,6 +2590,23 @@ static void submenu_key_hint(int x, int y, int fg, int bg, int chr)
     bfnt_draw_char(chr, x, y-5, fg, NO_BG_ERASE);
 }
 
+#ifdef CONFIG_SLIM_MENUS
+/* crop_rec: one line about the selected Film Format frame (sampling, stretch in post) */
+static int (*crop_rec_menu_footer)(char * buf, int size) = MODULE_FUNCTION(crop_rec_menu_footer);
+
+static void menu_draw_movie_footer()
+{
+    char note[96];
+    note[0] = 0;
+    if (!crop_rec_menu_footer || !crop_rec_menu_footer(note, sizeof(note)) || !note[0])
+        return;
+    int fnt = FONT(FONT_MED, UI_MUTED, MENU_BG_COLOR_HEADER_FOOTER);
+    if (bmp_string_width(fnt, note) > 700)
+        fnt |= FONT_ALIGN_JUSTIFIED | FONT_TEXT_WIDTH(700);
+    bmp_printf(fnt, 12, 444, "%s", note);
+}
+#endif
+
 static void menu_clean_footer()
 {
 #ifdef CONFIG_SLIM_MENUS
@@ -4199,7 +4216,14 @@ menu_display(
     //<== vscroll
 
     if (!menu_lv_transparent_mode)
+    {
         menu_clean_footer();
+#ifdef CONFIG_SLIM_MENUS
+        /* Movie page: small grey note in the empty bar at the bottom (sampling, stretch in post) */
+        if (!submenu_level && menu_grid_is_launched() && menu->name && streq(menu->name, "Movie"))
+            menu_draw_movie_footer();
+#endif
+    }
 
     for (int i = 0; i < num_visible && entry; )
     {
