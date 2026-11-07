@@ -87,16 +87,16 @@ int main(void)
         }
 
     /* the two standards */
-    CHECK(FILM_FILM_COUNT == 6 && FILM_VIDEO_COUNT == 6 && FILM_FORMAT_COUNT == 14, "6 FILM + 6 VIDEO + 2 CROP MOOD formats expected");
-    CHECK(!film_is_video(0) && !film_is_video(5) && film_is_video(6) && film_is_video(11) && !film_is_video(12) && !film_is_video(13), "film_is_video boundaries");
-    CHECK(!film_is_cm(11) && film_is_cm(12) && film_is_cm(13), "film_is_cm boundaries");
-    CHECK(film_standard(0) == 0 && film_standard(6) == 1 && film_standard(12) == 2, "film_standard");
+    CHECK(FILM_FILM_COUNT == 6 && FILM_VIDEO_COUNT == 5 && FILM_FORMAT_COUNT == 13, "6 FILM + 5 VIDEO + 2 CROP MOOD formats expected");
+    CHECK(!film_is_video(0) && !film_is_video(5) && film_is_video(6) && film_is_video(10) && !film_is_video(11) && !film_is_video(12), "film_is_video boundaries");
+    CHECK(!film_is_cm(10) && film_is_cm(11) && film_is_cm(12), "film_is_cm boundaries");
+    CHECK(film_standard(0) == 0 && film_standard(6) == 1 && film_standard(11) == 2, "film_standard");
     /* CROP MOOD: full sensor width only (3x3 and 1x3 both read 1736 columns = 5208 / 3) */
     for (int f = FILM_CM_FIRST; f < FILM_FORMAT_COUNT; f++)
         for (int k = 0; k < film_formats[f].count; k++)
             CHECK(film_frames[film_formats[f].first + k].w == 1736, "CROP MOOD frame %s is not full width", film_frames[film_formats[f].first + k].name);
-    CHECK(film_formats[12].count == 3 && film_formats[13].count == 1, "CROP MOOD: 3x3 has 3:2 / 16:9 / 2.35:1, 1x3 has 2.35:1");
-    CHECK(film_frames[film_formats[13].first].readout == FILM_RO_1X3, "1x3 uses the 1x3 readout");
+    CHECK(film_formats[11].count == 3 && film_formats[12].count == 1, "CROP MOOD: 3x3 has 3:2 / 16:9 / 2.35:1, 1x3 has 2.35:1");
+    CHECK(film_frames[film_formats[12].first].readout == FILM_RO_1X3, "1x3 uses the 1x3 readout");
     for (int f = FILM_FILM_COUNT; f < FILM_CM_FIRST; f++)
         for (int k = 0; k < film_formats[f].count; k++)
         {
@@ -133,8 +133,8 @@ int main(void)
             CHECK(n == f && __builtin_popcount(seen) == count, "film_step lap from %d (dir %d) does not cover the standard", f, dir);
         }
     CHECK(film_step(5, 1) == 0 && film_step(0, -1) == 5, "FILM list wraps A35 <-> 8mm");
-    CHECK(film_step(11, 1) == 6 && film_step(6, -1) == 11, "VIDEO list wraps 1\" <-> 1/4\"");
-    CHECK(film_step(12, 1) == 13 && film_step(13, 1) == 12 && film_step(12, -1) == 13, "CROP MOOD list: 3x3 <-> 1x3");
+    CHECK(film_step(10, 1) == 6 && film_step(6, -1) == 10, "VIDEO list wraps 1\" <-> 1/4\"");
+    CHECK(film_step(11, 1) == 12 && film_step(12, 1) == 11 && film_step(11, -1) == 12, "CROP MOOD list: 3x3 <-> 1x3");
 
     /* film_pick(): readout -> format and frame */
     {
@@ -146,28 +146,27 @@ int main(void)
         CHECK(film_pick(FILM_RO_3X3, 0, 2, &fr) == 0 && fr == 2, "A35 frame 2 is kept");
         CHECK(film_pick(FILM_RO_1280, 5, 1, &fr) == 5 && fr == 1, "8mm is kept on 1280p");
         CHECK(film_pick(FILM_RO_1280, 8, 1, &fr) == 8 && fr == 1, "1/2\" 4:3 is kept on 1280p");
-        CHECK(film_pick(FILM_RO_25K, 9, 1, &fr) == 9 && fr == 1, "1/2.3\" 4:3 is kept on 2.5K");
+        CHECK(film_pick(FILM_RO_25K, 9, 1, &fr) == 9 && fr == 1, "1/3\" 4:3 is kept on 2.5K");
         /* a stored frame from another readout is repaired */
         CHECK(film_pick(FILM_RO_1280, 7, 0, &fr) == 4 && fr == 0, "2/3\" cannot use 1280p: first format that can (S8)");
         CHECK(film_pick(FILM_RO_1280, 8, 0, &fr) == 8 && fr == 0, "1/2\" 16:9 is kept on 1280p");
-        CHECK(film_pick(FILM_RO_25K, 8, 1, &fr) == 9 && fr == 0, "1/2\" has no 2.5K frame: 2.5K -> 1/2.3\" 16:9");
+        CHECK(film_pick(FILM_RO_25K, 8, 1, &fr) == 9 && fr == 0, "1/2\" has no 2.5K frame: 2.5K -> 1/3\" 16:9");
         CHECK(film_pick(FILM_RO_1440, 7, 5, &fr) == 7 && fr == 0, "2/3\" on 1440p must be its 16:9 frame (it has no other)");
         /* a format that cannot use the readout is replaced by the first one that can */
-        CHECK(film_pick(FILM_RO_3K, 3, 0, &fr) == 2 && fr == 3, "3K from 16mm -> S16 2.35:1");
-        CHECK(film_pick(FILM_RO_3K, 9, 0, &fr) == 2 && fr == 3, "3K from 1/2.3\" -> S16 2.35:1 (the only 3K frame)");
-        CHECK(film_pick(FILM_RO_3K, 6, 0, &fr) == 2 && fr == 3, "1\" has no 3K frame any more: 3K -> S16 2.35:1");
-        CHECK(film_pick(FILM_RO_3K, 2, 0, &fr) == 2 && fr == 3, "S16 on 3K: saved 1x3 frame repaired to 2.35:1");
+        CHECK(film_pick(FILM_RO_28K, 3, 0, &fr) == 2 && fr == 3, "2.8K from 16mm -> S16 2.35:1");
+        CHECK(film_pick(FILM_RO_28K, 9, 0, &fr) == 2 && fr == 3, "2.8K from 1/3\" -> S16 2.35:1 (the only 2.8K frame)");
+        CHECK(film_pick(FILM_RO_28K, 2, 0, &fr) == 2 && fr == 3, "S16 on 2.8K: saved 1x3 frame repaired to 2.35:1");
         CHECK(film_pick(FILM_RO_1X3, 2, 2, &fr) == 2 && fr == 2, "S16 1.85:1 (1x3) is kept on the 1x3 readout");
         CHECK(film_pick(FILM_RO_1X3, 3, 2, &fr) == 3 && fr == 0, "16mm on 1x3: saved 1:1 frame repaired to Actual");
         CHECK(film_pick(FILM_RO_1X3, 6, 1, &fr) == 6 && fr == 1, "1\" 16:9 is kept on the 1x3 readout");
         CHECK(film_pick(FILM_RO_1620, 7, 0, &fr) == 7 && fr == 1, "1620p -> 2/3\" 4:3");
         CHECK(film_pick(FILM_RO_1440, 7, 1, &fr) == 7 && fr == 0, "1440p from 2/3\" 4:3 -> 2/3\" 16:9");
         CHECK(film_pick(FILM_RO_1280, 2, 0, &fr) == 4 && fr == 0, "1280p from S16 -> S8");
-        CHECK(film_pick(FILM_RO_25K, 0, 0, &fr) == 9 && fr == 0, "2.5K from A35 -> 1/2.3\" 16:9");
-        CHECK(film_pick(FILM_RO_3X3, 12, 2, &fr) == 12 && fr == 2, "CROP MOOD 3x3 2.35:1 is kept on the 3x3 readout");
-        CHECK(film_pick(FILM_RO_3X3, 13, 0, &fr) == 0 && fr == 0, "3x3 readout from 1x3 -> A35");
+        CHECK(film_pick(FILM_RO_25K, 0, 0, &fr) == 9 && fr == 0, "2.5K from A35 -> 1/3\" 16:9");
+        CHECK(film_pick(FILM_RO_3X3, 11, 2, &fr) == 11 && fr == 2, "CROP MOOD 3x3 2.35:1 is kept on the 3x3 readout");
+        CHECK(film_pick(FILM_RO_3X3, 12, 0, &fr) == 0 && fr == 0, "3x3 readout from 1x3 -> A35");
         CHECK(film_pick(FILM_RO_1X3, 0, 0, &fr) == 2 && fr == 0, "1x3 readout from A35 -> S16 Actual (first format with it)");
-        CHECK(film_pick(FILM_RO_1X3, 13, 0, &fr) == 13 && fr == 0, "CROP MOOD 1x3 is kept on the 1x3 readout");
+        CHECK(film_pick(FILM_RO_1X3, 12, 0, &fr) == 12 && fr == 0, "CROP MOOD 1x3 is kept on the 1x3 readout");
         /* every frame of every format maps back to itself */
         for (int f = 0; f < FILM_FORMAT_COUNT; f++)
             for (int k = 0; k < film_formats[f].count; k++)
@@ -176,9 +175,12 @@ int main(void)
                 int got = film_pick(ro, f, k, &fr);
                 CHECK(got == f && fr == k, "frame %d of format %d does not map back to itself (got %d/%d)", k, f, got, fr);
             }
-        /* no readout is left without a format */
+        /* no readout is left without a format, except 3K (S16 2.35:1 moved to 2.8K; 3K is a plain
+         * crop_rec mode again) */
         for (int ro = 0; ro < FILM_RO_COUNT; ro++)
-            CHECK(film_pick(ro, 0, 0, &fr) >= 0, "readout %d belongs to no format", ro);
+            if (ro != FILM_RO_3K)
+                CHECK(film_pick(ro, 0, 0, &fr) >= 0, "readout %d belongs to no format", ro);
+        CHECK(film_pick(FILM_RO_3K, 2, 3, &fr) == -1, "3K is not a film format any more");
     }
 
     /* black-bar scale: pixel scale on the 720x480 layer, window always fits the layer */

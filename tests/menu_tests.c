@@ -51,15 +51,17 @@ int main(void)
         }
 
     /* 2. a saved frame that belongs to another readout is repaired by sync */
-    set_state(9, 0);                       /* 1/2.3": frame 0 is 16:9 (2.5K) */
+    set_state(9, 0);                       /* 1/3": frame 0 is 16:9 (2.5K) */
     slim_mode_ui = 0; slim_1x1_ar = 3; slim_unified_preset = 0;     /* but the camera is on 1280p */
-    CHECK(slim_film_sync() == 4, "1/2.3\" cannot use 1280p: the first format that can (S8)");
+    CHECK(slim_film_sync() == 4, "1/3\" cannot use 1280p: the first format that can (S8)");
     set_state(8, 1);                       /* 1/2": both frames are on 1280p, so the saved frame is kept */
     CHECK(slim_film_sync() == 8 && slim_film_frame_get(8) == 1, "1/2\" 4:3 stays on 1280p");
 
     /* 3. leftover legacy modes are not film formats */
     slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1;      /* 2.8K Higher */
-    CHECK(slim_film_sync() == -1, "2.8K is not a film format");
+    CHECK(slim_film_sync() == 2 && slim_film_frame_get(2) == 3, "2.8K Higher is S16 2.35:1");
+    slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 0;      /* 3K Highest */
+    CHECK(slim_film_sync() == -1, "3K is not a film format any more");
     slim_mode_ui = 2; crop_preset_ar_menu = 0;                       /* 3x3 16:9 high fps */
     CHECK(slim_film_sync() == -1, "3x3 high fps is not a film format");
     slim_mode_ui = 1;
@@ -67,8 +69,8 @@ int main(void)
     slim_mode_ui = 1; crop_preset_ar_menu = 3; slim_unified_preset = 1;
     CHECK(slim_film_sync() == -1, "1x3 2.35:1 Higher is not a CROP MOOD format (Highest only)");
     slim_unified_preset = 0;
-    slim_film_fmt = 13;
-    CHECK(slim_film_sync() == 13, "1x3 2.35:1 Highest keeps CROP MOOD 1x3 when that was picked");
+    slim_film_fmt = 12;
+    CHECK(slim_film_sync() == 12, "1x3 2.35:1 Highest keeps CROP MOOD 1x3 when that was picked");
     slim_film_fmt = 0;
     CHECK(slim_film_sync() == 2, "1x3 2.35:1 Highest from A35 -> S16 Actual (the first 1x3 frame)");
     crop_preset_ar_menu = 0;
@@ -114,13 +116,13 @@ int main(void)
             { 1696,  954, 1, 191 },                                                  /* 25 fps: 640 clocks */
             { 1696,  954, 4, 157 },                                                  /* 36 fps: 528 clocks */
             { 1696,  954, 5, 155 }, { 1696,  722, 5, 117 },                          /* 48 fps: 520 clocks */
-            { 2912, 1238, 0, 333 },                                                  /* S16, 3K 860 clocks */
+            { 2880, 1226, 0, 309 },                                                  /* S16 2.35:1, 2.8K 806 clocks */
             { 2384, 1340, 0, 307 },                                                  /* 16mm, 1440p 732 clocks */
             { 1344,  930, 0, 164 },                                                  /* S8, 1280p 566 clocks */
             { 2032, 1536, 0, 304 },                                                  /* 2/3" 4:3, 1620p 634 clocks */
             {  968, 1720, 0, 280 }, {  792, 1736, 0, 282 },                          /* S16 / 16mm Actual, 1x3 520 clocks */
             { 1024, 2046, 0, 332 }, { 1024, 1728, 0, 281 },                          /* 1" Actual / 16:9, 1x3 */
-            { 1424,  800, 0, 179 },                                                  /* 1/2.3", 2.5K 716 clocks */
+            { 1104,  620, 0, 139 },                                                  /* 1/3", 2.5K 716 clocks */
             { 1736, 1152, 0, 190 }, { 1736,  976, 0, 161 },                          /* CROP MOOD 3x3, 528 clocks */
             { 1736,  736, 5, 120 },                                                  /* CROP MOOD 3x3 2.35:1 at 48 fps */
             { 1736, 2214, 0, 360 },                                                  /* CROP MOOD 1x3, 520 clocks */

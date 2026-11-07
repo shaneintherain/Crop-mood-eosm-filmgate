@@ -329,7 +329,7 @@ static int slim_handle_set_button(unsigned int key)
         return 1;
 
     if (lv && is_movie_mode() && !gui_menu_shown() && lv_disp_mode == 0)
-        gui_open_last_menu_selection();
+        gui_open_last_menu_selection_from_set();   /* a second SET closes the menu again */
 
     /* Do not fall through to legacy SET=2 (ISO) handling. */
     return 1;
@@ -4355,7 +4355,7 @@ static struct menu_entry slim_info_button_menu[] = {
         .edit_mode = EM_INLINE_ADJUST,
         .icon_type = IT_DICE,
         .help      = "Choose what SET does on the movie LiveView screen.",
-        .help2     = "Last settings opens the last changed ML setting, like a LiveView screen tap.",
+        .help2     = "Last settings: SET opens the last setting you changed; SET again goes back.",
     },
     {
         .name      = "Up/Down Button",
@@ -4398,7 +4398,7 @@ __attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
 /* ---- Film Format menu ------------------------------------------------------
  * The Movie menu offers eleven formats in two Standards (menu row "Standard"):
  *   FILM   Academy 35mm, A35 Anamorphic, S16, 16mm, S8, 8mm   (the default)
- *   VIDEO  video sensor sizes at 1:1: 1", 2/3", 1/2", 1/2.3", 1/3", 1/4"
+ *   VIDEO  video sensor sizes: 1", 2/3", 1/2", 1/3", 1/4"
  * The old Mode / Aspect Ratio / Preset choices are no longer exposed.  Rows are reused:
  *   "Mode" row         -> Film Format  (or Sensor Size in the VIDEO standard)
  *   "Aspect Ratio" row -> Frame        (Actual / 16:9 Crop / 1.85:1 Crop ...)
@@ -4456,7 +4456,7 @@ static int slim_film_menu_readout(void)
             switch (slim_1x1_ar)
             {
                 case 0: return FILM_RO_25K;
-                case 1: return slim_unified_preset == 0 ? FILM_RO_3K : -1; /* 2.8K Higher is legacy */
+                case 1: return slim_unified_preset == 0 ? FILM_RO_3K : FILM_RO_28K; /* 3K Highest / 2.8K Higher */
                 case 2: return FILM_RO_1440;
                 case 3: return FILM_RO_1280;
                 case 4: return FILM_RO_1620; /* 1620p 4:3: 2/3" 4:3 */
@@ -4494,6 +4494,7 @@ static int slim_film_active_readout(void)
         switch (crop_preset_1x1_res_menu)
         {
             case 0: return FILM_RO_25K;
+            case 1: return FILM_RO_28K;
             case 2: return FILM_RO_3K;
             case 3: return FILM_RO_1440;
             case 4: return FILM_RO_1280;
@@ -4871,6 +4872,7 @@ static int slim_line_clocks(void)
             if (crop_preset_fps_menu == 5) return 0x207 + 1;     /* 48 fps (738 or 958 row readout) */
             return 0x20F + 1;                                    /* 23.976 / 36 fps */
         case FILM_RO_3K:   return 0x35B + 1;
+        case FILM_RO_28K:  return 0x325 + 1;                     /* 1:1 2.8K 2.35:1 */
         case FILM_RO_1440: return 0x2DB + 1;
         case FILM_RO_1280: return 0x235 + 1;
         case FILM_RO_25K:  return 0x2CB + 1;
@@ -4970,7 +4972,7 @@ static void slim_film_apply(int fmt)
 {
     fmt = COERCE(fmt, 0, FILM_FORMAT_COUNT - 1);
     slim_film_fmt = fmt;
-    slim_unified_preset = 0; /* every film readout is a single Highest mode */
+    slim_unified_preset = 0; /* every film readout is a Highest mode, except 2.8K (Higher, set below) */
     switch (film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].readout)
     {
         case FILM_RO_3X3:  slim_mode_ui = 2; crop_preset_ar_menu = 4; break; /* 3x3 3:2 */
@@ -4980,6 +4982,7 @@ static void slim_film_apply(int fmt)
         case FILM_RO_25K:  slim_mode_ui = 0; slim_1x1_ar = 0; break;         /* 2.33:1 */
         case FILM_RO_1X3:  slim_mode_ui = 1; crop_preset_ar_menu = 3; break; /* 1x3 Highest 2.35:1 */
         case FILM_RO_1620: slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
+        case FILM_RO_28K:  slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1; break; /* 2.8K Higher */
         default:           slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
     }
     slim_crop_apply_mode();
@@ -5014,7 +5017,7 @@ static MENU_UPDATE_FUNC(slim_crop_standard_update)
     if (slim_standard_ui == 2)
         MENU_SET_HELP("CROP MOOD: the original full-width 3x3 and 1x3 modes.");
     else
-        MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 1\", 2/3\", 1/2\", 1/2.3\", 1/3\", 1/4\" sensor sizes.");
+        MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 1\", 2/3\", 1/2\", 1/3\", 1/4\" sensor sizes.");
     MENU_SET_ENABLED(1);
 }
 

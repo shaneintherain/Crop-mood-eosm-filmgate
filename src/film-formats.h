@@ -21,15 +21,15 @@
 #ifndef _FILM_FORMATS_H_
 #define _FILM_FORMATS_H_
 
-#define FILM_FRAME_COUNT   34   /* entries in film_frames[], including OFF at index 0 */
-#define FILM_FORMAT_COUNT  14   /* Film Formats in the Movie menu (all three standards) */
+#define FILM_FRAME_COUNT   32   /* entries in film_frames[], including OFF at index 0 */
+#define FILM_FORMAT_COUNT  13   /* Film Formats in the Movie menu (all three standards) */
 #define FILM_FILM_COUNT    6    /* the first six are the FILM standard */
-#define FILM_VIDEO_COUNT   6    /* the next six are the VIDEO standard */
+#define FILM_VIDEO_COUNT   5    /* the next five are the VIDEO standard */
 #define FILM_CM_FIRST      (FILM_FILM_COUNT + FILM_VIDEO_COUNT)   /* the rest are CROP MOOD */
 
 /* Sensor readouts the formats are cut from (the crop_rec 1:1 / 3x3 modes).  kn/kd is the
  * scale of one readout pixel on the camera's 720x480 LCD layer (used for the black-bar frame). */
-enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_1620, FILM_RO_COUNT };
+enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_1620, FILM_RO_28K, FILM_RO_COUNT };
 
 struct film_readout
 {
@@ -52,6 +52,7 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
                                          * 5208 columns -> 720 px, 2214 rows -> ~306 lines (centred) */
     { 2160, 1620,  9,  32, 1, 608 },    /* 1:1 4:3 1620p: preview at the 1440p scale, 84 % of the width
                                          * (crop_rec_preview_fit, LCD and 1080i); not yet measured */
+    { 2880, 1226,  1,   4, 1, 720 },    /* 1:1 2.8K 2.35:1 (Crop Mood "Higher"): 720 / 2880; not yet measured */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */
@@ -83,7 +84,9 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     { "Super 16 Actual",     968, 1720, "12.52x7.41mm gate (1x3: 2904x1720 desqueezed)", "1x3 2.35:1 1736x2214", "Actual",      FILM_RO_1X3 },
     { "Super 16 16:9 Crop",  968, 1632, "Super 16 gate width, cropped to 16:9 (1x3)",    "1x3 2.35:1 1736x2214", "16:9 Crop",   FILM_RO_1X3 },
     { "Super 16 1.85:1 Crop",968, 1568, "Super 16 gate width, cropped to 1.85:1 (1x3)",  "1x3 2.35:1 1736x2214", "1.85:1 Crop", FILM_RO_1X3 },
-    { "Super 16 2.35:1 Crop",2912,1238, "Super 16 gate width, cropped to 2.35:1","1:1 2.35:1 3072x1308 Highest", "2.35:1 Crop", FILM_RO_3K },
+    /* 2.35:1 from the 2.8K readout: 2880 wide (12.38 mm, 99 % of the 12.52 mm gate), 24 / 25 fps and a
+     * faster readout than the 3K one it used before (806 clocks per line instead of 860) */
+    { "Super 16 2.35:1 Crop",2880,1226, "Super 16 gate width (99 %), cropped to 2.35:1","1:1 2.35:1 2880x1226 Higher", "2.35:1 Crop", FILM_RO_28K },
     /* 16mm: Actual in 1x3 (792 x 3 = 2376, gate 2386), the crops at 1:1 */
     { "16mm Actual",         792, 1736, "10.26x7.49mm gate (1x3: 2376x1736 desqueezed)", "1x3 2.35:1 1736x2214", "Actual",      FILM_RO_1X3 },
     { "16mm 16:9 Crop",     2384, 1340, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440", "16:9 Crop", FILM_RO_1440 },
@@ -107,9 +110,6 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     /* both 1/2" frames use the 1280p readout, so the 16:9 window is as wide as the 4:3 one on the screen (it was cut from 2.5K, which previews smaller) */
     { "1/2\" 16:9 Crop",    1472,  828, "1/2\" sensor width (6.4 mm), cropped to 16:9",   "1:1 3:2 1920x1280",   "16:9 Crop", FILM_RO_1280 },
     { "1/2\" 4:3",          1472, 1104, "1/2\" sensor (6.4 x 4.8 mm), 4:3",              "1:1 3:2 1920x1280",   "4:3", FILM_RO_1280 },
-    /* 1/2.3" (6.17 x 4.55 mm) */
-    { "1/2.3\" 16:9 Crop",  1424,  800, "1/2.3\" sensor width (6.17 mm), cropped to 16:9", "1:1 2.33:1 2520x1080", "16:9 Crop", FILM_RO_25K },
-    { "1/2.3\" 4:3",        1424, 1056, "1/2.3\" sensor (6.17 x 4.55 mm), 4:3",          "1:1 2.33:1 2520x1080", "4:3", FILM_RO_25K },
     /* 1/3" (4.8 x 3.6 mm) */
     { "1/3\" 16:9 Crop",    1104,  620, "1/3\" sensor width (4.8 mm), cropped to 16:9",   "1:1 2.33:1 2520x1080", "16:9 Crop", FILM_RO_25K },
     { "1/3\" 4:3",          1104,  828, "1/3\" sensor (4.8 x 3.6 mm), 4:3",              "1:1 2.33:1 2520x1080", "4:3", FILM_RO_25K },
@@ -149,12 +149,11 @@ static const struct film_format film_formats[FILM_FORMAT_COUNT] __attribute__((u
     { "1\"",            "1\"",    18, 2 },
     { "2/3\"",          "2/3\"",  20, 2 },
     { "1/2\"",          "1/2\"",  22, 2 },
-    { "1/2.3\"",        "1/2.3\"",24, 2 },
-    { "1/3\"",          "1/3\"",  26, 2 },
-    { "1/4\"",          "1/4\"",  28, 2 },
+    { "1/3\"",          "1/3\"",  24, 2 },
+    { "1/4\"",          "1/4\"",  26, 2 },
     /* CROP MOOD standard */
-    { "3x3",            "3x3",    30, 3 },
-    { "1x3",            "1x3",    33, 1 },
+    { "3x3",            "3x3",    28, 3 },
+    { "1x3",            "1x3",    31, 1 },
 };
 
 /* index into film_frames[] for a Film Format and a Frame choice (out-of-range input is clamped) */
