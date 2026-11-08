@@ -145,13 +145,13 @@ int main(void)
         /* the saved choice is kept whenever it can use the readout */
         CHECK(film_pick(FILM_RO_3X3, 1, 1, &fr) == 1 && fr == 1, "A35-ANA frame 1 is kept");
         CHECK(film_pick(FILM_RO_3X3, 0, 2, &fr) == 0 && fr == 2, "A35 frame 2 is kept");
-        CHECK(film_pick(FILM_RO_1280, 5, 1, &fr) == 5 && fr == 1, "8mm is kept on 1280p");
-        CHECK(film_pick(FILM_RO_1280, 8, 1, &fr) == 8 && fr == 1, "1/2\" 4:3 is kept on 1280p");
-        CHECK(film_pick(FILM_RO_25K, 9, 1, &fr) == 9 && fr == 1, "1/3\" 4:3 is kept on 2.5K");
+        CHECK(film_pick(FILM_RO_NARROW, 5, 1, &fr) == 5 && fr == 1, "8mm is kept on Narrow");
+        CHECK(film_pick(FILM_RO_NARROW, 8, 1, &fr) == 8 && fr == 1, "1/2\" 4:3 is kept on Narrow");
+        CHECK(film_pick(FILM_RO_NARROW, 9, 1, &fr) == 9 && fr == 1, "1/3\" 4:3 is kept on Narrow");
+        CHECK(film_pick(FILM_RO_NARROW, 10, 1, &fr) == 10 && fr == 1, "1/4\" 4:3 is kept on Narrow");
         /* a stored frame from another readout is repaired */
-        CHECK(film_pick(FILM_RO_1280, 7, 0, &fr) == 4 && fr == 0, "2/3\" cannot use 1280p: first format that can (S8)");
-        CHECK(film_pick(FILM_RO_1280, 8, 0, &fr) == 8 && fr == 0, "1/2\" 16:9 is kept on 1280p");
-        CHECK(film_pick(FILM_RO_25K, 8, 1, &fr) == 9 && fr == 0, "1/2\" has no 2.5K frame: 2.5K -> 1/3\" 16:9");
+        CHECK(film_pick(FILM_RO_NARROW, 7, 0, &fr) == 4 && fr == 0, "2/3\" cannot use Narrow: first format that can (S8)");
+        CHECK(film_pick(FILM_RO_NARROW, 8, 0, &fr) == 8 && fr == 0, "1/2\" 16:9 is kept on Narrow");
         CHECK(film_pick(FILM_RO_1440, 7, 5, &fr) == 7 && fr == 0, "2/3\" on 1440p must be its 16:9 frame (it has no other)");
         /* a format that cannot use the readout is replaced by the first one that can */
         CHECK(film_pick(FILM_RO_28K, 3, 0, &fr) == 2 && fr == 3, "2.8K from 16mm -> S16 2.35:1");
@@ -162,8 +162,8 @@ int main(void)
         CHECK(film_pick(FILM_RO_1X3, 6, 1, &fr) == 6 && fr == 1, "1\" 16:9 is kept on the 1x3 readout");
         CHECK(film_pick(FILM_RO_1620, 7, 0, &fr) == 7 && fr == 1, "1620p -> 2/3\" 4:3");
         CHECK(film_pick(FILM_RO_1440, 7, 1, &fr) == 7 && fr == 0, "1440p from 2/3\" 4:3 -> 2/3\" 16:9");
-        CHECK(film_pick(FILM_RO_1280, 2, 0, &fr) == 4 && fr == 0, "1280p from S16 -> S8");
-        CHECK(film_pick(FILM_RO_25K, 0, 0, &fr) == 9 && fr == 0, "2.5K from A35 -> 1/3\" 16:9");
+        CHECK(film_pick(FILM_RO_NARROW, 2, 0, &fr) == 4 && fr == 0, "Narrow from S16 -> S8");
+        CHECK(film_pick(FILM_RO_NARROW, 9, 0, &fr) == 9 && fr == 0, "Narrow keeps 1/3\" 16:9");
         CHECK(film_pick(FILM_RO_3X3, 11, 2, &fr) == 11 && fr == 2, "CROP MOOD 3x3 2.35:1 is kept on the 3x3 readout");
         CHECK(film_pick(FILM_RO_3X3, 12, 0, &fr) == 0 && fr == 0, "3x3 readout from 1x3 -> A35");
         CHECK(film_pick(FILM_RO_1X3, 0, 0, &fr) == 2 && fr == 0, "1x3 readout from A35 -> S16 Actual (first format with it)");
@@ -184,12 +184,14 @@ int main(void)
                   2 * (ro->dy < 0 ? -ro->dy : ro->dy) <= ro->h - film_frames[i].h,
                   "frame %s: window offset %d,%d leaves the readout", film_frames[i].name, ro->dx, ro->dy);
         }
-        /* no readout is left without a format, except 3K (S16 2.35:1 moved to 2.8K; 3K is a plain
-         * crop_rec mode again) */
+        /* no readout is left without a format, except 3K (S16 2.35:1 moved to 2.8K) and 1280p / 2.5K
+         * (their frames moved to Narrow): plain crop_rec modes again */
         for (int ro = 0; ro < FILM_RO_COUNT; ro++)
-            if (ro != FILM_RO_3K)
+            if (ro != FILM_RO_3K && ro != FILM_RO_1280 && ro != FILM_RO_25K)
                 CHECK(film_pick(ro, 0, 0, &fr) >= 0, "readout %d belongs to no format", ro);
         CHECK(film_pick(FILM_RO_3K, 2, 3, &fr) == -1, "3K is not a film format any more");
+        CHECK(film_pick(FILM_RO_1280, 4, 0, &fr) == -1, "1280p is not a film format any more");
+        CHECK(film_pick(FILM_RO_25K, 9, 0, &fr) == -1, "2.5K is not a film format any more");
     }
 
     /* black-bar scale: pixel scale on the 720x480 layer, window always fits the layer */

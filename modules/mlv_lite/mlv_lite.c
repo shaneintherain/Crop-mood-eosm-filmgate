@@ -716,7 +716,10 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
 
     /* frame size in the 720x480 layer: the readout's preview is fit_w wide (720, or 608 for the
      * 1620p one); 1x3 previews are desqueezed by the camera, so the same rule holds for them */
-    int nw = res_x * ro->fit_w / rw;
+    int fit_w = ro->fit_w;
+    if (film_frames[f].readout == FILM_RO_NARROW && ext_monitor_hdmi)
+        fit_w = 720;    /* HDMI shows the Narrow readout stretched to the full width (crop_rec_preview_narrow_fit) */
+    int nw = res_x * fit_w / rw;
     int nh = res_y * kn / kd;
 
     /* 48 fps (A35 frames) reads a shorter sensor readout than the 1160-row one the scales above were
@@ -743,7 +746,7 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     int off_y = COERCE(cy + ro->dy, top_margin,  raw_info.active_area.y2 - res_y) - cy;
     dy_rows += off_y;
 
-    *x = N2BM_X(360 - nw / 2 + off_x * ro->fit_w / rw);
+    *x = N2BM_X(360 - nw / 2 + off_x * fit_w / rw);
     *y = N2BM_Y(240 - nh / 2 + dy_rows * kn / kd);
     *w = N2BM_X(nw) - N2BM_X(0);
     *h = N2BM_Y(nh) - N2BM_Y(0);

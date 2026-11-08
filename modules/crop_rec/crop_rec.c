@@ -92,6 +92,7 @@ static int crop_preset_1x1_res = 0;
 #define CROP_Full_Res  (crop_preset_1x1_res == 5)
 #define CROP_1620p     (crop_preset_1x1_res == 6)
 #define CROP_1080p     (crop_preset_1x1_res == 7)
+#define CROP_Narrow    (crop_preset_1x1_res == 8)   /* FilmGate 1536x1280: S8, 8mm, 1/2", 1/3", 1/4" */
 
 CONFIG_INT("crop.preset_1x3", crop_preset_1x3_res_menu, 1);
 static int crop_preset_1x3_res = 0;
@@ -1011,6 +1012,15 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                     cmos_new[7] = CROP_1280p ? 0xAC9 : 0xACA;   /* 1280p was 0xACA */
                 }
                 
+                /* Narrow 1536x1280: the 1280p rows (same cmos_new[7]); cmos_new[5] sets the first column,
+                 * about 2 px per unit (fitted to the measured 1:1 readouts): 0x3CC puts the 1536 columns
+                 * on the sensor centre where 1280p (0x380, 1920 columns) sat 38 px right */
+                if (CROP_Narrow)
+                {
+                    cmos_new[5] = 0x3CC;
+                    cmos_new[7] = 0xAC9;
+                }
+                
                 if (CROP_Full_Res)
                 {
                     cmos_new[5] = 0x0;
@@ -1589,7 +1599,7 @@ static void ntsc24_snap_timers(void)
     int target;
     if (Framerate_24)
         target = NTSC24_PRODUCT;
-    else if (Framerate_30 && crop_preset == CROP_PRESET_1X1 && CROP_2_5K && slim_video_standard())
+    else if (Framerate_30 && crop_preset == CROP_PRESET_1X1 && (CROP_2_5K || CROP_Narrow) && slim_video_standard())
         target = NTSC30_PRODUCT;
     else
         return;
@@ -1655,6 +1665,7 @@ static unsigned YUV_LV_Buf = 0;       // YUV (LV) buffer size             0xC0F0
 int is_LCD_Output();                  // defined with the HDMI output helpers below
 int is_1080i_Full_Output();           // same
 int crop_rec_preview_fit();           // 2/3" 4:3 preview drawn at the 16:9 scale (see below)
+int crop_rec_preview_narrow_fit();    // Narrow preview drawn unstretched and centred (see below)
 
 /* used to exceed preview limits */
 //static unsigned EDMAC_24_s = 0;       // EDMAC#24 size                    0xC0F26810
@@ -1898,6 +1909,39 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         Preview_R     = 0x19000D;
 
         YUV_HD_S_H    = 0x450080;
+        YUV_HD_S_V    = 0x250044;
+
+        Black_Bar     = 0;
+        Preview_Control = 1;
+        EDMAC_24_Redirect = 0;
+        EDMAC_9_Vertical_Change = 0;
+        Preview_Control_Basic = 0;
+    }
+    
+    /* FilmGate Narrow: the 1280p readout cut to 1536 columns, for the small frames (S8, 8mm, 1/2", 1/3",
+     * 1/4").  A shorter line: 470 clocks instead of 566 (17 % less rolling shutter), and 29.97 fps.
+     * RAW_H = width / 4 + 34 and TimerA = RAW_H + 51, as in every other 1:1 preset here. */
+    if (CROP_Narrow)
+    {
+        if (is_EOSM)
+        {
+            RAW_H    = 0x1A2 + reg_width;
+            RAW_V    = 0x51D + reg_height;
+            TimerA   = 0x1D5;
+            if (Framerate_24) TimerB = 0xB17;   /* 32 MHz / (470 * 2840) = 23.974; snapped to 23.976 */
+            if (Framerate_25) TimerB = 0xAA2;   /* 25.007 */
+            if (Framerate_30) TimerB = 0x8DF;   /* 29.967; snapped to 29.97 */
+            if (Framerate_18) TimerB = 0xEC5;   /* 18.002 */
+        }
+
+        Preview_H     = 1532;
+        Preview_V     = 1280;
+        Preview_R     = 0x19000D;
+
+        /* (out << 16) | in: the 1280p scale (69 / 128), so the 1536 columns come out 80 % as wide as the
+         * 1280p picture: 576 of 720 px, the full 480 lines high, not stretched.  Where the picture is not
+         * centred by a shift (HDMI), 0x66 in stretches it to the full width as 1280p does. */
+        YUV_HD_S_H    = crop_rec_preview_narrow_fit() ? 0x450080 : 0x450066;
         YUV_HD_S_V    = 0x250044;
 
         Black_Bar     = 0;
@@ -3163,6 +3207,16 @@ int crop_rec_preview_fit()
            (is_LCD_Output() || is_1080i_Full_Output());
 }
 
+/* The Narrow (1536x1280) readout: drawn at its own shape, 576 px wide and the full height, and moved
+ * to the middle of the screen.  Camera LCD only so far; HDMI shows it stretched to the full width. */
+int crop_rec_preview_narrow_fit()
+{
+    return is_EOSM &&
+           CROP_PRESET_MENU == CROP_PRESET_1X1 &&
+           crop_preset_1x1_res == 8 &&
+           is_LCD_Output();
+}
+
 static uint32_t ShiftAddress  = 0;
 static uint32_t ClearAddress  = 0;
 static uint32_t DefaultShift  = 0; // expected value which we want to patch
@@ -3214,6 +3268,13 @@ int GetShiftValue()
             case 4:
             {
                 if (is_LCD_Output()) return 0;
+            }
+            break;
+
+            case 8:     // Narrow: 576 px picture, (720 - 576) / 2 = 72 px from the left = 144 bytes
+            {
+                if (crop_rec_preview_narrow_fit()) return 0x90;
+                return 0;
             }
         }        
     }
@@ -3520,6 +3581,13 @@ static void FAST PATH_SelectPathDriveMode_hook(uint32_t* regs, uint32_t* stack, 
         }
     }
     
+    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 8)    // Narrow
+    {
+        Shift_Preview = crop_rec_preview_narrow_fit();
+        Clear_Artifacts = crop_rec_preview_narrow_fit();
+        EDMAC_9_Vertical_Change = 0;
+    }
+
     if (crop_preset_1x1_res == 6)    // CROP_1620p
     {
         Shift_Preview = 1;
@@ -3745,7 +3813,7 @@ static void update_patch()
         crop_preset_ar      = crop_preset_ar_menu;
         crop_preset_fps     = crop_preset_fps_menu;
         /* 18 fps exists only in the 1:1 1280p preset; anywhere else fall back to 24 */
-        if (crop_preset_fps == 3 && !(CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res_menu == 4))
+        if (crop_preset_fps == 3 && !(CROP_PRESET_MENU == CROP_PRESET_1X1 && (crop_preset_1x1_res_menu == 4 || crop_preset_1x1_res_menu == 8)))
             crop_preset_fps = 0;
         /* 36 / 48 fps exist only for the 3x3 3:2 (A35) readout, and only where the menu allows them */
         if (crop_preset_fps >= 4 &&
@@ -3964,6 +4032,10 @@ static MENU_UPDATE_FUNC(crop_preset_1x1_res_update)
     {
         MENU_SET_HELP("2160x1620 @ 23.976 FPS");
     }
+    if (crop_preset_1x1_res_menu == 8)
+    {
+        MENU_SET_HELP("1536x1280 @ 18, 23.976, 25 and 29.97 FPS (FilmGate small formats)");
+    }
 }
 
 static MENU_UPDATE_FUNC(crop_preset_1x3_res_update)
@@ -4125,6 +4197,7 @@ static MENU_UPDATE_FUNC(crop_preset_ar_update)
         if (crop_preset_1x1_res_menu == 5) MENU_SET_VALUE("3:2");     // CROP_Full_Res
         if (crop_preset_1x1_res_menu == 6) MENU_SET_VALUE("4:3");     // CROP_1620p
         if (crop_preset_1x1_res_menu == 7) MENU_SET_VALUE("16:9");    // CROP_1080p
+        if (crop_preset_1x1_res_menu == 8) MENU_SET_VALUE("6:5");     // Narrow 1536x1280
         MENU_SET_WARNING(MENU_WARN_ADVICE, "This option doesn't work in 1:1 crop.");
     }
 }
@@ -4393,10 +4466,10 @@ static int slim_bit_depth_ui = 2;   /* 0=10 1=11 2=12 3=14 → bit_depth_analog 
 static int slim_touch_crop_ready_at = 0;
 #define SLIM_TOUCH_CROP_SETTLE_MS 900
 
-/* 1x1 Aspect Ratio UI: 0=2.33:1, 1=2.35:1, 2=16:9, 3=3:2, 4=4:3 */
+/* 1x1 Aspect Ratio UI: 0=2.33:1, 1=2.35:1, 2=16:9, 3=3:2, 4=4:3, 5=Narrow (FilmGate frames only) */
 static int slim_1x1_ar = 2; /* default 16:9 */
-__attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
-    "2.33:1", "2.35:1", "16:9", "3:2", "4:3"
+__attribute__((unused)) static const char * const slim_1x1_ar_labels[6] = {
+    "2.33:1", "2.35:1", "16:9", "3:2", "4:3", "6:5"
 };
 
 /* ---- Film Format menu ------------------------------------------------------
@@ -4464,6 +4537,7 @@ static int slim_film_menu_readout(void)
                 case 2: return FILM_RO_1440;
                 case 3: return FILM_RO_1280;
                 case 4: return FILM_RO_1620; /* 1620p 4:3: 2/3" 4:3 */
+                case 5: return FILM_RO_NARROW;
             }
     }
     return -1;
@@ -4503,6 +4577,7 @@ static int slim_film_active_readout(void)
             case 3: return FILM_RO_1440;
             case 4: return FILM_RO_1280;
             case 6: return FILM_RO_1620;
+            case 8: return FILM_RO_NARROW;
         }
     }
     return -1;
@@ -4613,7 +4688,7 @@ static void slim_crop_apply_3x3_from_ar(void)
 /* Map 1x1 AR (+ Preset for 2.35:1) → res index, WxH, FPS mask. */
 static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
 {
-    slim_1x1_ar = COERCE(slim_1x1_ar, 0, 4);
+    slim_1x1_ar = COERCE(slim_1x1_ar, 0, 5);
 
     if (slim_1x1_ar == 0)
     {
@@ -4657,6 +4732,15 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
         *w = 1920; *h = 1280;
         /* FILM: 23.976 / 25 / 18 (Super 8 and 8mm).  VIDEO: 23.976 / 25 / 29.97 (TimerB 0x75D = 29.977,
          * untested on this readout; the original 1280p preset never offered 30). */
+        *fps_mask = slim_video_standard() ? 0x7 : 0xB;
+        slim_unified_preset = 0;
+    }
+    else if (slim_1x1_ar == 5)
+    {
+        /* Narrow → 1536x1280 (FilmGate S8, 8mm, 1/2", 1/3", 1/4").  FILM: 23.976 / 25 / 18;
+         * VIDEO: 23.976 / 25 / 29.97 */
+        *res_idx = 8;
+        *w = 1536; *h = 1280;
         *fps_mask = slim_video_standard() ? 0x7 : 0xB;
         slim_unified_preset = 0;
     }
@@ -4704,6 +4788,10 @@ static void slim_crop_sync_from_backend(void)
                 break;
             case 6: /* 1620p 4:3 */
                 slim_1x1_ar = 4;
+                slim_unified_preset = 0;
+                break;
+            case 8: /* Narrow */
+                slim_1x1_ar = 5;
                 slim_unified_preset = 0;
                 break;
             default:
@@ -4882,6 +4970,7 @@ static int slim_line_clocks(void)
         case FILM_RO_25K:  return 0x2CB + 1;
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest */
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
+        case FILM_RO_NARROW: return 0x1D5 + 1;                   /* 1:1 Narrow 1536x1280 */
     }
     return 0;
 }
@@ -4987,6 +5076,7 @@ static void slim_film_apply(int fmt)
         case FILM_RO_1X3:  slim_mode_ui = 1; crop_preset_ar_menu = 3; break; /* 1x3 Highest 2.35:1 */
         case FILM_RO_1620: slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
         case FILM_RO_28K:  slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1; break; /* 2.8K Higher */
+        case FILM_RO_NARROW: slim_mode_ui = 0; slim_1x1_ar = 5; break;       /* Narrow 1536x1280 */
         default:           slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
     }
     slim_crop_apply_mode();
@@ -5533,12 +5623,12 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
  * does not offer the source ratio (for example 4:3 when leaving 1x1). */
 __attribute__((unused)) static int slim_crop_current_ratio_x1000(void)
 {
-    static const int ratios_1x1[] = { 2330, 2350, 1778, 1500, 1333 };
+    static const int ratios_1x1[] = { 2330, 2350, 1778, 1500, 1333, 1200 };
     static const int ratios_1x3[] = { 1778, 2000, 2200, 2350, 2390 };
     static const int ratios_3x3[] = { 1778, 2000, 2200, 2350, 1500 };
 
     if (slim_mode_ui == 0)
-        return ratios_1x1[COERCE(slim_1x1_ar, 0, 4)];
+        return ratios_1x1[COERCE(slim_1x1_ar, 0, 5)];
     if (slim_mode_ui == 2)
         return ratios_3x3[COERCE(crop_preset_ar_menu, 0, 4)];
     return ratios_1x3[COERCE(crop_preset_ar_menu, 0, 4)];
@@ -5706,8 +5796,8 @@ static struct menu_entry crop_rec_menu[] =
                 .name       = "Preset:",   // CROP_PRESET_1X1
                 .priv       = &crop_preset_1x1_res_menu,
                 .update     = crop_preset_1x1_res_update,
-                .max        = 7,
-                .choices    = CHOICES("2.5K", "2.8K", "3K", "1440p", "1280p", "Full-Res LV", "1620p 4:3", "1920x1080p"),
+                .max        = 8,
+                .choices    = CHOICES("2.5K", "2.8K", "3K", "1440p", "1280p", "Full-Res LV", "1620p 4:3", "1920x1080p", "Narrow"),
                 .help       = "Choose 1:1 preset.",
                 .shidden    = 1,
             },
@@ -7804,6 +7894,7 @@ static LVINFO_UPDATE_FUNC(crop_info)
                     if (CROP_1280p)    snprintf(buffer, sizeof(buffer), "1280p");
                     if (CROP_1080p)    snprintf(buffer, sizeof(buffer), "1080p");
                     if (CROP_1620p)    snprintf(buffer, sizeof(buffer), "1620p");
+                    if (CROP_Narrow)   snprintf(buffer, sizeof(buffer), "Narrow");
                     if (CROP_Full_Res) snprintf(buffer, sizeof(buffer), "FLV");
                     break;
                 case CROP_PRESET_1X3:
@@ -8046,7 +8137,7 @@ static unsigned int raw_info_update_cbr(unsigned int unused)
 static const struct setting_range crop_settings[] = {
     SETTING(crop_preset_index,          1,       3,      1),  /* slim: 1..3 (3x3 / 1x1 / 1x3) */
     SETTING(crop_preset_ar_menu,        0,       4,      4),
-    SETTING(crop_preset_1x1_res_menu,   0,       7,      3),
+    SETTING(crop_preset_1x1_res_menu,   0,       8,      3),
     SETTING(crop_preset_1x3_res_menu,   0,       3,      1),
     SETTING(crop_preset_3x3_res_menu,   0,       2,      2),
     SETTING(crop_preset_fps_menu,       0,       5,      0),

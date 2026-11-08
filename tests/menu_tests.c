@@ -51,11 +51,13 @@ int main(void)
         }
 
     /* 2. a saved frame that belongs to another readout is repaired by sync */
-    set_state(9, 0);                       /* 1/3": frame 0 is 16:9 (2.5K) */
-    slim_mode_ui = 0; slim_1x1_ar = 3; slim_unified_preset = 0;     /* but the camera is on 1280p */
-    CHECK(slim_film_sync() == 4, "1/3\" cannot use 1280p: the first format that can (S8)");
-    set_state(8, 1);                       /* 1/2": both frames are on 1280p, so the saved frame is kept */
-    CHECK(slim_film_sync() == 8 && slim_film_frame_get(8) == 1, "1/2\" 4:3 stays on 1280p");
+    set_state(7, 0);                       /* 2/3": frame 0 is 16:9 (1440p) */
+    slim_mode_ui = 0; slim_1x1_ar = 5; slim_unified_preset = 0;     /* but the camera is on Narrow */
+    CHECK(slim_film_sync() == 4, "2/3\" cannot use Narrow: the first format that can (S8)");
+    set_state(8, 1);                       /* 1/2": both frames are on Narrow, so the saved frame is kept */
+    CHECK(slim_film_sync() == 8 && slim_film_frame_get(8) == 1, "1/2\" 4:3 stays on Narrow");
+    set_state(10, 1);
+    CHECK(slim_film_sync() == 10 && slim_film_frame_get(10) == 1, "1/4\" 4:3 stays on Narrow");
 
     /* 3. leftover legacy modes are not film formats */
     slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1;      /* 2.8K Higher */
@@ -102,7 +104,7 @@ int main(void)
             {
                 CHECK(!(mask & 8), "VIDEO format %d frame %d must not offer 18 fps (mask %x)", f, k, mask);
                 /* 29.97 is offered on the 2.5K frames and on 1280p; 1440p does not run it */
-                int ok30 = (ro == FILM_RO_25K || ro == FILM_RO_1280);
+                int ok30 = (ro == FILM_RO_25K || ro == FILM_RO_1280 || ro == FILM_RO_NARROW);
                 CHECK(!!(mask & 4) == ok30, "VIDEO format %d frame %d: 29.97 offered=%d, expected %d (mask %x)", f, k, !!(mask & 4), ok30, mask);
             }
         }
@@ -118,11 +120,12 @@ int main(void)
             { 1696,  954, 5, 155 }, { 1696,  722, 5, 117 },                          /* 48 fps: 520 clocks */
             { 2832, 1204, 0, 303 },                                                  /* S16 2.35:1, 2.8K 806 clocks */
             { 2384, 1340, 0, 307 },                                                  /* 16mm, 1440p 732 clocks */
-            { 1344,  930, 0, 164 },                                                  /* S8, 1280p 566 clocks */
+            { 1344,  930, 0, 137 },                                                  /* S8, Narrow 470 clocks */
             { 2032, 1536, 0, 304 },                                                  /* 2/3" 4:3, 1620p 634 clocks */
             {  968, 1720, 0, 280 }, {  792, 1736, 0, 282 },                          /* S16 / 16mm Actual, 1x3 520 clocks */
             { 1024, 2046, 0, 332 }, { 1024, 1728, 0, 281 },                          /* 1" Actual / 16:9, 1x3 */
-            { 1104,  620, 0, 139 },                                                  /* 1/3", 2.5K 716 clocks */
+            { 1104,  620, 0,  91 },                                                  /* 1/3", Narrow 470 clocks */
+            {  832,  468, 0,  69 }, { 1472, 1104, 0, 162 },                          /* 1/4" 16:9, 1/2" 4:3 */
             { 1736, 1152, 0, 190 }, { 1736,  976, 0, 161 },                          /* CROP MOOD 3x3, 528 clocks */
             { 1736,  736, 5, 120 },                                                  /* CROP MOOD 3x3 2.35:1 at 48 fps */
             { 1736, 2214, 0, 360 },                                                  /* CROP MOOD 1x3, 520 clocks */
@@ -152,7 +155,7 @@ int main(void)
             {
                 set_state(f, k);
                 slim_film_apply(f);
-                CHECK(slim_readout_x10() >= 80 && slim_readout_x10() <= 400, "format %d frame %d: readout %d out of range", f, k, slim_readout_x10());
+                CHECK(slim_readout_x10() >= 50 && slim_readout_x10() <= 400, "format %d frame %d: readout %d out of range", f, k, slim_readout_x10());
             }
     }
 
