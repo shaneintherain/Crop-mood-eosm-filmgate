@@ -58,8 +58,9 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
     { 2160, 1620,  9,  32, 1, 608, -40,  42 },  /* 1:1 4:3 1620p: preview at the 1440p scale, 84 % of the width
                                                  * (crop_rec_preview_fit, LCD and 1080i); was 70 rows low, 40 px
                                                  * right; start up 120 (50 too far), 42 rows is all the room */
-    { 2880, 1226,  1,   4, 1, 720,   0,   0 },  /* 1:1 2.8K 2.35:1 (Crop Mood "Higher"): 720 / 2880; ~35 px right
-                                                 * (1 %), but the frame is the whole readout width */
+    { 2880, 1206,  1,   4, 1, 720, -24,   0 },  /* 1:1 2.8K (Crop Mood "Higher"): 720 / 2880.  It records 1206 rows
+                                                 * (not 1226).  Measured 37 px right, 19 rows high; the 2832 wide
+                                                 * frame leaves room to move 24 px left (all the room) */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */
@@ -91,9 +92,10 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     { "Super 16 Actual",     968, 1720, "12.52x7.41mm gate (1x3: 2904x1720 desqueezed)", "1x3 2.35:1 1736x2214", "Actual",      FILM_RO_1X3 },
     { "Super 16 16:9 Crop",  968, 1632, "Super 16 gate width, cropped to 16:9 (1x3)",    "1x3 2.35:1 1736x2214", "16:9 Crop",   FILM_RO_1X3 },
     { "Super 16 1.85:1 Crop",968, 1568, "Super 16 gate width, cropped to 1.85:1 (1x3)",  "1x3 2.35:1 1736x2214", "1.85:1 Crop", FILM_RO_1X3 },
-    /* 2.35:1 from the 2.8K readout: 2880 wide (12.38 mm, 99 % of the 12.52 mm gate), 24 / 25 fps and a
-     * faster readout than the 3K one it used before (806 clocks per line instead of 860) */
-    { "Super 16 2.35:1 Crop",2880,1226, "Super 16 gate width (99 %), cropped to 2.35:1","1:1 2.35:1 2880x1226 Higher", "2.35:1 Crop", FILM_RO_28K },
+    /* 2.35:1 from the 2.8K readout: 2832x1204 (the readout gives 1206 rows; uncompressed needs a multiple
+     * of 4).  12.18 mm wide, 97 % of the 12.52 mm gate and 2.5 % narrower than Actual, so the window can
+     * move 24 px left to the sensor centre.  24 / 25 fps, 806 clocks per line (3K: 860) */
+    { "Super 16 2.35:1 Crop",2832,1204, "Super 16 gate width (97 %), cropped to 2.35:1","1:1 2.35:1 2880x1206 Higher", "2.35:1 Crop", FILM_RO_28K },
     /* 16mm: Actual in 1x3 (792 x 3 = 2376, gate 2386), the crops at 1:1 */
     { "16mm Actual",         792, 1736, "10.26x7.49mm gate (1x3: 2376x1736 desqueezed)", "1x3 2.35:1 1736x2214", "Actual",      FILM_RO_1X3 },
     { "16mm 16:9 Crop",     2384, 1340, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440", "16:9 Crop", FILM_RO_1440 },

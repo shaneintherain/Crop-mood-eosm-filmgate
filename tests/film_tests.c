@@ -82,7 +82,8 @@ int main(void)
             if (a->readout == b->readout)
                 CHECK(a->w == b->w, "format %s: frames have different widths", film_formats[f].name);
             else if (strstr(b->frame, "4:3") == NULL)
-                CHECK(ABS_DIFF(film_frame_desq_w(ia), film_frame_desq_w(ib)) * 100 <= film_frame_desq_w(ia),
+                /* S16 2.35:1 (2.8K) is 2.5 % narrower on purpose: the room centres it on the sensor */
+                CHECK(ABS_DIFF(film_frame_desq_w(ia), film_frame_desq_w(ib)) * 100 <= film_frame_desq_w(ia) * (b->readout == FILM_RO_28K ? 3 : 1),
                       "format %s: desqueezed widths %d and %d differ", film_formats[f].name, film_frame_desq_w(ia), film_frame_desq_w(ib));
         }
 
