@@ -733,7 +733,17 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
             dy_rows = FILM_48FPS_UP_ROWS_958;
     }
 
-    *x = N2BM_X(360 - nw / 2);
+    /* the recorded window's offset from the readout centre (film_readouts dx / dy), as it is in
+     * update_cropping_offsets (same clamping) */
+    int left_margin = (raw_info.active_area.x1 + 7) & ~7;
+    int top_margin  = (raw_info.active_area.y1 + 1) & ~1;
+    int cx = left_margin + (max_res_x - res_x) / 2;
+    int cy = top_margin  + (max_res_y - res_y) / 2;
+    int off_x = COERCE(cx + ro->dx, left_margin, raw_info.active_area.x2 - res_x) - cx;
+    int off_y = COERCE(cy + ro->dy, top_margin,  raw_info.active_area.y2 - res_y) - cy;
+    dy_rows += off_y;
+
+    *x = N2BM_X(360 - nw / 2 + off_x * ro->fit_w / rw);
     *y = N2BM_Y(240 - nh / 2 + dy_rows * kn / kd);
     *w = N2BM_X(nw) - N2BM_X(0);
     *h = N2BM_Y(nh) - N2BM_Y(0);
@@ -1038,6 +1048,16 @@ void update_cropping_offsets()
             sx = COERCE(sx - delta_x, raw_info.active_area.x1, raw_info.active_area.x2 - res_x);
             sy = COERCE(sy - delta_y, raw_info.active_area.y1, raw_info.active_area.y2 - res_y);
         }
+    }
+
+    /* film frames: the recorded window sits where the frame is centred on the sensor, which for
+     * some readouts is not the readout centre (dx / dy, measured); kept inside the active area */
+    int film_f = film_format_effective();
+    if (film_f > 0 && film_frame_sampling_ok(film_f) && !FRAMING_PANNING)
+    {
+        const struct film_readout * fro = &film_readouts[film_frames[film_f].readout];
+        sx = COERCE(sx + fro->dx, left_margin, raw_info.active_area.x2 - res_x);
+        sy = COERCE(sy + fro->dy, top_margin,  raw_info.active_area.y2 - res_y);
     }
 
     skip_x = sx;

@@ -39,20 +39,27 @@ struct film_readout
     int kd;                 /* LCD scale denominator */
     int bin_x;              /* columns per recorded pixel: 1 (1:1, 3x3) or 3 (1x3: desqueeze 3x in post) */
     int fit_w;              /* width of the readout's preview on the 720 px LCD layer */
+    int dx, dy;             /* recorded window moved from the readout centre (raw pixels, + = right / down),
+                             * so the frame sits on the sensor centre; the frame line moves with it */
 };
 
 static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unused)) =
 {
-    { 1736, 1160, 90, 217, 1, 720 },    /* 3x3 3:2   (measured on the camera) */
-    { 3072, 1308, 15,  64, 1, 720 },    /* 1:1 3K    (measured) */
-    { 2560, 1440,  9,  32, 1, 720 },    /* 1:1 1440p (measured) */
-    { 1920, 1280,  3,   8, 1, 720 },    /* 1:1 1280p (measured) */
-    { 2520, 1080,  2,   7, 1, 720 },    /* 1:1 2.5K  (720 / 2520; not yet measured) */
-    { 1736, 2214,  9,  65, 3, 720 },    /* 1x3 2.35:1: squeezed 3x, the camera desqueezes the preview:
-                                         * 5208 columns -> 720 px, 2214 rows -> ~306 lines (centred) */
-    { 2160, 1620,  9,  32, 1, 608 },    /* 1:1 4:3 1620p: preview at the 1440p scale, 84 % of the width
-                                         * (crop_rec_preview_fit, LCD and 1080i); not yet measured */
-    { 2880, 1226,  1,   4, 1, 720 },    /* 1:1 2.8K 2.35:1 (Crop Mood "Higher"): 720 / 2880; not yet measured */
+    /* dx / dy: measured with the V9 framing charts (camera locked off, calibrated on CROP MOOD 3x3 3:2);
+     * the readouts' own start rows were also moved (crop_rec cmos_new[7], 120-row steps), dx / dy is
+     * the rest.  3x3, 1x3 and 2.8K were centred within the measuring error. */
+    { 1736, 1160, 90, 217, 1, 720,   0,   0 },  /* 3x3 3:2   (measured on the camera) */
+    { 3072, 1308, 15,  64, 1, 720,   0,   0 },  /* 1:1 3K    (measured) */
+    { 2560, 1440,  9,  32, 1, 720,   0,  22 },  /* 1:1 1440p (measured); was 98 rows low, start moved up 120 */
+    { 1920, 1280,  3,   8, 1, 720, -38, -20 },  /* 1:1 1280p (measured); was 140 rows low, 38 px right; start up 120 */
+    { 2520, 1080,  2,   7, 1, 720,  14, -38 },  /* 1:1 2.5K  (720 / 2520); was 38 rows low, 14 px left */
+    { 1736, 2214,  9,  65, 3, 720,   0,   0 },  /* 1x3 2.35:1: squeezed 3x, the camera desqueezes the preview:
+                                                 * 5208 columns -> 720 px, 2214 rows -> ~306 lines (centred) */
+    { 2160, 1620,  9,  32, 1, 608, -40,  42 },  /* 1:1 4:3 1620p: preview at the 1440p scale, 84 % of the width
+                                                 * (crop_rec_preview_fit, LCD and 1080i); was 70 rows low, 40 px
+                                                 * right; start up 120 (50 too far), 42 rows is all the room */
+    { 2880, 1226,  1,   4, 1, 720,   0,   0 },  /* 1:1 2.8K 2.35:1 (Crop Mood "Higher"): 720 / 2880; ~35 px right
+                                                 * (1 %), but the frame is the whole readout width */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */

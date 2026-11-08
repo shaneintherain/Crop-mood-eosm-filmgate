@@ -175,6 +175,14 @@ int main(void)
                 int got = film_pick(ro, f, k, &fr);
                 CHECK(got == f && fr == k, "frame %d of format %d does not map back to itself (got %d/%d)", k, f, got, fr);
             }
+        /* the window offsets (dx / dy) keep every frame inside its readout */
+        for (int i = 1; i < FILM_FRAME_COUNT; i++)
+        {
+            const struct film_readout * ro = &film_readouts[film_frames[i].readout];
+            CHECK(2 * (ro->dx < 0 ? -ro->dx : ro->dx) <= ro->w - film_frames[i].w &&
+                  2 * (ro->dy < 0 ? -ro->dy : ro->dy) <= ro->h - film_frames[i].h,
+                  "frame %s: window offset %d,%d leaves the readout", film_frames[i].name, ro->dx, ro->dy);
+        }
         /* no readout is left without a format, except 3K (S16 2.35:1 moved to 2.8K; 3K is a plain
          * crop_rec mode again) */
         for (int ro = 0; ro < FILM_RO_COUNT; ro++)

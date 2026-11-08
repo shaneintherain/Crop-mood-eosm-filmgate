@@ -977,16 +977,20 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                     cmos_new[7] = 0xA6A;
                 }
                 
+                /* FilmGate: the low bits of cmos_new[7] set the readout's first row in 120-row
+                 * steps (measured with the V9 charts: 1440p, 1280p and 1620p were 98, 140 and 70
+                 * rows below the sensor centre).  One step up each; mlv_lite (film_readouts dx / dy)
+                 * places the recorded window for the rest. */
                 if (CROP_1440p)
                 {
                     cmos_new[5] = 0x2C0;
-                    cmos_new[7] = 0xAA9;
+                    cmos_new[7] = 0xAA8;    /* was 0xAA9 */
                 }
                 
                 if (CROP_1620p)
                 {
                     cmos_new[5] = 0x344 + reg_cmos5;
-                    cmos_new[7] = 0xAC8 + reg_cmos7;
+                    cmos_new[7] = 0xAC7 + reg_cmos7;    /* was 0xAC8 */
                 }
                 
                 if (CROP_2_8K)
@@ -1004,7 +1008,7 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                 if (CROP_1280p || CROP_1080p)
                 {
                     cmos_new[5] = 0x380;
-                    cmos_new[7] = 0xACA;
+                    cmos_new[7] = CROP_1280p ? 0xAC9 : 0xACA;   /* 1280p was 0xACA */
                 }
                 
                 if (CROP_Full_Res)
@@ -7025,6 +7029,22 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                     set_zoom(old_zoom);
                     gui_uilock(UILOCK_NONE);
                     info_led_off();
+                }
+                /* Switching between a 1x3 mode and a 1:1 / 3x3 one (e.g. S16 1.85:1 -> S16 2.35:1)
+                 * left the preview black until the camera was restarted (V9 test).  Restart Live
+                 * View once, as after every recording, which rebuilds Canon's preview path. */
+                {
+                    static int last_1x3 = -1;
+                    int now_1x3 = (CROP_PRESET_MENU == CROP_PRESET_1X3);
+                    if (last_1x3 != -1 && now_1x3 != last_1x3 && lv && !RECORDING)
+                    {
+                        gui_uilock(UILOCK_EVERYTHING);
+                        PauseLiveView();
+                        msleep(100);
+                        ResumeLiveView();
+                        gui_uilock(UILOCK_NONE);
+                    }
+                    last_1x3 = now_1x3;
                 }
                 idle_kill_flicker_after_menu();     /* Canon settles after the zoom steps: hold again */
                 slim_cover_hold_and_release(SLIM_COVER_HOLD_MS);
