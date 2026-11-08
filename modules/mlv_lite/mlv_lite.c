@@ -717,8 +717,6 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     /* frame size in the 720x480 layer: the readout's preview is fit_w wide (720, or 608 for the
      * 1620p one); 1x3 previews are desqueezed by the camera, so the same rule holds for them */
     int fit_w = ro->fit_w;
-    if (film_frames[f].readout == FILM_RO_NARROW && ext_monitor_hdmi)
-        fit_w = 720;    /* HDMI shows the Narrow readout stretched to the full width (crop_rec_preview_narrow_fit) */
     int nw = res_x * fit_w / rw;
     int nh = res_y * kn / kd;
 

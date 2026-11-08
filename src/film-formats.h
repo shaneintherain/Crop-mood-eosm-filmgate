@@ -61,10 +61,9 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
     { 2880, 1206,  1,   4, 1, 720, -24,   0 },  /* 1:1 2.8K (Crop Mood "Higher"): 720 / 2880.  It records 1206 rows
                                                  * (not 1226).  Measured 37 px right, 19 rows high; the 2832 wide
                                                  * frame leaves room to move 24 px left (all the room) */
-    { 1536, 1280,  3,   8, 1, 576,   0, -20 },  /* 1:1 Narrow (FilmGate): the 1280p rows (same start, same dy), 1536
+    { 1536, 1280,  3,   8, 1, 720,   0, -20 },  /* 1:1 Narrow (FilmGate): the 1280p rows (same start, same dy), 1536
                                                  * columns moved to the centre by cmos_new[5] (not yet measured).
-                                                 * Preview at the 1280p scale: 576 px wide, full height (camera LCD;
-                                                 * stretched to 720 over HDMI, see mlv_lite film_frame_rect) */
+                                                 * Preview stretched to the full width for now (1.25x sideways) */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */

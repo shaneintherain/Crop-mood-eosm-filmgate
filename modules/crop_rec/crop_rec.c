@@ -1665,7 +1665,6 @@ static unsigned YUV_LV_Buf = 0;       // YUV (LV) buffer size             0xC0F0
 int is_LCD_Output();                  // defined with the HDMI output helpers below
 int is_1080i_Full_Output();           // same
 int crop_rec_preview_fit();           // 2/3" 4:3 preview drawn at the 16:9 scale (see below)
-int crop_rec_preview_narrow_fit();    // Narrow preview drawn unstretched and centred (see below)
 
 /* used to exceed preview limits */
 //static unsigned EDMAC_24_s = 0;       // EDMAC#24 size                    0xC0F26810
@@ -1938,10 +1937,10 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         Preview_V     = 1280;
         Preview_R     = 0x19000D;
 
-        /* (out << 16) | in: the 1280p scale (69 / 128), so the 1536 columns come out 80 % as wide as the
-         * 1280p picture: 576 of 720 px, the full 480 lines high, not stretched.  Where the picture is not
-         * centred by a shift (HDMI), 0x66 in stretches it to the full width as 1280p does. */
-        YUV_HD_S_H    = crop_rec_preview_narrow_fit() ? 0x450080 : 0x450066;
+        /* (out << 16) | in, as 1280p (69 / 128 for 1916 px): 0x66 in for 1532 px fills the whole width,
+         * so the preview is stretched sideways (1.25x) for now; an unstretched preview comes later.
+         * (0x450080 would keep the 1280p scale: 576 of 720 px, then needing a shift to centre it.) */
+        YUV_HD_S_H    = 0x450066;
         YUV_HD_S_V    = 0x250044;
 
         Black_Bar     = 0;
@@ -3207,16 +3206,6 @@ int crop_rec_preview_fit()
            (is_LCD_Output() || is_1080i_Full_Output());
 }
 
-/* The Narrow (1536x1280) readout: drawn at its own shape, 576 px wide and the full height, and moved
- * to the middle of the screen.  Camera LCD only so far; HDMI shows it stretched to the full width. */
-int crop_rec_preview_narrow_fit()
-{
-    return is_EOSM &&
-           CROP_PRESET_MENU == CROP_PRESET_1X1 &&
-           crop_preset_1x1_res == 8 &&
-           is_LCD_Output();
-}
-
 static uint32_t ShiftAddress  = 0;
 static uint32_t ClearAddress  = 0;
 static uint32_t DefaultShift  = 0; // expected value which we want to patch
@@ -3268,13 +3257,6 @@ int GetShiftValue()
             case 4:
             {
                 if (is_LCD_Output()) return 0;
-            }
-            break;
-
-            case 8:     // Narrow: 576 px picture, (720 - 576) / 2 = 72 px from the left = 144 bytes
-            {
-                if (crop_rec_preview_narrow_fit()) return 0x90;
-                return 0;
             }
         }        
     }
@@ -3581,10 +3563,10 @@ static void FAST PATH_SelectPathDriveMode_hook(uint32_t* regs, uint32_t* stack, 
         }
     }
     
-    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 8)    // Narrow
+    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 8)    // Narrow: fills the screen, as 1280p
     {
-        Shift_Preview = crop_rec_preview_narrow_fit();
-        Clear_Artifacts = crop_rec_preview_narrow_fit();
+        Shift_Preview = 0;
+        Clear_Artifacts = 0;
         EDMAC_9_Vertical_Change = 0;
     }
 
