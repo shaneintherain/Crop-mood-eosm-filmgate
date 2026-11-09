@@ -30,7 +30,10 @@ CR=modules/crop_rec/crop_rec.c
   python3 tests/extract.py $CR function slim_crop_fps_mask
 } > "$OUT/crop_rec_menu_snippets.h"
 python3 tests/extract.py $CR function slim_film_apply > "$OUT/crop_rec_apply_snippet.h"
-python3 tests/extract.py $CR function std_fps_snap > "$OUT/crop_rec_fps_snippet.h"
+{
+  python3 tests/extract.py $CR function std_fps_shown_x100
+  python3 tests/extract.py $CR function std_fps_snap
+} > "$OUT/crop_rec_fps_snippet.h"
 
 # 2. structure check: the film table exists once, in src/film-formats.h only
 if grep -n '"Super 8 Actual"\|"A35 Anamorphic 2x"' modules/crop_rec/crop_rec.c modules/mlv_lite/mlv_lite.c; then

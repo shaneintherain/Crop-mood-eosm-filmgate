@@ -2729,18 +2729,18 @@ static LVINFO_UPDATE_FUNC(fps_update)
     if (is_movie_mode())
     {
         int f = fps_get_current_x1000();
+        int f100 = (f + 5) / 10;        /* two decimals, rounded: 23.976 -> 23.98 */
         if (ABS(f - 36000) <= 60)
             snprintf(buffer, sizeof(buffer), "36fps");
         else if (ABS(f - 48000) <= 60)
             snprintf(buffer, sizeof(buffer), "48fps");
+        else if (f100 % 100 == 0)       /* whole rates: 18fps, 25fps, 50fps */
+            snprintf(buffer, sizeof(buffer), "%dfps", f100 / 100);
         else
-        {
-            int f100 = (f + 5) / 10;    /* two decimals, rounded: 23.976 -> 23.98 */
             snprintf(buffer, sizeof(buffer),
                 "%2d.%02d",
                 f100 / 100, f100 % 100
             );
-        }
     }
 }
 

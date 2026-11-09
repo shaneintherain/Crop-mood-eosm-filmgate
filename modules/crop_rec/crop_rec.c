@@ -1582,58 +1582,89 @@ static unsigned RAW_V = 0;            // RAW vertical resolution          0xC0F0
  * ...).  After a preset has chosen its timers, std_fps_snap() picks the nearest standard rate (only
  * when the preset is already within 1 % of it, so 36 / 48 fps and the odd high-FPS presets are left
  * alone) and finds timers that hit it to within 40 ppm (+-0.001 fps):
- *   - Timer B alone first.  When no whole B is close enough, the line is made longer by 2 clocks at a
- *     time (never shorter, at most 1/32 = 3 % longer) and B recalculated.  A moves in steps of 2 so
+ *   - Timer B alone first, when a whole B gets within 100 ppm and the top bar shows the right number.
+ *     Otherwise the line is made longer by 2 clocks at a time (never shorter, at most 1/32 = 3 %
+ *     longer, never in 1x3) and B recalculated.  A moves in steps of 2 so
  *     its parity stays as Canon has it: an earlier attempt that changed the parity gave vertical line
  *     artifacts and a low-res preview.
  *   - B may shrink only while at least 75 % of the preset's vertical blanking (B - RAW_V) remains.
  *   - When nothing within 3 % gets there, only B is moved (to the nearest whole value).
  * Returns 1 and the new A / B (not register values) when something changes. */
-static int std_fps_snap(int a0, int b0, int raw_v, int * a_out, int * b_out)
+/* what the top bar shows for A x B: fps x 100, rounded (fps_get_current_x1000 is truncated) */
+static int std_fps_shown_x100(int a, int b)
+{
+    int f = (int)(32000000000ULL / ((unsigned long long)a * b));
+    return (f + 5) / 10;
+}
+
+static int std_fps_snap(int a0, int b0, int raw_v, int allow_a, int * a_out, int * b_out)
 {
     /* 9 * 32 MHz / fps: whole numbers for all four rates */
-    static const int t9s[4] = { 16000000, 12012000, 11520000, 9609600 };   /* 18, 23.976, 25, 29.97 */
+    static const int t9s[4]  = { 16000000, 12012000, 11520000, 9609600 };   /* 18, 23.976, 25, 29.97 */
+    static const int x100[4] = {     1800,     2398,     2500,    2997 };
 
     if (a0 < 2 || b0 < 2) return 0;
     int p9 = 9 * a0 * b0;
-    int t9 = 0;
+    int t9 = 0, want = 0;
     for (int i = 0; i < 4; i++)
         if (ABS(p9 - t9s[i]) <= t9s[i] / 100)
-            t9 = t9s[i];
+        {
+            t9 = t9s[i]; want = x100[i];
+        }
     if (!t9) return 0;
 
     int tol9 = t9 / 25000;              /* 40 ppm: 23.976 +- 0.001 */
+    int ok9  = t9 / 10000;              /* 100 ppm: good enough when the top bar shows it right */
     int err0 = ABS(p9 - t9);
-    if (err0 <= tol9) return 0;
+    if (err0 <= tol9 || (err0 <= ok9 && std_fps_shown_x100(a0, b0) == want)) return 0;
 
     int blank0 = b0 - raw_v;
     int b_min = (raw_v > 0 && blank0 > 0) ? raw_v + (3 * blank0) / 4 : b0;
-    int b_only = b0, b_only_err = err0;
 
-    /* the shortest line (from the preset's own, in steps of 2) that a whole B brings within 40 ppm */
-    for (int a = a0; a <= a0 + a0 / 32; a += 2)
+    /* 1. Timer B only (the safest change): the nearest B that shows the right number */
+    int bb = 0, bb_err = 0, bn = 0, bn_err = 0;
+    for (int k = 0; k < 2; k++)
     {
-        int b_floor = t9 / (9 * a);
-        for (int k = 0; k < 2; k++)
+        int b = t9 / (9 * a0) + k;
+        if (b < b_min) continue;
+        int err = ABS(9 * a0 * b - t9);
+        if (std_fps_shown_x100(a0, b) == want && (!bb || err < bb_err)) { bb = b; bb_err = err; }
+        if (!bn || err < bn_err) { bn = b; bn_err = err; }
+    }
+    if (bb && bb_err <= ok9)
+        goto done_b;
+
+    /* 2. a longer line (from the preset's own, in steps of 2, at most 3 %) that a whole B brings
+     *    within 40 ppm */
+    if (allow_a)
+    {
+        for (int a = a0 + 2; a <= a0 + a0 / 32; a += 2)
         {
-            int b = b_floor + k;
-            if (b < b_min) continue;
-            int err = ABS(9 * a * b - t9);
-            if (a == a0 && err < b_only_err)
+            int b_floor = t9 / (9 * a);
+            for (int k = 0; k < 2; k++)
             {
-                b_only_err = err; b_only = b;
-            }
-            if (err <= tol9)
-            {
-                *a_out = a; *b_out = b;
-                return 1;
+                int b = b_floor + k;
+                if (b < b_min) continue;
+                if (ABS(9 * a * b - t9) <= tol9)
+                {
+                    *a_out = a; *b_out = b;
+                    return 1;
+                }
             }
         }
     }
 
-    /* none: the preset's own line, with the best B */
-    if (b_only == b0) return 0;
-    *a_out = a0; *b_out = b_only;
+    /* 3. none: Timer B only - the B that shows the right number when it is within 400 ppm
+     *    (+-0.01 fps), else the nearest B */
+    if (!(bb && bb_err <= 4 * ok9))
+    {
+        if (!bn || bn_err >= err0) return 0;
+        bb = bn;
+    }
+
+done_b:
+    if (bb == b0) return 0;
+    *a_out = a0; *b_out = bb;
     return 1;
 }
 
@@ -1641,7 +1672,10 @@ static void std_fps_snap_timers(void)
 {
     if (!is_EOSM) return;
     int a, b;
-    if (std_fps_snap(TimerA + 1, TimerB + 1, RAW_V, &a, &b))
+    /* 1x3: Timer B only.  A longer line in 1x3 2.35:1 Highest gave a lagging preview and recording
+     * that stopped at once (V9 test). */
+    int allow_a = (crop_preset != CROP_PRESET_1X3);
+    if (std_fps_snap(TimerA + 1, TimerB + 1, RAW_V, allow_a, &a, &b))
     {
         TimerA = a - 1;
         TimerB = b - 1;
@@ -4961,8 +4995,8 @@ static int slim_line_clocks(void)
             if (fps == 2) return 0x213 + 1;                      /* 29.97 (snapped from 0x20F) */
             return 0x20F + 1;                                    /* 36 fps */
         case FILM_RO_3K:   return 0x35B + 1;
-        case FILM_RO_28K:                                        /* 1:1 2.8K 2.35:1 (snapped from 0x325) */
-            return (fps == 1) ? 0x333 + 1 : 0x33D + 1;
+        case FILM_RO_28K:                                        /* 1:1 2.8K 2.35:1 */
+            return (fps == 1) ? 0x325 + 1 : 0x33D + 1;           /* 23.976 snapped from 0x325 */
         case FILM_RO_1440:
             return (fps == 1) ? 0x2E5 + 1 : 0x2DB + 1;           /* 25 snapped from 0x2DB */
         case FILM_RO_1280:
@@ -4971,9 +5005,8 @@ static int slim_line_clocks(void)
             if (fps == 1) return 0x2D3 + 1;
             if (fps == 2) return 0x2CF + 1;
             return 0x2CB + 1;
-        case FILM_RO_1X3:  return 0x20B + 1;                     /* 1x3 2.35:1 Highest (snapped from 0x207) */
-        case FILM_RO_1620:
-            return (fps == 1) ? 0x279 + 1 : 0x27D + 1;           /* 23.976 snapped from 0x279 */
+        case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest (Timer B only) */
+        case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
         case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
             if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
             if (fps == 2 || fps == 3) return 0x1E9 + 1;          /* 29.97 / 18 fps */
@@ -7139,7 +7172,18 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                         PauseLiveView();
                         msleep(100);
                         ResumeLiveView();
+                        /* it still came back black now and then (1" Actual -> 2/3" 4:3, 16mm Actual
+                         * -> 16:9; V9 test): check, and bounce the zoom when it is not right, as
+                         * after a recording */
+                        wait_lv_frames(3);
+                        if (lv && !lv_check_is_healthy())
+                        {
+                            int old_zoom = lv_dispsize == 1 ? 5 : lv_dispsize;
+                            set_zoom(old_zoom == 5 ? 1 : 5);
+                            set_zoom(old_zoom);
+                        }
                         gui_uilock(UILOCK_NONE);
+                        crop_rec_request_lv_check();    /* and once more a moment later */
                     }
                     last_1x3 = now_1x3;
                 }
