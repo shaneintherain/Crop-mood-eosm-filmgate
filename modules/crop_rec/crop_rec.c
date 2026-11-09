@@ -1920,7 +1920,7 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
     }
     
     /* FilmGate Narrow: the 1280p readout cut to 1600 columns, for the small frames (S8, 8mm, 1/2", 1/3",
-     * 1/4").  A shorter line: 486 clocks instead of 566 (14 % less rolling shutter), and 29.97 fps.
+     * 1/4").  A shorter line: 490-498 clocks instead of 566 (12-13 % less rolling shutter), and 29.97 fps.
      * RAW_H = width / 4 + 34 and TimerA = RAW_H + 51, as in every other 1:1 preset here. */
     if (CROP_Narrow)
     {
@@ -1928,11 +1928,13 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         {
             RAW_H    = 0x1B2 + reg_width;
             RAW_V    = 0x51D + reg_height;
-            TimerA   = 0x1E5;
-            if (Framerate_24) TimerB = 0xAB9;   /* 32 MHz / (486 * 2746) = 23.978; snapped to 23.976 */
-            if (Framerate_25) TimerB = 0xA49;   /* 24.998 */
-            if (Framerate_30) TimerB = 0x894;   /* 29.970 */
-            if (Framerate_18) TimerB = 0xE49;   /* 18.000 */
+            /* the line is 486 clocks at the least; each rate takes the shortest line (Timer A + 1) for
+             * which a whole Timer B gives the exact rate to 3 decimals, as ML shows it (486 gave
+             * 23.978, 24.997, 29.969, 17.999).  32 MHz / (A * B): */
+            if (Framerate_24) { TimerA = 0x1F1; TimerB = 0xA77; }  /* 498 * 2680: 23.9765 */
+            if (Framerate_25) { TimerA = 0x1ED; TimerB = 0xA1E; }  /* 494 * 2591: 25.0009 */
+            if (Framerate_30) { TimerA = 0x1E9; TimerB = 0x882; }  /* 490 * 2179: 29.9707 */
+            if (Framerate_18) { TimerA = 0x1E9; TimerB = 0xE2B; }  /* 490 * 3628: 18.0006 */
         }
 
         Preview_H     = 1596;
@@ -4953,7 +4955,11 @@ static int slim_line_clocks(void)
         case FILM_RO_25K:  return 0x2CB + 1;
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest */
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
-        case FILM_RO_NARROW: return 0x1E5 + 1;                   /* 1:1 Narrow 1600x1280 */
+        case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
+            if (crop_preset_fps_menu == 1) return 0x1ED + 1;     /* 25 fps */
+            if (crop_preset_fps_menu == 2 ||
+                crop_preset_fps_menu == 3) return 0x1E9 + 1;     /* 29.97 / 18 fps */
+            return 0x1F1 + 1;                                    /* 23.976 */
     }
     return 0;
 }
