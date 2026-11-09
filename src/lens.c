@@ -2734,10 +2734,13 @@ static LVINFO_UPDATE_FUNC(fps_update)
         else if (ABS(f - 48000) <= 60)
             snprintf(buffer, sizeof(buffer), "48fps");
         else
+        {
+            int f100 = (f + 5) / 10;    /* two decimals, rounded: 23.976 -> 23.98 */
             snprintf(buffer, sizeof(buffer),
-                "%2d.%03d",
-                f / 1000, f % 1000
+                "%2d.%02d",
+                f100 / 100, f100 % 100
             );
+        }
     }
 }
 
