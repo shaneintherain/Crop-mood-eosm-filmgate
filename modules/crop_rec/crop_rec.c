@@ -92,7 +92,7 @@ static int crop_preset_1x1_res = 0;
 #define CROP_Full_Res  (crop_preset_1x1_res == 5)
 #define CROP_1620p     (crop_preset_1x1_res == 6)
 #define CROP_1080p     (crop_preset_1x1_res == 7)
-#define CROP_Narrow    (crop_preset_1x1_res == 8)   /* FilmGate 1536x1280: S8, 8mm, 1/2", 1/3", 1/4" */
+#define CROP_Narrow    (crop_preset_1x1_res == 8)   /* FilmGate 1600x1280: S8, 8mm, 1/2", 1/3", 1/4" */
 
 CONFIG_INT("crop.preset_1x3", crop_preset_1x3_res_menu, 1);
 static int crop_preset_1x3_res = 0;
@@ -1012,12 +1012,14 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                     cmos_new[7] = CROP_1280p ? 0xAC9 : 0xACA;   /* 1280p was 0xACA */
                 }
                 
-                /* Narrow 1536x1280: the 1280p rows (same cmos_new[7]); cmos_new[5] sets the first column,
-                 * about 2 px per unit (fitted to the measured 1:1 readouts).  0x3CC (predicted centre) came
-                 * out ~40 px left on the LCD (first Narrow test), so 20 units more */
+                /* Narrow 1600x1280: the 1280p rows (same cmos_new[7]).  cmos_new[5]: bit 5 (0x20) is the
+                 * 3-column binning of the 1x3 presets (0x3E0 squeezed the picture 3x: second Narrow test);
+                 * the first column moves only in 0x40 steps of ~124 px (fitted to the measured 1:1 readouts).
+                 * At 0x3CC a 1536 wide readout sat ~40 px left, so the readout is 64 px wider instead
+                 * (its left edge stays put, its centre moves 32 px right) and mlv_lite's dx does the rest */
                 if (CROP_Narrow)
                 {
-                    cmos_new[5] = 0x3E0;
+                    cmos_new[5] = 0x3CC;
                     cmos_new[7] = 0xAC9;
                 }
                 
@@ -1917,30 +1919,29 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         Preview_Control_Basic = 0;
     }
     
-    /* FilmGate Narrow: the 1280p readout cut to 1536 columns, for the small frames (S8, 8mm, 1/2", 1/3",
-     * 1/4").  A shorter line: 470 clocks instead of 566 (17 % less rolling shutter), and 29.97 fps.
+    /* FilmGate Narrow: the 1280p readout cut to 1600 columns, for the small frames (S8, 8mm, 1/2", 1/3",
+     * 1/4").  A shorter line: 486 clocks instead of 566 (14 % less rolling shutter), and 29.97 fps.
      * RAW_H = width / 4 + 34 and TimerA = RAW_H + 51, as in every other 1:1 preset here. */
     if (CROP_Narrow)
     {
         if (is_EOSM)
         {
-            RAW_H    = 0x1A2 + reg_width;
+            RAW_H    = 0x1B2 + reg_width;
             RAW_V    = 0x51D + reg_height;
-            TimerA   = 0x1D5;
-            if (Framerate_24) TimerB = 0xB17;   /* 32 MHz / (470 * 2840) = 23.974; snapped to 23.976 */
-            if (Framerate_25) TimerB = 0xAA2;   /* 25.007 */
-            if (Framerate_30) TimerB = 0x8DF;   /* 29.967; snapped to 29.97 */
-            if (Framerate_18) TimerB = 0xEC5;   /* 18.002 */
+            TimerA   = 0x1E5;
+            if (Framerate_24) TimerB = 0xAB9;   /* 32 MHz / (486 * 2746) = 23.978; snapped to 23.976 */
+            if (Framerate_25) TimerB = 0xA49;   /* 24.998 */
+            if (Framerate_30) TimerB = 0x894;   /* 29.970 */
+            if (Framerate_18) TimerB = 0xE49;   /* 18.000 */
         }
 
-        Preview_H     = 1532;
+        Preview_H     = 1596;
         Preview_V     = 1280;
         Preview_R     = 0x19000D;
 
-        /* (out << 16) | in, as 1280p (69 / 128 for 1916 px): 0x66 in for 1532 px fills the whole width,
-         * so the preview is stretched sideways (1.25x) for now; an unstretched preview comes later.
-         * (0x450080 would keep the 1280p scale: 576 of 720 px, then needing a shift to centre it.) */
-        YUV_HD_S_H    = 0x450066;
+        /* (out << 16) | in, as 1280p (69 / 128 for 1916 px): 0x6A in for 1596 px fills the whole width,
+         * so the preview is stretched sideways (1.2x) for now; an unstretched preview comes later. */
+        YUV_HD_S_H    = 0x45006A;
         YUV_HD_S_V    = 0x250044;
 
         Black_Bar     = 0;
@@ -4016,7 +4017,7 @@ static MENU_UPDATE_FUNC(crop_preset_1x1_res_update)
     }
     if (crop_preset_1x1_res_menu == 8)
     {
-        MENU_SET_HELP("1536x1280 @ 18, 23.976, 25 and 29.97 FPS (FilmGate small formats)");
+        MENU_SET_HELP("1600x1280 @ 18, 23.976, 25 and 29.97 FPS (FilmGate small formats)");
     }
 }
 
@@ -4179,7 +4180,7 @@ static MENU_UPDATE_FUNC(crop_preset_ar_update)
         if (crop_preset_1x1_res_menu == 5) MENU_SET_VALUE("3:2");     // CROP_Full_Res
         if (crop_preset_1x1_res_menu == 6) MENU_SET_VALUE("4:3");     // CROP_1620p
         if (crop_preset_1x1_res_menu == 7) MENU_SET_VALUE("16:9");    // CROP_1080p
-        if (crop_preset_1x1_res_menu == 8) MENU_SET_VALUE("6:5");     // Narrow 1536x1280
+        if (crop_preset_1x1_res_menu == 8) MENU_SET_VALUE("5:4");     // Narrow 1600x1280
         MENU_SET_WARNING(MENU_WARN_ADVICE, "This option doesn't work in 1:1 crop.");
     }
 }
@@ -4451,7 +4452,7 @@ static int slim_touch_crop_ready_at = 0;
 /* 1x1 Aspect Ratio UI: 0=2.33:1, 1=2.35:1, 2=16:9, 3=3:2, 4=4:3, 5=Narrow (FilmGate frames only) */
 static int slim_1x1_ar = 2; /* default 16:9 */
 __attribute__((unused)) static const char * const slim_1x1_ar_labels[6] = {
-    "2.33:1", "2.35:1", "16:9", "3:2", "4:3", "6:5"
+    "2.33:1", "2.35:1", "16:9", "3:2", "4:3", "5:4"
 };
 
 /* ---- Film Format menu ------------------------------------------------------
@@ -4719,10 +4720,10 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
     }
     else if (slim_1x1_ar == 5)
     {
-        /* Narrow → 1536x1280 (FilmGate S8, 8mm, 1/2", 1/3", 1/4").  FILM: 23.976 / 25 / 18;
+        /* Narrow → 1600x1280 (FilmGate S8, 8mm, 1/2", 1/3", 1/4").  FILM: 23.976 / 25 / 18;
          * VIDEO: 23.976 / 25 / 29.97 */
         *res_idx = 8;
-        *w = 1536; *h = 1280;
+        *w = 1600; *h = 1280;
         *fps_mask = slim_video_standard() ? 0x7 : 0xB;
         slim_unified_preset = 0;
     }
@@ -4952,7 +4953,7 @@ static int slim_line_clocks(void)
         case FILM_RO_25K:  return 0x2CB + 1;
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest */
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
-        case FILM_RO_NARROW: return 0x1D5 + 1;                   /* 1:1 Narrow 1536x1280 */
+        case FILM_RO_NARROW: return 0x1E5 + 1;                   /* 1:1 Narrow 1600x1280 */
     }
     return 0;
 }
@@ -5058,7 +5059,7 @@ static void slim_film_apply(int fmt)
         case FILM_RO_1X3:  slim_mode_ui = 1; crop_preset_ar_menu = 3; break; /* 1x3 Highest 2.35:1 */
         case FILM_RO_1620: slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
         case FILM_RO_28K:  slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1; break; /* 2.8K Higher */
-        case FILM_RO_NARROW: slim_mode_ui = 0; slim_1x1_ar = 5; break;       /* Narrow 1536x1280 */
+        case FILM_RO_NARROW: slim_mode_ui = 0; slim_1x1_ar = 5; break;       /* Narrow 1600x1280 */
         default:           slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
     }
     slim_crop_apply_mode();
@@ -5605,7 +5606,7 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
  * does not offer the source ratio (for example 4:3 when leaving 1x1). */
 __attribute__((unused)) static int slim_crop_current_ratio_x1000(void)
 {
-    static const int ratios_1x1[] = { 2330, 2350, 1778, 1500, 1333, 1200 };
+    static const int ratios_1x1[] = { 2330, 2350, 1778, 1500, 1333, 1250 };
     static const int ratios_1x3[] = { 1778, 2000, 2200, 2350, 2390 };
     static const int ratios_3x3[] = { 1778, 2000, 2200, 2350, 1500 };
 
