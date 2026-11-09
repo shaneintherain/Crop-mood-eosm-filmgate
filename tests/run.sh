@@ -31,6 +31,7 @@ CR=modules/crop_rec/crop_rec.c
 } > "$OUT/crop_rec_menu_snippets.h"
 python3 tests/extract.py $CR function slim_film_apply > "$OUT/crop_rec_apply_snippet.h"
 {
+  python3 tests/extract.py $CR line     "#define STD_FPS_TIGHT_CLOCKS"
   python3 tests/extract.py $CR function std_fps_shown_x100
   python3 tests/extract.py $CR function std_fps_snap
 } > "$OUT/crop_rec_fps_snippet.h"

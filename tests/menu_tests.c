@@ -98,7 +98,9 @@ int main(void)
             int fits976 = a35 && film_frames[film_frame_index(f, k)].h <= 958;
             CHECK(!!(mask & 0x10) == a35, "format %d frame %d: 36 fps offered=%d, expected %d (mask %x)", f, k, !!(mask & 0x10), a35, mask);
             CHECK(!!(mask & 0x20) == fits976, "format %d frame %d: 48 fps offered=%d, expected %d (mask %x)", f, k, !!(mask & 0x20), fits976, mask);
-            if (!film_is_video(f))
+            if (film_is_cm(f) && ro == FILM_RO_3X3)
+                CHECK(mask & 4, "CROP MOOD 3x3 frame %d must offer 29.97 (mask %x)", k, mask);
+            else if (!film_is_video(f))
                 CHECK(!(mask & 4), "FILM format %d frame %d must not offer 30 / 29.97 (mask %x)", f, k, mask);
             else
             {

@@ -655,9 +655,11 @@ static int quick_screen_adjust(int index, int delta)
 
     quick_screen_feedback = index * 2 + (delta < 0);
     /* Film Format cell: Up goes towards A35, Down steps to the next smaller film
-     * (A35 > A35-ANA > S16 > 16mm > S8 > 8mm).  The other cells keep Up = increase. */
+     * (A35 > A35-ANA > S16 > 16mm > S8 > 8mm).  Frame cell the same way: Up towards the bigger
+     * frame (2.35:1 > 1.85:1 > 16:9 > Actual).  The other cells keep Up = increase. */
     menu_adjust_value_by_name(
-        item->adjust_menu, item->adjust_entry, index == QS_FORMAT ? -delta : delta);
+        item->adjust_menu, item->adjust_entry,
+        (index == QS_FORMAT || index == QS_FRAME) ? -delta : delta);
     menu_redraw();
     delayed_call(220, quick_screen_feedback_clear, 0);
     delayed_call(500, quick_screen_refresh, 0);
@@ -688,7 +690,15 @@ void menu_quick_screen_draw(void)
     int index;
     film_palette_apply();
     bmp_fill(UI_BG, 0, 0, 720, 480);
-    bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), 16, 4, "QUICK MENU");
+    {
+        /* the Standard (FILM / VIDEO / CROP MOOD) the cells belong to */
+        struct menu_display_info std_info;
+        char * std = menu_get_str_value_from_script("Movie", "Standard", &std_info);
+        if (std && std[0])
+            bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), 16, 4, "QUICK MENU > %s", std);
+        else
+            bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), 16, 4, "QUICK MENU");
+    }
     /* divider under the title; the bottom 50 px stay plain background, like the other pages */
     bmp_fill(UI_LINE, 0, 47, 720, 1);
 

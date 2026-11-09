@@ -1589,7 +1589,10 @@ static unsigned RAW_V = 0;            // RAW vertical resolution          0xC0F0
  *     artifacts and a low-res preview.
  *   - B may shrink only while at least 75 % of the preset's vertical blanking (B - RAW_V) remains.
  *   - When nothing within 3 % gets there, only B is moved (to the nearest whole value).
+ *   - Presets with less than 8 ms of vertical blanking: Timer B only, one line at most.
  * Returns 1 and the new A / B (not register values) when something changes. */
+#define STD_FPS_TIGHT_CLOCKS 256000     /* 8 ms of vertical blanking, in 32 MHz clocks */
+
 /* what the top bar shows for A x B: fps x 100, rounded (fps_get_current_x1000 is truncated) */
 static int std_fps_shown_x100(int a, int b)
 {
@@ -1621,6 +1624,22 @@ static int std_fps_snap(int a0, int b0, int raw_v, int allow_a, int * a_out, int
     int blank0 = b0 - raw_v;
     int b_min = (raw_v > 0 && blank0 > 0) ? raw_v + (3 * blank0) / 4 : b0;
 
+    /* A tight preset (less than 8 ms between the end of one readout and the start of the next:
+     * 1x3 Highest, 1440p at 25 fps) failed to record with a longer line or 2 lines fewer (V9 test).
+     * There, only Timer B moves, and by one line at most, as V8 did. */
+    if (raw_v > 0 && blank0 * a0 < STD_FPS_TIGHT_CLOCKS)
+    {
+        int best = b0, best_err = err0;
+        for (int b = b0 - 1; b <= b0 + 1; b += 2)
+        {
+            int err = ABS(9 * a0 * b - t9);
+            if (b > raw_v && err < best_err) { best = b; best_err = err; }
+        }
+        if (best == b0) return 0;
+        *a_out = a0; *b_out = best;
+        return 1;
+    }
+
     /* 1. Timer B only (the safest change): the nearest B that shows the right number */
     int bb = 0, bb_err = 0, bn = 0, bn_err = 0;
     for (int k = 0; k < 2; k++)
@@ -1645,6 +1664,7 @@ static int std_fps_snap(int a0, int b0, int raw_v, int allow_a, int * a_out, int
             {
                 int b = b_floor + k;
                 if (b < b_min) continue;
+                if ((b - raw_v) * a < STD_FPS_TIGHT_CLOCKS) continue;
                 if (ABS(9 * a * b - t9) <= tol9)
                 {
                     *a_out = a; *b_out = b;
@@ -4674,6 +4694,18 @@ int crop_rec_film_format()
     return film_frame_index(fmt, frame);
 }
 
+/* The frame to draw on the screen: as crop_rec_film_format(), and also CROP MOOD 1x3, which records
+ * the whole readout (so is no window for mlv_lite) but still gets its frame line around the picture.
+ * Without it the 3x3 frame line stayed on the screen after switching 3x3 -> 1x3 (V9 test). */
+int crop_rec_film_display_format()
+{
+    int frame;
+    int fmt = film_pick(slim_film_active_readout(), slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
+    if (fmt < 0)
+        return 0;
+    return film_frame_index(fmt, frame);
+}
+
 static void slim_crop_apply_mode(void);
 static void slim_crop_apply_unified_preset(void);
 static void slim_crop_clamp_fps(void);
@@ -4997,8 +5029,7 @@ static int slim_line_clocks(void)
         case FILM_RO_3K:   return 0x35B + 1;
         case FILM_RO_28K:                                        /* 1:1 2.8K 2.35:1 */
             return (fps == 1) ? 0x325 + 1 : 0x33D + 1;           /* 23.976 snapped from 0x325 */
-        case FILM_RO_1440:
-            return (fps == 1) ? 0x2E5 + 1 : 0x2DB + 1;           /* 25 snapped from 0x2DB */
+        case FILM_RO_1440: return 0x2DB + 1;
         case FILM_RO_1280:
             return (fps == 1) ? 0x23D + 1 : 0x235 + 1;
         case FILM_RO_25K:
@@ -5067,8 +5098,11 @@ static int slim_crop_fps_mask(void)
         int ar = COERCE(crop_preset_ar_menu, 0, 4);
         if (ar == 4)
         {
-            /* 3:2 (A35, A35 Anamorphic) → 23.976 / 25 / 36; no 30 in FILM */
+            /* 3:2 (A35, A35 Anamorphic) → 23.976 / 25 / 36; no 30 in FILM.  CROP MOOD 3x3 also
+             * offers 29.97 (as the original 3x3 preset did) */
             int mask = 0x1 | 0x2 | 0x10;
+            if (film_is_cm(slim_film_fmt))
+                mask |= 0x4;
             /* 48 only where the recorded frame fits in a shorter readout
              * (A35 16:9, 1.85, 2.35; not the 1152-row anamorphic frames) */
             int h = slim_film_frame_height();
@@ -5730,6 +5764,7 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
     (void *)&crop_rec_touch_get_value,
     (void *)&crop_rec_custom_adjust,
     (void *)&crop_rec_film_format,
+    (void *)&crop_rec_film_display_format,
     (void *)&crop_rec_film_standard,
     (void *)&crop_rec_video_standard,
     (void *)&crop_rec_menu_footer,

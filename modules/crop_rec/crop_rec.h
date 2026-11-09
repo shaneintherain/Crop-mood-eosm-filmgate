@@ -16,6 +16,9 @@ extern WEAK_FUNC(ret_0) int crop_rec_custom_adjust(int control, int delta);
 /* Film Format / Frame chosen in the Movie menu: 0 = none, otherwise an index
  * 1..FILM_FRAME_COUNT-1 into the film_frames[] table in src/film-formats.h. */
 extern WEAK_FUNC(ret_0) int crop_rec_film_format();
+/* The frame to draw: as crop_rec_film_format(), and also CROP MOOD 1x3 (which records the whole
+ * readout, so is not a window for mlv_lite). */
+extern WEAK_FUNC(ret_0) int crop_rec_film_display_format();
 /* 1 when the active recording format is a FILM standard one (A35 ... 8mm): the shutter is shown
  * as an angle first.  0 for VIDEO, CROP MOOD and every other mode. */
 extern WEAK_FUNC(ret_0) int crop_rec_film_standard();

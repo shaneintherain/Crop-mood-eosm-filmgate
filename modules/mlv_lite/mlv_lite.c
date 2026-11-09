@@ -689,13 +689,22 @@ static int film_frame_sampling_ok(int f)
     return squeeze_factor == 1.0f;
 }
 
+/* the frame drawn on the screen (CROP MOOD 1x3 included: see crop_rec_film_display_format) */
+static int film_display_format(void)
+{
+    int f = crop_rec_film_display_format();
+    if (f <= 0 || f >= COUNT(film_frames))
+        f = crop_rec_film_format();
+    return f;
+}
+
 static int film_frame_possible(void)
 {
     /* The EOS M crop_rec presets run in Canon's x5 zoom state (lv_dispsize == 5),
      * so x5 must be accepted here; x10 (focus zoom) is not. */
-    return crop_rec_film_format() > 0 &&
+    return film_display_format() > 0 &&
            (lv_dispsize == 1 || lv_dispsize == 5) &&
-           film_frame_sampling_ok(crop_rec_film_format()) &&
+           film_frame_sampling_ok(film_display_format()) &&
            (is_LCD_Output() || is_480p_Output() || is_1080i_Full_Output() || is_1080i_Info_Output() ||
             ext_monitor_hdmi /* any other HDMI mode (720p ...): generic placement, not measured */);
 }
@@ -708,7 +717,7 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     if (!film_frame_possible())
         return 0;
 
-    int f = crop_rec_film_format();
+    int f = film_display_format();
 
     /* readout width and LCD scale numerator / denominator, from the shared table */
     const struct film_readout * ro = &film_readouts[film_frames[f].readout];
@@ -870,7 +879,7 @@ static void refresh_cropmarks_if_changed(void)
     static int last_sig = INT_MIN;
     int sig = (lv ? 1 : 0)
             | (lv_dispsize << 1)
-            | (crop_rec_film_format() << 6)
+            | (film_display_format() << 6)
             | (raw_video_enabled ? 1 << 12 : 0)
             | ((is_LCD_Output() ? 1 : 0) << 13)
             | ((is_480p_Output() ? 1 : 0) << 14)

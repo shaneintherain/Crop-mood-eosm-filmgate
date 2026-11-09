@@ -2783,7 +2783,7 @@ static LVINFO_UPDATE_FUNC(focal_len_update)
     {
         snprintf(buffer, sizeof(buffer), "%d%s",
                crop_info ? (lens_info.focal_len * SENSORCROPFACTOR + 5) / 10 : lens_info.focal_len,
-               crop_info ? "eq" : SYM_SMALL_M SYM_SMALL_M
+               crop_info ? "eq" : "mm"     /* the small "mm" symbol is not in the bar font */
         );
     }
 }
