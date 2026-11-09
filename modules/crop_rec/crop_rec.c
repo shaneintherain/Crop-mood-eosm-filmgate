@@ -1013,11 +1013,11 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                 }
                 
                 /* Narrow 1536x1280: the 1280p rows (same cmos_new[7]); cmos_new[5] sets the first column,
-                 * about 2 px per unit (fitted to the measured 1:1 readouts): 0x3CC puts the 1536 columns
-                 * on the sensor centre where 1280p (0x380, 1920 columns) sat 38 px right */
+                 * about 2 px per unit (fitted to the measured 1:1 readouts).  0x3CC (predicted centre) came
+                 * out ~40 px left on the LCD (first Narrow test), so 20 units more */
                 if (CROP_Narrow)
                 {
-                    cmos_new[5] = 0x3CC;
+                    cmos_new[5] = 0x3E0;
                     cmos_new[7] = 0xAC9;
                 }
                 

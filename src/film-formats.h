@@ -62,7 +62,8 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
                                                  * (not 1226).  Measured 37 px right, 19 rows high; the 2832 wide
                                                  * frame leaves room to move 24 px left (all the room) */
     { 1536, 1280,  3,   8, 1, 720,   0, -20 },  /* 1:1 Narrow (FilmGate): the 1280p rows (same start, same dy), 1536
-                                                 * columns moved to the centre by cmos_new[5] (not yet measured).
+                                                 * columns moved to the centre by cmos_new[5] (LCD: ~40 px left
+                                                 * at 0x3CC; now 0x3E0, clips not yet measured).
                                                  * Preview stretched to the full width for now (1.25x sideways) */
 };
 
