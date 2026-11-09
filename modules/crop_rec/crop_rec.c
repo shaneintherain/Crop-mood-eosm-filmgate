@@ -1575,68 +1575,76 @@ static unsigned TimerA = 0;
 static unsigned RAW_H = 0;            // RAW width    resolution          0xC0F06804
 static unsigned RAW_V = 0;            // RAW vertical resolution          0xC0F06804
 
-/* True 23.976 fps (24000/1001).
+/* Standard frame rates: 18, 23.976 (24000/1001), 25 and 29.97 (30000/1001).
  *
- * Sensor frame rate = 32 MHz / (A * B), with A = TimerA + 1 and B = TimerB + 1 (the registers
- * hold value - 1).  24000/1001 needs A * B = 1334666.67, which is not a whole number.  Canon's own
- * 24p mode hits it on average by switching Timer B between two neighbouring values; the presets
- * below use one fixed value, so several of them ran 0.01% - 0.05% too fast (e.g. A=528 B=2527
- * gives 23.983 fps, about 1 second too many per hour).
- *
- * After a preset has chosen its timers, move Timer B (only B) to the value that gets A * B closest
- * to the NTSC target.  Timer A is never touched: it sets the line time and its parity must stay as
- * Canon has it (the core FPS engine keeps it for the same reason); an earlier attempt that also moved
- * A produced vertical line artifacts and a low-res preview.
- * Only done for 24p presets (within 1% of 23.976), so 25p / 30p / high-FPS presets are untouched,
- * and Timer B may shrink only while at least 75% of the original vertical blanking (B - RAW_V) remains. */
-#define NTSC24_PRODUCT 1334667   /* 32000000 * 1001 / 24000, rounded */
-#define NTSC30_PRODUCT 1067733   /* 32000000 * 1001 / 30000, rounded */
-/* defined with the Film Format menu code */
-static int slim_video_standard(void);
-static void ntsc24_snap_timers(void)
+ * Sensor frame rate = 32 MHz / (A * B), with A = TimerA + 1 (the line time) and B = TimerB + 1 (lines
+ * per frame).  The presets' fixed timers land a little off (23.964 - 23.990, 25.005, 29.955 - 29.988,
+ * ...).  After a preset has chosen its timers, std_fps_snap() picks the nearest standard rate (only
+ * when the preset is already within 1 % of it, so 36 / 48 fps and the odd high-FPS presets are left
+ * alone) and finds timers that hit it to within 40 ppm (+-0.001 fps):
+ *   - Timer B alone first.  When no whole B is close enough, the line is made longer by 2 clocks at a
+ *     time (never shorter, at most 1/32 = 3 % longer) and B recalculated.  A moves in steps of 2 so
+ *     its parity stays as Canon has it: an earlier attempt that changed the parity gave vertical line
+ *     artifacts and a low-res preview.
+ *   - B may shrink only while at least 75 % of the preset's vertical blanking (B - RAW_V) remains.
+ *   - When nothing within 3 % gets there, only B is moved (to the nearest whole value).
+ * Returns 1 and the new A / B (not register values) when something changes. */
+static int std_fps_snap(int a0, int b0, int raw_v, int * a_out, int * b_out)
 {
-    if (!is_EOSM) return;
+    /* 9 * 32 MHz / fps: whole numbers for all four rates */
+    static const int t9s[4] = { 16000000, 12012000, 11520000, 9609600 };   /* 18, 23.976, 25, 29.97 */
 
-    /* 24p always; 30p only for the VIDEO standard on the 2.5K readout (29.97 fps) */
-    int target;
-    if (Framerate_24)
-        target = NTSC24_PRODUCT;
-    else if (Framerate_30 && crop_preset == CROP_PRESET_1X1 && (CROP_2_5K || CROP_Narrow) && slim_video_standard())
-        target = NTSC30_PRODUCT;
-    else
-        return;
+    if (a0 < 2 || b0 < 2) return 0;
+    int p9 = 9 * a0 * b0;
+    int t9 = 0;
+    for (int i = 0; i < 4; i++)
+        if (ABS(p9 - t9s[i]) <= t9s[i] / 100)
+            t9 = t9s[i];
+    if (!t9) return 0;
 
-    int a = TimerA + 1;
-    int b0 = TimerB + 1;
-    if (a < 2 || b0 < 2) return;
+    int tol9 = t9 / 25000;              /* 40 ppm: 23.976 +- 0.001 */
+    int err0 = ABS(p9 - t9);
+    if (err0 <= tol9) return 0;
 
-    int p0 = a * b0;
-    if (p0 < target - target / 100 || p0 > target + target / 100) return;
+    int blank0 = b0 - raw_v;
+    int b_min = (raw_v > 0 && blank0 > 0) ? raw_v + (3 * blank0) / 4 : b0;
+    int b_only = b0, b_only_err = err0;
 
-    int err0 = ABS(p0 - target);
-    int blank0 = b0 - (int)RAW_V;      /* original vertical blanking, in lines */
-    int best_b = b0, best_err = err0;
-    int b_floor = target / a;
-
-    for (int k = 0; k < 2; k++)
+    /* the shortest line (from the preset's own, in steps of 2) that a whole B brings within 40 ppm */
+    for (int a = a0; a <= a0 + a0 / 32; a += 2)
     {
-        int b = b_floor + k;
-        if (b < 2) continue;
-
-        /* keep most of the original blanking when Timer B gets smaller */
-        if (b < b0 && (blank0 <= 0 || (b - (int)RAW_V) * 4 < blank0 * 3)) continue;
-
-        int err = ABS(a * b - target);
-        if (err < best_err)
+        int b_floor = t9 / (9 * a);
+        for (int k = 0; k < 2; k++)
         {
-            best_err = err; best_b = b;
+            int b = b_floor + k;
+            if (b < b_min) continue;
+            int err = ABS(9 * a * b - t9);
+            if (a == a0 && err < b_only_err)
+            {
+                b_only_err = err; b_only = b;
+            }
+            if (err <= tol9)
+            {
+                *a_out = a; *b_out = b;
+                return 1;
+            }
         }
     }
 
-    /* only change something when it is clearly better */
-    if (best_err < err0 && err0 > 13)
+    /* none: the preset's own line, with the best B */
+    if (b_only == b0) return 0;
+    *a_out = a0; *b_out = b_only;
+    return 1;
+}
+
+static void std_fps_snap_timers(void)
+{
+    if (!is_EOSM) return;
+    int a, b;
+    if (std_fps_snap(TimerA + 1, TimerB + 1, RAW_V, &a, &b))
     {
-        TimerB = best_b - 1;
+        TimerA = a - 1;
+        TimerB = b - 1;
     }
 }
 
@@ -2045,8 +2053,8 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         }
     }
 
-    /* true 23.976 fps (see ntsc24_snap_timers) */
-    ntsc24_snap_timers();
+    /* exact 18 / 23.976 / 25 / 29.97 fps (see std_fps_snap) */
+    std_fps_snap_timers();
 
     /* get rid of moving Dual ISO lines by tweaking Timer B a tiny bit */
     if (fix_dual_iso_flicker && dual_iso_is_enabled())
@@ -2444,8 +2452,8 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
         }
     }
 
-    /* true 23.976 fps (see ntsc24_snap_timers) */
-    ntsc24_snap_timers();
+    /* exact 18 / 23.976 / 25 / 29.97 fps (see std_fps_snap) */
+    std_fps_snap_timers();
 
     /* get rid of moving Dual ISO lines by tweaking Timer B a tiny bit */
     if (fix_dual_iso_flicker && dual_iso_is_enabled())
@@ -2667,8 +2675,8 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
     Preview_Control_Basic = 0;
     REG_C0F383DC_Tuning = 0;
 
-    /* true 23.976 fps (see ntsc24_snap_timers) */
-    ntsc24_snap_timers();
+    /* exact 18 / 23.976 / 25 / 29.97 fps (see std_fps_snap) */
+    std_fps_snap_timers();
 
     /* get rid of moving Dual ISO lines by tweaking Timer B a tiny bit */
     if (fix_dual_iso_flicker && dual_iso_is_enabled())
@@ -4942,23 +4950,33 @@ static int slim_film_frame_height(void)
  * in reg_override_1X1 / reg_override_3X3. */
 static int slim_line_clocks(void)
 {
+    /* the line after std_fps_snap(): some rates take a slightly longer line to land exactly */
+    int fps = crop_preset_fps_menu;
     switch (slim_film_menu_readout())
     {
         case FILM_RO_3X3:
-            if (crop_preset_fps_menu == 1) return 0x27F + 1;     /* 25 fps */
-            if (crop_preset_fps_menu == 5) return 0x207 + 1;     /* 48 fps (738 or 958 row readout) */
-            return 0x20F + 1;                                    /* 23.976 / 36 fps */
+            if (fps == 1) return 0x27F + 1;                      /* 25 fps */
+            if (fps == 5) return 0x207 + 1;                      /* 48 fps (738 or 958 row readout) */
+            if (fps == 0) return 0x217 + 1;                      /* 23.976 (snapped from 0x20F) */
+            if (fps == 2) return 0x213 + 1;                      /* 29.97 (snapped from 0x20F) */
+            return 0x20F + 1;                                    /* 36 fps */
         case FILM_RO_3K:   return 0x35B + 1;
-        case FILM_RO_28K:  return 0x325 + 1;                     /* 1:1 2.8K 2.35:1 */
-        case FILM_RO_1440: return 0x2DB + 1;
-        case FILM_RO_1280: return 0x235 + 1;
-        case FILM_RO_25K:  return 0x2CB + 1;
-        case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest */
-        case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
+        case FILM_RO_28K:                                        /* 1:1 2.8K 2.35:1 (snapped from 0x325) */
+            return (fps == 1) ? 0x333 + 1 : 0x33D + 1;
+        case FILM_RO_1440:
+            return (fps == 1) ? 0x2E5 + 1 : 0x2DB + 1;           /* 25 snapped from 0x2DB */
+        case FILM_RO_1280:
+            return (fps == 1) ? 0x23D + 1 : 0x235 + 1;
+        case FILM_RO_25K:
+            if (fps == 1) return 0x2D3 + 1;
+            if (fps == 2) return 0x2CF + 1;
+            return 0x2CB + 1;
+        case FILM_RO_1X3:  return 0x20B + 1;                     /* 1x3 2.35:1 Highest (snapped from 0x207) */
+        case FILM_RO_1620:
+            return (fps == 1) ? 0x279 + 1 : 0x27D + 1;           /* 23.976 snapped from 0x279 */
         case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
-            if (crop_preset_fps_menu == 1) return 0x1ED + 1;     /* 25 fps */
-            if (crop_preset_fps_menu == 2 ||
-                crop_preset_fps_menu == 3) return 0x1E9 + 1;     /* 29.97 / 18 fps */
+            if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
+            if (fps == 2 || fps == 3) return 0x1E9 + 1;          /* 29.97 / 18 fps */
             return 0x1F1 + 1;                                    /* 23.976 */
     }
     return 0;
