@@ -27,6 +27,7 @@ static struct menu_entry custom_menu_placeholders[] =
     /* other */
     { .name = "Small Hacks",         .placeholder = 1 },
     { .name = "More Hacks",          .placeholder = 1 },
+    { .name = "1x3 LV Restart (test)", .placeholder = 1 },
     /* card */
     { .name = "Card Benchmark",      .placeholder = 1 },
     { .name = "SD Overclock",        .placeholder = 1 },

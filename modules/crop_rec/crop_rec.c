@@ -61,6 +61,9 @@ static CONFIG_INT("crop.tapdisp", tapdisp, 1);
 static CONFIG_INT("crop.preset_fps_reduce", crop_preset_fps_reduce, 1);
 static CONFIG_INT("crop.preset", crop_preset_index, 3); /* default: 3x3 = S35 */
 static CONFIG_INT("crop.shutter_range", shutter_range, 0);
+/* TEST (V9): the Live View restart on a 1x3 switch / start-up in 1x3 can be turned off, to see
+ * whether it is what stops CROP MOOD 1x3 recording at once */
+static CONFIG_INT("crop.lv_restart_1x3", lv_restart_1x3, 1);
 static CONFIG_INT("crop.fix_dual_iso_flicker", fix_dual_iso_flicker, 1);
 
 CONFIG_INT("crop.bit_depth", bit_depth_analog, 1);
@@ -4411,6 +4414,15 @@ static MENU_UPDATE_FUNC(fix_dual_iso_flicker_update)
 
 static struct menu_entry slim_more_hacks_menu[] = {
     {
+        .name     = "1x3 LV Restart (test)",
+        .max      = 1,
+        .choices  = CHOICES("OFF", "ON"),
+        .priv     = &lv_restart_1x3,
+        .edit_mode = EM_INLINE_ADJUST,
+        .help     = "TEST: restart Live View when switching to or from a 1x3 mode (and at start-up in 1x3).",
+        .help2    = "OFF: as V8. The preview may stay black after the switch.",
+    },
+    {
         .name     = "More Hacks",
         .max      = 1,
         .choices  = CHOICES("OFF", "Allow"),
@@ -7200,7 +7212,7 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                     /* also at start-up straight into 1x3: CROP MOOD 1x3 stayed black after
                      * turning the camera on until 3x3 and back (V9 test) */
                     int switched = (last_1x3 == -1) ? now_1x3 : (now_1x3 != last_1x3);
-                    if (switched && lv && !RECORDING)
+                    if (switched && lv && !RECORDING && lv_restart_1x3)
                     {
                         gui_uilock(UILOCK_EVERYTHING);
                         PauseLiveView();
