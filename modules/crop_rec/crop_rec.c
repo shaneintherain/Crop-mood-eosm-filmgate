@@ -5531,11 +5531,9 @@ static MENU_UPDATE_FUNC(slim_crop_fps_update)
         return;
     }
 
-    static const char * labels[] = { "23.976", "25", "30", "18", "36", "48" };
-    if (slim_video_standard() && crop_preset_fps_menu == 2)
-        MENU_SET_VALUE("29.97");   /* VIDEO standard: 2.5K readout snapped to 29.97 */
-    else
-        MENU_SET_VALUE("%s", labels[COERCE(crop_preset_fps_menu, 0, 5)]);
+    /* "30" runs at 29.97 in every preset (std_fps_snap) */
+    static const char * labels[] = { "23.976", "25", "29.97", "18", "36", "48" };
+    MENU_SET_VALUE("%s", labels[COERCE(crop_preset_fps_menu, 0, 5)]);
 
     /* Only one valid rate → show it greyed (read-only). */
     int mask = slim_crop_fps_mask();
@@ -5668,10 +5666,8 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
             }
             else
             {
-                static const char *labels[] = { "23.976", "25", "30", "18", "36", "48" };
-                snprintf(value, size, "%s",
-                    (slim_video_standard() && crop_preset_fps_menu == 2) ? "29.97" :
-                    labels[COERCE(crop_preset_fps_menu, 0, 5)]);
+                static const char *labels[] = { "23.976", "25", "29.97", "18", "36", "48" };
+                snprintf(value, size, "%s", labels[COERCE(crop_preset_fps_menu, 0, 5)]);
             }
             enabled = bits > 1;
         }
@@ -5840,7 +5836,7 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .select     = slim_crop_fps_select,
         .update     = slim_crop_fps_update,
         .max        = 3,
-        .choices    = CHOICES("23.976", "25", "30", "18"),
+        .choices    = CHOICES("23.976", "25", "29.97", "18"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
         .help       = "Frame rates supported by the current configuration.",
@@ -7201,7 +7197,10 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                 {
                     static int last_1x3 = -1;
                     int now_1x3 = (CROP_PRESET_MENU == CROP_PRESET_1X3);
-                    if (last_1x3 != -1 && now_1x3 != last_1x3 && lv && !RECORDING)
+                    /* also at start-up straight into 1x3: CROP MOOD 1x3 stayed black after
+                     * turning the camera on until 3x3 and back (V9 test) */
+                    int switched = (last_1x3 == -1) ? now_1x3 : (now_1x3 != last_1x3);
+                    if (switched && lv && !RECORDING)
                     {
                         gui_uilock(UILOCK_EVERYTHING);
                         PauseLiveView();
