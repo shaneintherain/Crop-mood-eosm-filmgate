@@ -2729,6 +2729,13 @@ static LVINFO_UPDATE_FUNC(fps_update)
     if (is_movie_mode())
     {
         int f = fps_get_current_x1000();
+        /* A few presets cannot land exactly on their rate without a timing change they do not take
+         * (16mm 16:9 at 25: 24.995; CROP MOOD 1x3: 23.973).  Within 0.03 % they show the standard
+         * rate they are meant to be. */
+        static const int standard[] = { 18000, 23976, 25000, 29970 };
+        for (int i = 0; i < COUNT(standard); i++)
+            if (ABS(f - standard[i]) * 10000 <= standard[i] * 3)
+                f = standard[i];
         int f100 = (f + 5) / 10;        /* two decimals, rounded: 23.976 -> 23.98 */
         if (ABS(f - 36000) <= 60)
             snprintf(buffer, sizeof(buffer), "36fps");
