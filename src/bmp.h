@@ -334,9 +334,10 @@ void film_palette_apply(void);
 #define UI_TEXT      COLOR_WHITE      /* labels and values          */
 #define UI_DIM       COLOR_GRAY(65)   /* secondary text             */
 #define UI_MUTED     COLOR_GRAY(45)   /* locked / read-only rows    */
-#define UI_SEL       COLOR_ORANGE     /* selection fill, accents    */
-#define UI_SEL_TEXT  COLOR_BLACK      /* text on the selection      */
-#define UI_SEL_MUTED COLOR_GRAY(25)   /* locked text on the selection */
+#define UI_SEL       COLOR_GRAY(18)   /* selection fill: a dark grey bar / panel */
+#define UI_SEL_TEXT  COLOR_WHITE      /* text on the selection      */
+#define UI_SEL_MUTED COLOR_GRAY(45)   /* locked text on the selection */
+#define UI_ACCENT    COLOR_ORANGE     /* the one accent: selection marker, selected value, arrows */
 #define UI_PILL      COLOR_GRAY(20)   /* recording time box, audio meter track */
 
 #define COLOR_DARK_GREEN1_MOD 21

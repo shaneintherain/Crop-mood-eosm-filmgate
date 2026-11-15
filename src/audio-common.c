@@ -372,10 +372,16 @@ draw_meter(
     {
         int x0 = edges[band], x1 = edges[band + 1];
         int xl = COERCE(fast, x0, x1);          /* lit part of this band */
+        /* refined look: a thin (4 px) bar in the middle of the meter's row; the rest of the row
+         * is filled with the bar background, so every pixel is still drawn once per refresh */
+        const int bh = MIN(4, (int) meter_height - 2);
+        const int by = y_origin + ((int) meter_height - bh) / 2;
+        bmp_fill(COLOR_BLACK, bar_x0 + x0, y_origin + 1, x1 - x0, by - (y_origin + 1));
+        bmp_fill(COLOR_BLACK, bar_x0 + x0, by + bh, x1 - x0, y_origin + (int) meter_height - 1 - (by + bh));
         if (xl > x0)
-            bmp_fill(lit_color[band], bar_x0 + x0, y_origin + 1, xl - x0, (int) meter_height - 2);
+            bmp_fill(lit_color[band], bar_x0 + x0, by, xl - x0, bh);
         if (x1 > xl)
-            bmp_fill(UI_PILL, bar_x0 + xl, y_origin + 1, x1 - xl, (int) meter_height - 2);
+            bmp_fill(UI_PILL, bar_x0 + xl, by, x1 - xl, bh);
     }
 
     // Write the current level
