@@ -61,9 +61,6 @@ static CONFIG_INT("crop.tapdisp", tapdisp, 1);
 static CONFIG_INT("crop.preset_fps_reduce", crop_preset_fps_reduce, 1);
 static CONFIG_INT("crop.preset", crop_preset_index, 3); /* default: 3x3 = S35 */
 static CONFIG_INT("crop.shutter_range", shutter_range, 0);
-/* TEST (V9): the Live View restart on a 1x3 switch / start-up in 1x3 can be turned off, to see
- * whether it is what stops CROP MOOD 1x3 recording at once */
-static CONFIG_INT("crop.lv_restart_1x3", lv_restart_1x3, 1);
 static CONFIG_INT("crop.fix_dual_iso_flicker", fix_dual_iso_flicker, 1);
 
 CONFIG_INT("crop.bit_depth", bit_depth_analog, 1);
@@ -1694,15 +1691,27 @@ done_b:
 static void std_fps_snap_timers(void)
 {
     if (!is_EOSM) return;
-    int a, b;
     /* 1x3: Timer B only.  A longer line in 1x3 2.35:1 Highest gave a lagging preview and recording
      * that stopped at once (V9 test). */
     int allow_a = (crop_preset != CROP_PRESET_1X3);
-    if (std_fps_snap(TimerA + 1, TimerB + 1, RAW_V, allow_a, &a, &b))
+
+    /* This runs from the register hook: for every register Canon writes, every frame, also while
+     * recording.  The search (loops, 64-bit divisions) is only done when the preset's timers
+     * change; after that the answer is reused.  Written and read from the same (Canon's) task. */
+    static unsigned in_a = 0, in_b = 0, in_v = 0, out_a = 0, out_b = 0;
+    static int in_allow = -1;
+    if (TimerA != in_a || TimerB != in_b || RAW_V != in_v || allow_a != in_allow)
     {
-        TimerA = a - 1;
-        TimerB = b - 1;
+        int a = TimerA + 1, b = TimerB + 1;
+        if (!std_fps_snap(TimerA + 1, TimerB + 1, RAW_V, allow_a, &a, &b))
+        {
+            a = TimerA + 1; b = TimerB + 1;
+        }
+        in_a = TimerA; in_b = TimerB; in_v = RAW_V; in_allow = allow_a;
+        out_a = a - 1; out_b = b - 1;
     }
+    TimerA = out_a;
+    TimerB = out_b;
 }
 
 static unsigned Preview_Control = 0;        // Flag tells we want full real-time preview
@@ -4414,15 +4423,6 @@ static MENU_UPDATE_FUNC(fix_dual_iso_flicker_update)
 
 static struct menu_entry slim_more_hacks_menu[] = {
     {
-        .name     = "1x3 LV Restart (test)",
-        .max      = 1,
-        .choices  = CHOICES("OFF", "ON"),
-        .priv     = &lv_restart_1x3,
-        .edit_mode = EM_INLINE_ADJUST,
-        .help     = "TEST: restart Live View when switching to or from a 1x3 mode (and at start-up in 1x3).",
-        .help2    = "OFF: as V8. The preview may stay black after the switch.",
-    },
-    {
         .name     = "More Hacks",
         .max      = 1,
         .choices  = CHOICES("OFF", "Allow"),
@@ -6983,9 +6983,23 @@ extern void idle_kill_flicker_after_menu();
 
 /* Canon redraws its x5 screen (with arrows) into the overlay layer while the zoom steps run, and
  * those steps block, so a single black fill is painted over.  Keep refilling from a small
- * background task for the whole refresh. */
+ * background task for the whole refresh.
+ *
+ * The task takes ML's overlay lock only for each fill, never for the whole cover: the code that
+ * runs under the cover (PauseLiveView, the idle logic, property handlers) takes that lock too,
+ * and would otherwise wait for the cover to time out.
+ *
+ * (Until V9 the task was stopped the moment it was created: task_create() returns the task's id,
+ * an even non-zero number, which was read as "failed".  Only the first fill was ever painted,
+ * which is why the x1 / x5 steps could still be seen.) */
 static volatile int slim_cover_on = 0;
 static volatile int slim_cover_task_alive = 0;
+static volatile int slim_cover_lv_restart = 0;  /* Live View is being restarted under the cover */
+static int slim_cover_up = 0;                   /* a cover was put up and not lifted yet (poll task only) */
+
+extern int boot_logo_is_active(void);
+extern int get_global_draw_setting();
+extern int ml_shutdown_requested;
 
 static void slim_cover_black(void)
 {
@@ -6994,30 +7008,32 @@ static void slim_cover_black(void)
 
 static void slim_cover_task(void *unused)
 {
-    /* Hold ML's overlay lock for the whole cover so ML's own bars and info text cannot draw between
-     * the black fills (that showed as flicker).  Canon's own drawing does not use this lock, so the
-     * black is still refilled over it. */
     int t0 = get_ms_clock();
-    AcquireRecursiveLock(bmp_lock, 0);
-    while (slim_cover_on && lv && !gui_menu_shown() && !RECORDING && get_ms_clock() - t0 < SLIM_COVER_MAX_MS)
+    /* the cover stays up across a Live View restart (1x3 switch), where lv is 0 for a moment */
+    while (slim_cover_on && (lv || slim_cover_lv_restart) && !gui_menu_shown() && !RECORDING &&
+           !ml_shutdown_requested && get_ms_clock() - t0 < SLIM_COVER_MAX_MS)
     {
-        bmp_fill(COLOR_BLACK, BMP_W_MINUS, BMP_H_MINUS, BMP_TOTAL_WIDTH, BMP_TOTAL_HEIGHT);
+        slim_cover_black();
         msleep(20);
     }
-    ReleaseRecursiveLock(bmp_lock);
+    slim_cover_on = 0;
     slim_cover_task_alive = 0;
 }
 
 static void slim_cover_start(void)
 {
+    /* the start-up splash covers the screen itself (and repaints itself): leave it alone */
+    if (boot_logo_is_active())
+        return;
     slim_cover_black();
+    slim_cover_up = 1;
     if (slim_cover_task_alive)
         return;
     slim_cover_on = 1;
     slim_cover_task_alive = 1;
     /* task slots are scarce (a persistent extra task made mlv_lite fail to boot): if there is
-     * none free, just skip the cover */
-    if (task_create("slim_cover", 0x1c, 0x1000, slim_cover_task, (void*)0))
+     * none free, just skip the cover.  task_create() returns an odd number when it fails. */
+    if ((uint32_t) task_create("slim_cover", 0x1c, 0x1000, slim_cover_task, (void*)0) & 1)
     {
         slim_cover_on = 0;
         slim_cover_task_alive = 0;
@@ -7026,23 +7042,60 @@ static void slim_cover_start(void)
 
 static void slim_cover_hold_and_release(int hold_ms)
 {
+    if (!slim_cover_up)
+        return;     /* no cover was put up (start-up splash): nothing to lift */
+    slim_cover_up = 0;
+
     int t = get_ms_clock();
     while (get_ms_clock() - t < hold_ms && lv && !gui_menu_shown() && !RECORDING)
+    {
+        if (!slim_cover_task_alive)
+            slim_cover_black();     /* no task (no free slot): keep it black from here */
         msleep(40);
+    }
     slim_cover_on = 0;
     int n = 0;
     while (slim_cover_task_alive && n++ < 50)
         msleep(20);
 
     /* Lift the black WITHOUT redraw(): redraw() repaints Canon's own dialog, which brings Canon's
-     * x5 arrows back for a couple of frames.  Clear the overlay and ask ML to redraw its own
-     * things (film framing, info text, AF frame) instead.  If the framing is somehow missing,
-     * mlv_lite's own safety net still does a full redraw a moment later. */
-    BMP_LOCK( clrscr(); )
+     * x5 arrows back for a couple of frames.  When the film frame is known, go straight from black
+     * to the finished frame (black outside, frame line, picture inside), so the picture is never
+     * seen without its bars; otherwise clear the overlay.  Then ask ML to redraw its own things
+     * (info text, AF frame).  If the framing is somehow missing, mlv_lite's own safety net still
+     * does a full redraw a moment later. */
+    if (lv && !gui_menu_shown())
+    {
+        BMP_LOCK(
+            if (!((get_global_draw_setting() & 1) && is_movie_mode() && film_canvas_paint(1)))
+                clrscr();
+        )
+    }
     afframe_set_dirty();
     crop_set_dirty(10);
     menu_set_dirty();
     lens_display_set_dirty();
+}
+
+/* x1 -> x5, as every preset needs.  Right after Live View came back (*fresh), under the cover, so
+ * the full x1 picture and the jump to x5 are not seen; any other time (focus zoom and so on) as it
+ * always was.  One covered try only: if x5 cannot be reached, the screen must not stay black. */
+static void slim_zoom_x5(int * fresh)
+{
+    if (*fresh && !RECORDING && is_movie_mode())
+    {
+        *fresh = 0;
+        idle_kill_flicker_after_menu();
+        slim_cover_start();
+        set_zoom(5);
+        idle_kill_flicker_after_menu();
+        slim_cover_hold_and_release(SLIM_COVER_HOLD_MS);
+    }
+    else
+    {
+        *fresh = 0;
+        set_zoom(5);
+    }
 }
 
 /* when closing ML menu, check whether we need to refresh the LiveView */
@@ -7077,6 +7130,33 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 #endif
 
     int menu_shown = gui_menu_shown();
+
+    /* Live View was off (Canon's menu, playback): when it comes back it starts at x1 and is taken
+     * to x5 below.  Remember, to do that step under the cover.  Not at start-up: the splash covers
+     * that one. */
+    static int slim_lv_fresh = 0;
+    static int slim_lv_seen = 0;
+    static int slim_lv_was_off = 0;
+    static int slim_lv_back_ms = 0;
+    if (!lv)
+    {
+        /* a real exit only, not ML pausing Live View (after a recording, 1x3 switch) */
+        if (!LV_PAUSED)
+            slim_lv_was_off = slim_lv_seen;
+    }
+    else
+    {
+        if (slim_lv_was_off)
+        {
+            slim_lv_was_off = 0;
+            slim_lv_fresh = 1;
+            slim_lv_back_ms = get_ms_clock();
+        }
+        slim_lv_seen = 1;
+        /* only for the first moments after it is back: later x1 steps are something else */
+        if (slim_lv_fresh && get_ms_clock() - slim_lv_back_ms > 3000)
+            slim_lv_fresh = 0;
+    }
 #ifdef CONFIG_EOSM
     /* Cover every path back into Movie Live View, including Canon menus
      * (which may not set gui_menu_shown), recording stop and boot. */
@@ -7144,12 +7224,17 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 
             if (!lv_check_is_healthy() && lv_dispsize == 5)
             {
-                /* same recovery the old record-stop code ran every time */
+                /* same recovery the old record-stop code ran every time; under the cover, so the
+                 * x1 picture and Canon's x5 screen are not seen */
                 info_led_on();
+                idle_kill_flicker_after_menu();
+                slim_cover_start();
                 gui_uilock(UILOCK_EVERYTHING);
                 set_zoom(1);
                 set_zoom(5);
                 gui_uilock(UILOCK_NONE);
+                idle_kill_flicker_after_menu();
+                slim_cover_hold_and_release(SLIM_COVER_HOLD_MS);
                 info_led_off();
             }
         }
@@ -7212,12 +7297,18 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                     /* also at start-up straight into 1x3: CROP MOOD 1x3 stayed black after
                      * turning the camera on until 3x3 and back (V9 test) */
                     int switched = (last_1x3 == -1) ? now_1x3 : (now_1x3 != last_1x3);
-                    if (switched && lv && !RECORDING && lv_restart_1x3)
+                    if (switched && lv && !RECORDING)
                     {
                         gui_uilock(UILOCK_EVERYTHING);
+                        slim_cover_lv_restart = 1;  /* keep the cover up while lv is 0 */
                         PauseLiveView();
+                        if (slim_cover_up)
+                            slim_cover_black();     /* PauseLiveView clears the overlay */
                         msleep(100);
                         ResumeLiveView();
+                        if (slim_cover_up)
+                            slim_cover_black();
+                        slim_cover_lv_restart = 0;
                         /* it still came back black now and then (1" Actual -> 2/3" 4:3, 16mm Actual
                          * -> 16:9; V9 test): check, and bounce the zoom when it is not right, as
                          * after a recording */
@@ -7298,7 +7389,7 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                 }
                 else
                 {
-                    if (lv_dispsize == 1) set_zoom(5);
+                    if (lv_dispsize == 1) slim_zoom_x5(&slim_lv_fresh);
                 }
             }
 
@@ -7319,7 +7410,7 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 
             if (!is_manual_focus() && lv_af_mode == 1)
             {
-                if (lv_dispsize == 1) set_zoom(5);
+                if (lv_dispsize == 1) slim_zoom_x5(&slim_lv_fresh);
             }
             }
         }
