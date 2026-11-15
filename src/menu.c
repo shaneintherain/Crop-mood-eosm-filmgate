@@ -267,12 +267,25 @@ static int entry_is_slim_style(struct menu_entry * entry, int in_submenu)
 /* Arrows are drawn at 3/4 of the slot size (slots and touch boxes keep the full size);
  * the flat base stays where it was, next to the value. */
 #define SLIM_ARROW_SCALE(h) MAX(((h) * 3) / 4, 6)
+/* A thin chevron in the footprint of the old solid arrow: the tip at tip_x, opening towards
+ * tip_x + dir * depth; 2 px thick. */
+static void slim_draw_chevron(int tip_x, int cy, int dir, int depth, int height, int color)
+{
+    int half = MAX(height / 2, 2);
+    int d = MIN(depth, half);       /* 45 degrees at the most: reads as a chevron, not a wedge */
+    for (int t = 0; t < 2; t++)
+    {
+        draw_line(tip_x + dir * t, cy, tip_x + dir * (d + t), cy - half, color);
+        draw_line(tip_x + dir * t, cy, tip_x + dir * (d + t), cy + half, color);
+    }
+}
+
 static void slim_draw_arrow_left(int tip_x, int cy, int height, int color)
 {
     int depth = MAX((height * 6) / 10, 2);
     int h2 = SLIM_ARROW_SCALE(height);
     int depth2 = MAX((h2 * 6) / 10, 2);
-    bmp_draw_antialiased_triangle(tip_x + depth - depth2, cy, 0, depth2, h2, color);
+    slim_draw_chevron(tip_x + depth - depth2, cy, 1, depth2, h2, color);
 }
 
 /* Filled ► — tip points right (flat base on left, narrow on right). */
@@ -281,7 +294,7 @@ static void slim_draw_arrow_right(int tip_x, int cy, int height, int color)
     int depth = MAX((height * 6) / 10, 2);
     int h2 = SLIM_ARROW_SCALE(height);
     int depth2 = MAX((h2 * 6) / 10, 2);
-    bmp_draw_antialiased_triangle(tip_x - depth + depth2, cy, 1, depth2, h2, color);
+    slim_draw_chevron(tip_x - depth + depth2, cy, -1, depth2, h2, color);
 }
 #endif
 
@@ -2615,6 +2628,7 @@ static void menu_clean_footer()
 #ifdef CONFIG_SLIM_MENUS
     /* No grey help strip — keep the reclaim area solid black with the menu body. */
     bmp_fill(MENU_BG_COLOR_HEADER_FOOTER, 0, 430, 720, 50);
+    bmp_fill(UI_LINE, 0, 430, 720, 1);      /* hairline above the bottom bar */
 #else
     int h = 50;
     if (is_menu_active("Help")) h = font_med.height * 3 + 2;
@@ -3051,10 +3065,13 @@ entry_print(
     {
         /* Film Edge: the selected row is a solid cream block (like the quick menu),
          * other rows get a thin divider line. Drawn before the text. */
+        /* Refined look: the selected row is a dark grey bar with an orange marker at its left
+         * edge; no divider lines between rows (the spacing separates them). */
         if (SLIM_ROW_SEL(entry))
+        {
             bmp_fill(UI_SEL, 10, y, 666, h - 1);
-        else
-            bmp_fill(UI_LINE, 10, y + h - 1, 666, 1);
+            bmp_fill(UI_ACCENT, 10, y, 3, h - 1);
+        }
     }
 
     if (slim_style && !customize_mode && !junkie_mode)
@@ -3116,13 +3133,15 @@ skip_name:
         !junkie_mode;
     int draw_left_arrow = draw_tri_arrows;
     int draw_right_arrow = draw_tri_arrows;
-    int arrow_color = UI_ARROW;
+    /* arrows only show on the selected row (orange); on the other rows they are drawn in the
+     * background colour, so the values and the touch targets stay where they were */
+    int arrow_color = UI_BG;
     if (draw_tri_arrows && slim_locked)
-        arrow_color = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_MUTED;
+        arrow_color = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_BG;
     else if (draw_tri_arrows && SLIM_ROW_SEL(entry))
-        arrow_color = UI_SEL_TEXT;
-    /* degree rings follow the value text, not the (dimmer) arrows */
-    int ring_color = SLIM_ROW_SEL(entry) ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
+        arrow_color = UI_ACCENT;
+    /* degree rings follow the value text, not the arrows */
+    int ring_color = SLIM_ROW_SEL(entry) ? (slim_locked ? UI_SEL_MUTED : UI_ACCENT)
                                      : (slim_locked ? UI_MUTED : UI_TEXT);
     int fonth = fontspec_font(fnt)->height;
     int tri_h = MAX(fonth - 4, 18); /* match value glyph height */
@@ -3270,7 +3289,7 @@ skip_name:
      * read-only rows keep the muted colour chosen above. */
     if (slim_style && !customize_mode && !junkie_mode && !slim_locked)
         value_fnt = SLIM_ROW_SEL(entry)
-            ? slim_ui_font_spec(UI_SEL_TEXT, UI_SEL)
+            ? slim_ui_font_spec(UI_ACCENT, UI_SEL)     /* the selected value in the accent colour */
             : slim_ui_font_spec(UI_TEXT, UI_BG);
 #endif
     bmp_printf(
@@ -4879,7 +4898,7 @@ void menus_display(
     int bgs = UI_BG;
     int bgu = MENU_BG_COLOR_HEADER_FOOTER;
     int fgu = COLOR_WHITE;
-    int fgs = UI_SEL;
+    int fgs = UI_ACCENT;
 
     if (customize_mode) fgs = get_customize_color();
 
@@ -4933,8 +4952,8 @@ void menus_display(
                     if (block)
                         bmp_fill(UI_SEL, tx - 8, y + 4, tw + 16, header_h - 8);
                     bmp_printf(tf, tx, title_y, "%s", slim_tabs[t]);
-                    if (on && !block)
-                        bmp_fill(UI_SEL, tx, y + header_h - 4, tw, 4);
+                    if (on)
+                        bmp_fill(UI_ACCENT, tx, y + header_h - 3, tw, 2);
                     /* touch box: the label plus half the gap on each side */
                     slim_tab_x1[t] = tx - 13;
                     slim_tab_x2[t] = tx + tw + 13;
@@ -7713,7 +7732,7 @@ static void draw_longpress_indicator(struct longpress * longpress)
 
         /* blues, matching the menus */
         int color = (!pressed)  ? UI_DIM   :  /* button just released */
-                    (n >= 25/2) ? UI_SEL   :  /* long press event fired */
+                    (n >= 25/2) ? UI_ACCENT :  /* long press event fired */
                                   UI_DIM   ;  /* on the way to long press */
         fill_circle(x, y, 2, color);
     }
