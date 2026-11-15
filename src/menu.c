@@ -2603,10 +2603,10 @@ static void menu_draw_movie_footer()
     if (!crop_rec_menu_footer || !crop_rec_menu_footer(note, sizeof(note)) || !note[0])
         return;
     int fnt = FONT(FONT_MED, UI_MUTED, MENU_BG_COLOR_HEADER_FOOTER);
-    if (bmp_string_width(fnt, note) > 700)
-        fnt |= FONT_ALIGN_JUSTIFIED | FONT_TEXT_WIDTH(700);
-    /* centred top to bottom in the bottom bar (rows 440 .. 479, below the black menu body) */
-    bmp_printf(fnt, 12, 440 + (40 - (int)font_med.height) / 2, "%s", note);
+    /* Right-aligned, and centred top to bottom in the empty bar under the last row (about rows
+     * 424 .. 479).  The height is the drawn font's, not font_med.height (the menu font is bigger). */
+    int h = (int)fontspec_font(fnt)->height;
+    bmp_printf(fnt | FONT_ALIGN_RIGHT, 704, 452 - h / 2, "%s", note);
 }
 #endif
 

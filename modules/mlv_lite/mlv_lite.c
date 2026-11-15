@@ -92,6 +92,7 @@ static GUARDED_BY(GuiMainTask) int show_edmac = 0;
 /* from mlv_play module */
 extern WEAK_FUNC(ret_0) void mlv_play_file(char *filename);
 extern WEAK_FUNC(ret_0) void crop_rec_request_lv_check(void);
+extern void idle_kill_flicker_after_menu();
 
 /* Dual ISO: skip ML raw preview while recording (striped dual RAW on LV). */
 static int dual_iso_skip_raw_preview(void)
@@ -4847,6 +4848,10 @@ cleanup:
         raw_recording_state = RAW_IDLE;
 
 #ifndef CONFIG_EOSM
+        /* Live View is coming back at x5: keep Canon's overlay (its x5 box and arrows) off while
+         * it settles, as after closing a menu.  It flashed between the stop and the preview. */
+        if (cam_eos_m && lv)
+            idle_kill_flicker_after_menu();
         redraw();
 #endif
 
