@@ -4678,13 +4678,13 @@ int crop_rec_menu_footer(char * buf, int size)
     int i = film_frame_index(fmt, frame);
     int ro = film_frames[i].readout;
     if (film_readouts[ro].bin_x > 1)
-        snprintf(buf, size, "1x3  -  stretch 3x wide in post");
+        snprintf(buf, size, "1x3 > Stretch 3x in post");
     else if (fmt == 1)  /* A35 Anamorphic: the lens squeezes, not the sensor */
-        snprintf(buf, size, "3x3  -  anamorphic lens: stretch %s wide in post", frame == 0 ? "2x" : "1.33x");
+        snprintf(buf, size, "3x3 > Anamorphic lens: stretch %s in post", frame == 0 ? "2x" : "1.33x");
     else if (ro == FILM_RO_3X3)
-        snprintf(buf, size, "3x3  -  no stretch");
+        snprintf(buf, size, "3x3 > No stretch");
     else
-        snprintf(buf, size, "1:1  -  pixel for pixel, no stretch");
+        snprintf(buf, size, "1:1 > No stretch");
     return 1;
 }
 
