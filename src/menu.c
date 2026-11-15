@@ -2605,7 +2605,8 @@ static void menu_draw_movie_footer()
     int fnt = FONT(FONT_MED, UI_MUTED, MENU_BG_COLOR_HEADER_FOOTER);
     if (bmp_string_width(fnt, note) > 700)
         fnt |= FONT_ALIGN_JUSTIFIED | FONT_TEXT_WIDTH(700);
-    bmp_printf(fnt, 12, 444, "%s", note);
+    /* centred top to bottom in the bottom bar (rows 440 .. 479, below the black menu body) */
+    bmp_printf(fnt, 12, 440 + (40 - (int)font_med.height) / 2, "%s", note);
 }
 #endif
 

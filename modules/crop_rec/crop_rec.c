@@ -4678,11 +4678,13 @@ int crop_rec_menu_footer(char * buf, int size)
     int i = film_frame_index(fmt, frame);
     int ro = film_frames[i].readout;
     if (film_readouts[ro].bin_x > 1)
-        snprintf(buf, size, "1x3 sampling  -  stretch 3x horizontally in post  (file %dx%d)", film_frames[i].w, film_frames[i].h);
+        snprintf(buf, size, "1x3  -  stretch 3x wide in post");
     else if (fmt == 1)  /* A35 Anamorphic: the lens squeezes, not the sensor */
-        snprintf(buf, size, "3x3 sampling  -  stretch %s horizontally in post (anamorphic lens)", frame == 0 ? "2x" : "1.33x");
+        snprintf(buf, size, "3x3  -  anamorphic lens: stretch %s wide in post", frame == 0 ? "2x" : "1.33x");
+    else if (ro == FILM_RO_3X3)
+        snprintf(buf, size, "3x3  -  no stretch");
     else
-        snprintf(buf, size, "%s sampling  -  no stretch needed", ro == FILM_RO_3X3 ? "3x3" : "1:1");
+        snprintf(buf, size, "1:1  -  pixel for pixel, no stretch");
     return 1;
 }
 
@@ -7232,6 +7234,21 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                 gui_uilock(UILOCK_EVERYTHING);
                 set_zoom(1);
                 set_zoom(5);
+                /* still not right (S16 2.35:1 stayed black after a recording, V9 test): restart
+                 * Live View once, the step that brings the picture back after a 1x3 switch */
+                wait_lv_frames(3);
+                if (lv && lv_dispsize == 5 && !lv_check_is_healthy())
+                {
+                    slim_cover_lv_restart = 1;
+                    PauseLiveView();
+                    if (slim_cover_up)
+                        slim_cover_black();
+                    msleep(100);
+                    ResumeLiveView();
+                    if (slim_cover_up)
+                        slim_cover_black();
+                    slim_cover_lv_restart = 0;
+                }
                 gui_uilock(UILOCK_NONE);
                 idle_kill_flicker_after_menu();
                 slim_cover_hold_and_release(SLIM_COVER_HOLD_MS);
