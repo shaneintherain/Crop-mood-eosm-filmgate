@@ -7176,6 +7176,10 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
             slim_lv_was_off = 0;
             slim_lv_fresh = 1;
             slim_lv_back_ms = get_ms_clock();
+            /* back from playback (Canon's or the MLV player) or Canon's menu: check the picture
+             * a moment later, as after a recording, and recover it if it is black (V8 report:
+             * leaving the player often ended on a black screen until a power cycle) */
+            crop_rec_request_lv_check();
         }
         slim_lv_seen = 1;
         /* only for the first moments after it is back: later x1 steps are something else */
