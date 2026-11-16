@@ -386,7 +386,9 @@ draw_meter(
 
     /* refined look: only the channel letter (L / R) in grey; no input name, no dB value */
     (void) db_peak;
-    bmp_printf( FONT(FONT_SMALL, COLOR_GRAY(60), COLOR_BLACK), x_origin, y_origin, "%c  ", label[0] );
+    /* no "%c" here: the camera's printf does not handle it (it filled the whole bar with the letter) */
+    char letter[4] = { label[0], ' ', ' ', 0 };
+    bmp_printf( FONT(FONT_SMALL, COLOR_GRAY(60), COLOR_BLACK), x_origin, y_origin, "%s", letter );
 }
 
 

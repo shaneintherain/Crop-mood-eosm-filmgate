@@ -774,10 +774,18 @@ void menu_quick_screen_draw(void)
         /* the Standard (FILM / VIDEO / CROP MOOD) the cells belong to */
         struct menu_display_info std_info;
         char * std = menu_get_str_value_from_script("Movie", "Standard", &std_info);
+        /* "QUICK MENU" small, grey and letter-spaced; the Standard after it in the large white font.
+         * y 14 puts the small font on the same baseline as the large one at y 4. */
+        uint32_t qf = FONT(FONT_MED, UI_DIM, UI_BG);
+        int qx = 16;
+        for (const char *c = "QUICK MENU"; *c; c++)
+        {
+            char ch[2] = { *c, 0 };
+            bmp_printf(qf, qx, 14, "%s", ch);
+            qx += bmp_string_width(qf, ch) + 2;
+        }
         if (std && std[0])
-            bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), 16, 4, "QUICK MENU > %s", std);
-        else
-            bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), 16, 4, "QUICK MENU");
+            bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), qx + 12, 4, "%s", std);
     }
     /* divider under the title; the bottom 50 px stay plain background, like the other pages */
     bmp_fill(UI_LINE, 0, 47, 720, 1);
