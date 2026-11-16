@@ -3300,11 +3300,12 @@ int GetShiftValue()
             {
                 /* values are the centring offset in bytes: lines * line pitch + 2 * pixels from the left */
                 if (is_LCD_Output())  return crop_rec_preview_fit() ? 0x43F0 : 0x7BC0;   /* 12 or 22 lines of 1440, 56 px */
-                /* Fit over 1080i (line pitch 0xCA8 bytes, 2 bytes per pixel).  Was 0x10EF4 (21 lines +
-                 * 662 px).  Measured with the 2/3" 4:3 chart on the monitor (V9): the chart sat 10.6 %
-                 * of the frame width left of the frame (strip of artifacts at the right) and about
-                 * 21 lines low, so 138 px more and no lines: 0 * 0xCA8 + 2 * 800. */
-                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x640 : 0x2772C;
+                /* Fit over 1080i.  The shift is lines * 3840 + 2 * pixels: the picture buffer there is
+                 * 1920 px wide (not the 1620 of the line pitch register; found from two chart photos,
+                 * V9: 0x10EF4 = 18 lines + 122 px sat 10.4 % of the frame width left and 5 % low;
+                 * 0x640 = 0 lines + 800 px sat 41 % right, wrapped round, and vertically centred).
+                 * Centre: 0 lines, 122 + 136 = 258 px. */
+                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x204 : 0x2772C;
                 if (is_480p_Output()) return 0xB9E0;     /* same picture as the 1440p one */
                 if (is_1080i_Info_Output()) return 0x33B58;
                 return 0;
