@@ -734,11 +734,11 @@ void menu_quick_screen_draw(void)
               [QS_SHUTTER] = "SHUTTER", [QS_ISO] = "ISO", [QS_WB] = "WB", [QS_APERTURE] = "APERTURE" };
 
         /* Film Edge cell: thin outline, or the whole box solid cream when selected */
-        /* refined look: dark panel; the selected one a little lighter with a thin orange outline */
-        rr_tile(box_x, box_y, box_w, box_h, selected ? UI_ACCENT : tile_bg, tile_bg);
+        /* refined look: dark panel; the selected one solid orange with black text and chevrons */
+        rr_tile(box_x, box_y, box_w, box_h, tile_bg, tile_bg);
 
         color = !enabled ? UI_MUTED : selected ? UI_SEL_TEXT : UI_TEXT;
-        arrow_color = selected ? UI_ACCENT : enabled ? UI_ARROW : UI_LINE;
+        arrow_color = selected ? UI_SEL_TEXT : enabled ? UI_ARROW : UI_LINE;
 
         bmp_printf(
             FONT(FONT_SMALL, selected ? UI_SEL_TEXT : UI_DIM, label_bg),
@@ -970,8 +970,8 @@ void menu_grid_draw(void)
         int fg = selected ? UI_SEL_TEXT : UI_TEXT;
         int tile_bg = selected ? UI_SEL : UI_TILE;
 
-        /* refined look, the same as the quick menu cells: thin orange outline when selected */
-        rr_tile(x, y, w, h, selected ? UI_ACCENT : tile_bg, tile_bg);
+        /* the same as the quick menu cells: solid orange when selected */
+        rr_tile(x, y, w, h, tile_bg, tile_bg);
 
         /* Shared bottom baseline for all four labels. */
         int label_y = y + h - GRID_LABEL_PAD - label_h;

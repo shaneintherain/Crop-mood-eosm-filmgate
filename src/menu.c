@@ -3065,13 +3065,10 @@ entry_print(
     {
         /* Film Edge: the selected row is a solid cream block (like the quick menu),
          * other rows get a thin divider line. Drawn before the text. */
-        /* Refined look: the selected row is a dark grey bar with an orange marker at its left
-         * edge; no divider lines between rows (the spacing separates them). */
+        /* Refined look: the selected row is a solid orange bar; no divider lines between rows
+         * (the spacing separates them). */
         if (SLIM_ROW_SEL(entry))
-        {
             bmp_fill(UI_SEL, 10, y, 666, h - 1);
-            bmp_fill(UI_ACCENT, 10, y, 3, h - 1);
-        }
     }
 
     if (slim_style && !customize_mode && !junkie_mode)
@@ -3133,15 +3130,15 @@ skip_name:
         !junkie_mode;
     int draw_left_arrow = draw_tri_arrows;
     int draw_right_arrow = draw_tri_arrows;
-    /* arrows only show on the selected row (orange); on the other rows they are drawn in the
-     * background colour, so the values and the touch targets stay where they were */
+    /* arrows only show on the selected row (black on the orange bar); on the other rows they are
+     * drawn in the background colour, so the values and the touch targets stay where they were */
     int arrow_color = UI_BG;
     if (draw_tri_arrows && slim_locked)
         arrow_color = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_BG;
     else if (draw_tri_arrows && SLIM_ROW_SEL(entry))
-        arrow_color = UI_ACCENT;
+        arrow_color = UI_SEL_TEXT;
     /* degree rings follow the value text, not the arrows */
-    int ring_color = SLIM_ROW_SEL(entry) ? (slim_locked ? UI_SEL_MUTED : UI_ACCENT)
+    int ring_color = SLIM_ROW_SEL(entry) ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
                                      : (slim_locked ? UI_MUTED : UI_TEXT);
     int fonth = fontspec_font(fnt)->height;
     int tri_h = MAX(fonth - 4, 18); /* match value glyph height */
@@ -3289,7 +3286,7 @@ skip_name:
      * read-only rows keep the muted colour chosen above. */
     if (slim_style && !customize_mode && !junkie_mode && !slim_locked)
         value_fnt = SLIM_ROW_SEL(entry)
-            ? slim_ui_font_spec(UI_ACCENT, UI_SEL)     /* the selected value in the accent colour */
+            ? slim_ui_font_spec(UI_SEL_TEXT, UI_SEL)
             : slim_ui_font_spec(UI_TEXT, UI_BG);
 #endif
     bmp_printf(
