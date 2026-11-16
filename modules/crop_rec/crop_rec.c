@@ -3304,8 +3304,10 @@ int GetShiftValue()
                  * 1920 px wide (not the 1620 of the line pitch register; found from two chart photos,
                  * V9: 0x10EF4 = 18 lines + 122 px sat 10.4 % of the frame width left and 5 % low;
                  * 0x640 = 0 lines + 800 px sat 41 % right, wrapped round, and vertically centred).
-                 * Centre: 0 lines, 122 + 136 = 258 px. */
-                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x204 : 0x2772C;
+                 * Centre: 0 lines, 122 + 136 = 258 px (0x204; third photo: centred within 3 px).
+                 * The picture ends about 1 % short of the frame's right edge there (a sliver of
+                 * artifacts just inside the frame line), so 18 px more: 276 px. */
+                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x228 : 0x2772C;
                 if (is_480p_Output()) return 0xB9E0;     /* same picture as the 1440p one */
                 if (is_1080i_Info_Output()) return 0x33B58;
                 return 0;
