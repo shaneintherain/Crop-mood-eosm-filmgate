@@ -3300,7 +3300,11 @@ int GetShiftValue()
             {
                 /* values are the centring offset in bytes: lines * line pitch + 2 * pixels from the left */
                 if (is_LCD_Output())  return crop_rec_preview_fit() ? 0x43F0 : 0x7BC0;   /* 12 or 22 lines of 1440, 56 px */
-                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x10EF4 : 0x2772C;   /* Fit: first photo showed it ~65 px too far right */
+                /* Fit over 1080i (line pitch 0xCA8 bytes, 2 bytes per pixel).  Was 0x10EF4 (21 lines +
+                 * 662 px).  Measured with the 2/3" 4:3 chart on the monitor (V9): the chart sat 10.6 %
+                 * of the frame width left of the frame (strip of artifacts at the right) and about
+                 * 21 lines low, so 138 px more and no lines: 0 * 0xCA8 + 2 * 800. */
+                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x640 : 0x2772C;
                 if (is_480p_Output()) return 0xB9E0;     /* same picture as the 1440p one */
                 if (is_1080i_Info_Output()) return 0x33B58;
                 return 0;
