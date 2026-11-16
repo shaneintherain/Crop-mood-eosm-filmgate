@@ -3385,8 +3385,8 @@ int raw_rec_start_ready(void)
 
 /* Event-only diagnostics for unstable LiveView transitions. */
 #define LVRECOV_LOG_FILE "ML/LOGS/LVRECOV.LOG"
-static int (*crop_rec_lv_transition_diag)(char *, int) =
-    MODULE_FUNCTION(crop_rec_lv_transition_diag);
+/* crop_rec_lv_transition_diag: declared in crop_rec.h (weak: returns 0 when crop_rec is not loaded).
+ * The MODULE_FUNCTION pointer used here before never got connected: the log lines had no details. */
 
 static void lvrecov_log_state(void)
 {
@@ -3419,8 +3419,7 @@ static void lvrecov_log_state(void)
     int edmac_ready = edmac_read != 0xffffffff && edmac_write != 0xffffffff;
     int invalid = lv && (fps <= 0 || !raw_ready || !geometry_ready || !buffers_ready || !edmac_ready);
     char guard[320] = "";
-    int guard_signature = crop_rec_lv_transition_diag ?
-        crop_rec_lv_transition_diag(guard, sizeof(guard)) : 0;
+    int guard_signature = crop_rec_lv_transition_diag(guard, sizeof(guard));
 
     if (lv == last_lv && invalid == last_invalid && fps == last_fps && zoom == last_zoom
         && crop == last_crop && ar == last_ar && res_x == last_res_x && res_y == last_res_y

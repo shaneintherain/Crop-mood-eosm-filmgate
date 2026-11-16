@@ -19,6 +19,9 @@ extern WEAK_FUNC(ret_0) int crop_rec_film_format();
 /* The frame to draw: as crop_rec_film_format(), and also CROP MOOD 1x3 (which records the whole
  * readout, so is not a window for mlv_lite). */
 extern WEAK_FUNC(ret_0) int crop_rec_film_display_format();
+/* One line of Live View diagnostics for ML/LOGS/LVRECOV.LOG; returns a signature that changes
+ * when the state does. */
+extern WEAK_FUNC(ret_0) int crop_rec_lv_transition_diag(char * buffer, int size);
 /* 1 when the active recording format is a FILM standard one (A35 ... 8mm): the shutter is shown
  * as an angle first.  0 for VIDEO, CROP MOOD and every other mode. */
 extern WEAK_FUNC(ret_0) int crop_rec_film_standard();
