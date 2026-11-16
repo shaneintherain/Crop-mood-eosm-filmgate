@@ -330,8 +330,9 @@ void film_palette_apply(void);
 #define UI_BG        COLOR_BLACK      /* page background            */
 #define UI_TILE      COLOR_GRAY(10)   /* tiles, submenu title bar   */
 #define UI_LINE      COLOR_GRAY(20)   /* dividers                   */
-#define UI_ARROW     COLOR_GRAY(35)   /* arrows on rows not selected */
+#define UI_ARROW     COLOR_GRAY(40)   /* arrows on rows not selected */
 #define UI_TEXT      COLOR_WHITE      /* labels and values          */
+#define UI_LABEL     COLOR_GRAY(70)   /* menu row titles            */
 #define UI_DIM       COLOR_GRAY(65)   /* secondary text             */
 #define UI_MUTED     COLOR_GRAY(45)   /* locked / read-only rows    */
 #define UI_SEL       COLOR_ORANGE     /* selection fill: solid orange bar / panel */

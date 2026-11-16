@@ -189,8 +189,8 @@ static int slim_tab_current = -1;   /* page index shown, -1 = not a tab page (e.
 static void slim_touch_scroll_repeat(int timer, void *opaque);
 static int slim_touch_handle_scroll(int x, int y, int pressed);
 static int slim_touch_handle_grid_back(int x, int y);
-static void slim_draw_scroll_arrow_up(int cx, int cy, int size, int color);
-static void slim_draw_scroll_arrow_down(int cx, int cy, int size, int color);
+__attribute__((unused)) static void slim_draw_scroll_arrow_up(int cx, int cy, int size, int color);
+__attribute__((unused)) static void slim_draw_scroll_arrow_down(int cx, int cy, int size, int color);
 
 static void slim_touch_arrow_reset(void)
 {
@@ -3075,7 +3075,8 @@ entry_print(
     {
         /* Canon Gothic — native camera UI font (smoother than RBF bitmap fonts). */
         /* Film Edge: selected row black on cream, other rows in softer grey. */
-        int fg = SLIM_ROW_SEL(entry) ? UI_SEL_TEXT : UI_TEXT;
+        /* row titles in a soft grey (the values stay white); black on the orange bar */
+        int fg = SLIM_ROW_SEL(entry) ? UI_SEL_TEXT : UI_LABEL;
         /* read-only rows use enabled=0 and stay muted. */
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
@@ -3130,13 +3131,10 @@ skip_name:
         !junkie_mode;
     int draw_left_arrow = draw_tri_arrows;
     int draw_right_arrow = draw_tri_arrows;
-    /* arrows only show on the selected row (black on the orange bar); on the other rows they are
-     * drawn in the background colour, so the values and the touch targets stay where they were */
-    int arrow_color = UI_BG;
-    if (draw_tri_arrows && slim_locked)
-        arrow_color = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_BG;
-    else if (draw_tri_arrows && SLIM_ROW_SEL(entry))
-        arrow_color = UI_SEL_TEXT;
+    /* chevrons: black on the orange bar, soft grey on the other rows (darker when locked) */
+    int arrow_color = SLIM_ROW_SEL(entry)
+        ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
+        : (slim_locked ? UI_LINE : UI_ARROW);
     /* degree rings follow the value text, not the arrows */
     int ring_color = SLIM_ROW_SEL(entry) ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
                                      : (slim_locked ? UI_MUTED : UI_TEXT);
@@ -4777,20 +4775,17 @@ show_vscroll(struct menu * parent){
         int arrow_h = 34;
         int track_y = y_lo + arrow_h;
         int track_bottom = h_bot - arrow_h;
-        int track_h = MAX(1, track_bottom - track_y);
-        int size = MAX(8, track_h * menu_len / max);
-        int y = track_y + ((track_h - size) * (pos-1) / MAX(max-1, 1));
+        /* the thumb uses the whole height (no arrows drawn); the top and bottom 34 px
+         * stay invisible tap targets for scrolling one step */
+        int thumb_h = MAX(1, h_bot - y_lo);
+        int size = MAX(8, thumb_h * menu_len / max);
+        int y = y_lo + ((thumb_h - size) * (pos-1) / MAX(max-1, 1));
         /* Keep the complete arrow inside the 720px bitmap edge. */
         int x = 688;
         int bar_w = 24;
 
-        /* Minimal scrollbar: orange thumb and white Canon-style arrows only. */
-        bmp_fill(UI_DIM, x + 9, y, 6, size);
-        int arrow_size = MAX(slim_ui_font_height() - 4, 18);
-        slim_draw_scroll_arrow_up(x + bar_w / 2, y_lo + arrow_size / 2 + 2,
-            arrow_size, UI_DIM);
-        slim_draw_scroll_arrow_down(x + bar_w / 2, h_bot - arrow_size / 2 - 2,
-            arrow_size, UI_DIM);
+        /* Minimal scrollbar: just the grey thumb, no arrows */
+        bmp_fill(UI_DIM, x + 9, y, 4, size);
         slim_touch_scroll_x1 = x;
         slim_touch_scroll_x2 = x + bar_w;
         slim_touch_scroll_up_y1 = y_lo;
@@ -4944,17 +4939,32 @@ void menus_display(
                     /* D-pad on the tab strip: the open tab becomes an orange block */
                     int block = on && slim_tab_focus;
                     int tbg = block ? UI_SEL : bgu;
-                    uint32_t tf = slim_ui_font_spec(block ? UI_SEL_TEXT : on ? UI_TEXT : UI_DIM, tbg);
-                    int tw = bmp_string_width(tf, slim_tabs[t]);
+                    /* refined look: smaller tab names, letter-spaced 2 px */
+                    uint32_t tf = FONT(FONT_MED, block ? UI_SEL_TEXT : on ? UI_TEXT : UI_DIM, tbg);
+                    const int spacing = 2;
+                    const char * name = slim_tabs[t];
+                    int n = strlen(name);
+                    int tw = 0;
+                    for (int c = 0; c < n; c++)
+                    {
+                        char ch[2] = { name[c], 0 };
+                        tw += bmp_string_width(tf, ch) + (c < n - 1 ? spacing : 0);
+                    }
+                    int ty = y + (header_h - (int)fontspec_font(tf)->height) / 2;
                     if (block)
                         bmp_fill(UI_SEL, tx - 8, y + 4, tw + 16, header_h - 8);
-                    bmp_printf(tf, tx, title_y, "%s", slim_tabs[t]);
+                    for (int c = 0, cx = tx; c < n; c++)
+                    {
+                        char ch[2] = { name[c], 0 };
+                        bmp_printf(tf, cx, ty, "%s", ch);
+                        cx += bmp_string_width(tf, ch) + spacing;
+                    }
                     if (on)
                         bmp_fill(UI_ACCENT, tx, y + header_h - 3, tw, 2);
                     /* touch box: the label plus half the gap on each side */
-                    slim_tab_x1[t] = tx - 13;
-                    slim_tab_x2[t] = tx + tw + 13;
-                    tx += tw + 26;
+                    slim_tab_x1[t] = tx - 15;
+                    slim_tab_x2[t] = tx + tw + 15;
+                    tx += tw + 30;
                 }
             }
             else

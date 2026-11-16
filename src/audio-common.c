@@ -361,7 +361,7 @@ draw_meter(
     /* Solid bar: white, amber from -12 dB, red from -3 dB, on a dark grey track.
      * Every pixel is drawn exactly once per refresh (no clearing first), so it does not flicker.
      * No peak-hold marker: the bar simply follows the level. */
-    const int bar_x0 = x_origin + AUDIO_METER_OFFSET * 4;
+    const int bar_x0 = x_origin + AUDIO_METER_LABEL_W;
     const int w = (int) width;
     const int fast = COERCE((int32_t)w + db_peak_fast * (int32_t)w / 40, 0, w);
     const int amber_x = w - 12 * w / 40;
@@ -384,12 +384,13 @@ draw_meter(
             bmp_fill(UI_PILL, bar_x0 + xl, by, x1 - xl, bh);
     }
 
-    // Write the current level
-    bmp_printf( FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), x_origin, y_origin, "%s %02d", label, MIN(db_peak, -1) );
+    /* refined look: only the channel letter (L / R) in grey; no input name, no dB value */
+    (void) db_peak;
+    bmp_printf( FONT(FONT_SMALL, COLOR_GRAY(60), COLOR_BLACK), x_origin, y_origin, "%c  ", label[0] );
 }
 
 
-static void
+__attribute__((unused)) static void
 draw_ticks(
    int x_origin,
    int y_origin,
@@ -501,8 +502,8 @@ static void draw_meters(void)
         return;
     }
 
+    /* refined look: two thin bars, no tick marks between them */
     draw_meter( x0, y0 + 0, 10, &audio_levels[0], left_label, width);
-    draw_ticks( x0, y0 + 10, 2, width);
     draw_meter( x0, y0 + 12, 10, &audio_levels[1], right_label, width);
 
         if (gui_menu_shown() && alc_enable)
@@ -520,7 +521,7 @@ static LVINFO_UPDATE_FUNC(audio_meter_update)
     {
         /* if it's alone, draw it big; if not, draw it smaller */
         int is_big = fontspec_width(item->fontspec) >= fontspec_width(FONT_MED_LARGE);
-        int label_width = AUDIO_METER_OFFSET*4;
+        int label_width = AUDIO_METER_LABEL_W;
         item->width = MIN((is_big ? 720 : 360) / 40 * 40, 720-item->x);
         audio_meter_font = item->fontspec;
         if (audio_tc_mode())

@@ -27,6 +27,10 @@ typedef void (*lvinfo_update_func)(
     )
 
 /* Use this macro to statically allocate a buffer for item->value from a callback routine */
+/* In an item's text, LVINFO_UNIT switches between the value and a unit label; the unit
+ * parts are drawn smaller and in grey ("23" LVINFO_UNIT " FPS", LVINFO_UNIT "ISO " LVINFO_UNIT "100"). */
+#define LVINFO_UNIT "\x01"
+
 #define LVINFO_BUFFER(n) \
     static char buffer[n]; \
     buffer[0] = '\0'; \
@@ -122,6 +126,7 @@ enum lvinfo_touch_field
     LVINFO_TOUCH_CROP,
     LVINFO_TOUCH_FPS,
     LVINFO_TOUCH_BIT_DEPTH,
+    LVINFO_TOUCH_FRAME,
 };
 
 enum lvinfo_touch_field lvinfo_touch_field_at(int x, int y);
