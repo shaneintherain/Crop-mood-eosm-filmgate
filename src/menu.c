@@ -124,6 +124,8 @@ static int menu_custom_is_active(void);
 
 /* Last highlighted menu row — recording-screen touch opens this (persists across boot). */
 static char last_sel_menu[40];
+static int menu_set_shortcut_open = 0;   /* menu opened by SET = Last settings, still on that row */
+static int menu_set_shortcut_still_on_row(struct menu * menu);
 static char last_sel_entry[48];
 static int last_sel_dirty = 0;
 static int menu_open_direct = 0;
@@ -2590,6 +2592,24 @@ static void submenu_key_hint(int x, int y, int fg, int bg, int chr)
     bfnt_draw_char(chr, x, y-5, fg, NO_BG_ERASE);
 }
 
+#ifdef CONFIG_SLIM_MENUS
+/* crop_rec: one line about the selected Film Format frame (sampling, stretch in post) */
+static int (*crop_rec_menu_footer)(char * buf, int size) = MODULE_FUNCTION(crop_rec_menu_footer);
+
+static void menu_draw_movie_footer()
+{
+    char note[96];
+    note[0] = 0;
+    if (!crop_rec_menu_footer || !crop_rec_menu_footer(note, sizeof(note)) || !note[0])
+        return;
+    int fnt = FONT(FONT_MED, UI_MUTED, MENU_BG_COLOR_HEADER_FOOTER);
+    /* Right-aligned, and centred top to bottom in the empty bar under the last row (about rows
+     * 424 .. 479).  The height is the drawn font's, not font_med.height (the menu font is bigger). */
+    int h = (int)fontspec_font(fnt)->height;
+    bmp_printf(fnt | FONT_ALIGN_RIGHT, 704, 452 - h / 2, "%s", note);
+}
+#endif
+
 static void menu_clean_footer()
 {
 #ifdef CONFIG_SLIM_MENUS
@@ -4199,7 +4219,21 @@ menu_display(
     //<== vscroll
 
     if (!menu_lv_transparent_mode)
+    {
         menu_clean_footer();
+#ifdef CONFIG_SLIM_MENUS
+        /* Movie page: small grey note in the empty bar at the bottom (sampling, stretch in post) */
+        if (!submenu_level && menu_grid_is_launched() && menu->name && streq(menu->name, "Movie"))
+            menu_draw_movie_footer();
+        /* Settings page: when this build was made, to tell test builds apart on the camera */
+        if (!submenu_level && menu_grid_is_launched() && menu->name && streq(menu->name, "Settings"))
+        {
+            int fnt = FONT(FONT_MED, UI_MUTED, MENU_BG_COLOR_HEADER_FOOTER);
+            int h = (int)fontspec_font(fnt)->height;
+            bmp_printf(fnt | FONT_ALIGN_RIGHT, 704, 452 - h / 2, "Build %s", build_date);
+        }
+#endif
+    }
 
     for (int i = 0; i < num_visible && entry; )
     {
@@ -5582,7 +5616,8 @@ void menu_entry_move(
     // Select the new one, which might be the same as the old one
     entry->selected = 1;
 #ifdef CONFIG_SLIM_MENUS
-    menu_remember_selection(entry);
+    /* moving away from the row SET opened: SET works normally again */
+    menu_set_shortcut_open = 0;
 #endif
     
     if (!menu_lv_transparent_mode)
@@ -6676,6 +6711,15 @@ handle_ml_menu_keys(struct event * event)
     case BGMT_Q_SET:
 #endif
     case BGMT_PRESS_SET:
+#ifdef CONFIG_SLIM_MENUS
+        if (menu_set_shortcut_open && !submenu_level && !edit_mode && !menu_quick_screen_is_active() &&
+            menu_set_shortcut_still_on_row(menu))
+        {
+            menu_set_shortcut_open = 0;
+            gui_stop_menu();
+            return 0;
+        }
+#endif
         if (menu_help_active) // pel, don't touch this!
         { 
             menu_help_active = 0;
@@ -6949,6 +6993,22 @@ void gui_open_menu_at_entry(const char * menu_name, const char * entry_name)
     give_semaphore(gui_sem);
 }
 
+/* is the selection still on the row that SET = Last settings opened (same page, same row)? */
+static int menu_set_shortcut_still_on_row(struct menu * menu)
+{
+    struct menu_entry * e = get_selected_menu_entry(menu);
+    return e && e->name && menu && menu->name &&
+           streq(menu->name, last_sel_menu) && streq(e->name, last_sel_entry);
+}
+
+/* SET = Last settings: open the menu at the last setting changed; while that row is still
+ * selected, a second SET press closes the menu again (back to the shooting screen) */
+void gui_open_last_menu_selection_from_set(void)
+{
+    gui_open_last_menu_selection();
+    menu_set_shortcut_open = 1;
+}
+
 void gui_open_last_menu_selection(void)
 {
     if (last_sel_menu[0] && last_sel_entry[0])
@@ -7120,8 +7180,8 @@ static void menu_open()
             select_menu_by_name(menu_open_target_menu, menu_open_target_entry);
         menu_grid_enter_launched();
         menu_open_direct = 0;
-        if (!menu_custom_is_active())
-            menu_remember_selection(get_selected_menu_entry(get_current_menu_or_submenu()));
+        /* the remembered row is only updated when a value is changed (SET = Last settings
+         * and a tap reopen the last setting that was changed, not the last row visited) */
     }
     else
     {
@@ -7143,6 +7203,9 @@ static void menu_close()
 { 
     if (!menu_shown) return;
     menu_shown = false;
+#ifdef CONFIG_SLIM_MENUS
+    menu_set_shortcut_open = 0;
+#endif
 
 #ifdef CONFIG_SLIM_MENUS
     menu_last_sel_save();

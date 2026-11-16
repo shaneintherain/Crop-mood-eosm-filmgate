@@ -2729,14 +2729,24 @@ static LVINFO_UPDATE_FUNC(fps_update)
     if (is_movie_mode())
     {
         int f = fps_get_current_x1000();
+        /* A few presets cannot land exactly on their rate without a timing change they do not take
+         * (16mm 16:9 at 25: 24.995; CROP MOOD 1x3: 23.973).  Within 0.03 % they show the standard
+         * rate they are meant to be. */
+        static const int standard[] = { 18000, 23976, 25000, 29970 };
+        for (int i = 0; i < COUNT(standard); i++)
+            if (ABS(f - standard[i]) * 10000 <= standard[i] * 3)
+                f = standard[i];
+        int f100 = (f + 5) / 10;        /* two decimals, rounded: 23.976 -> 23.98 */
         if (ABS(f - 36000) <= 60)
             snprintf(buffer, sizeof(buffer), "36fps");
         else if (ABS(f - 48000) <= 60)
             snprintf(buffer, sizeof(buffer), "48fps");
+        else if (f100 % 100 == 0)       /* whole rates: 18fps, 25fps, 50fps */
+            snprintf(buffer, sizeof(buffer), "%dfps", f100 / 100);
         else
             snprintf(buffer, sizeof(buffer),
-                "%2d.%03d",
-                f / 1000, f % 1000
+                "%2d.%02d",
+                f100 / 100, f100 % 100
             );
     }
 }
@@ -2780,7 +2790,7 @@ static LVINFO_UPDATE_FUNC(focal_len_update)
     {
         snprintf(buffer, sizeof(buffer), "%d%s",
                crop_info ? (lens_info.focal_len * SENSORCROPFACTOR + 5) / 10 : lens_info.focal_len,
-               crop_info ? "eq" : SYM_SMALL_M SYM_SMALL_M
+               crop_info ? "eq" : "mm"     /* the small "mm" symbol is not in the bar font */
         );
     }
 }

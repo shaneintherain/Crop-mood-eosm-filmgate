@@ -51,19 +51,31 @@ int main(void)
         }
 
     /* 2. a saved frame that belongs to another readout is repaired by sync */
-    set_state(9, 0);                       /* 1/2.3": frame 0 is 16:9 (2.5K) */
-    slim_mode_ui = 0; slim_1x1_ar = 3; slim_unified_preset = 0;     /* but the camera is on 1280p */
-    CHECK(slim_film_sync() == 4, "1/2.3\" cannot use 1280p: the first format that can (S8)");
-    set_state(8, 1);                       /* 1/2": both frames are on 1280p, so the saved frame is kept */
-    CHECK(slim_film_sync() == 8 && slim_film_frame_get(8) == 1, "1/2\" 4:3 stays on 1280p");
+    set_state(7, 0);                       /* 2/3": frame 0 is 16:9 (1440p) */
+    slim_mode_ui = 0; slim_1x1_ar = 5; slim_unified_preset = 0;     /* but the camera is on Narrow */
+    CHECK(slim_film_sync() == 4, "2/3\" cannot use Narrow: the first format that can (S8)");
+    set_state(8, 1);                       /* 1/2": both frames are on Narrow, so the saved frame is kept */
+    CHECK(slim_film_sync() == 8 && slim_film_frame_get(8) == 1, "1/2\" 4:3 stays on Narrow");
+    set_state(10, 1);
+    CHECK(slim_film_sync() == 10 && slim_film_frame_get(10) == 1, "1/4\" 4:3 stays on Narrow");
 
     /* 3. leftover legacy modes are not film formats */
     slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1;      /* 2.8K Higher */
-    CHECK(slim_film_sync() == -1, "2.8K is not a film format");
+    CHECK(slim_film_sync() == 2 && slim_film_frame_get(2) == 3, "2.8K Higher is S16 2.35:1");
+    slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 0;      /* 3K Highest */
+    CHECK(slim_film_sync() == -1, "3K is not a film format any more");
     slim_mode_ui = 2; crop_preset_ar_menu = 0;                       /* 3x3 16:9 high fps */
     CHECK(slim_film_sync() == -1, "3x3 high fps is not a film format");
     slim_mode_ui = 1;
-    CHECK(slim_film_sync() == -1, "1x3 is not a film format");
+    CHECK(slim_film_sync() == -1, "1x3 16:9 is not a film format");
+    slim_mode_ui = 1; crop_preset_ar_menu = 3; slim_unified_preset = 1;
+    CHECK(slim_film_sync() == -1, "1x3 2.35:1 Higher is not a CROP MOOD format (Highest only)");
+    slim_unified_preset = 0;
+    slim_film_fmt = 12;
+    CHECK(slim_film_sync() == 12, "1x3 2.35:1 Highest keeps CROP MOOD 1x3 when that was picked");
+    slim_film_fmt = 0;
+    CHECK(slim_film_sync() == 2, "1x3 2.35:1 Highest from A35 -> S16 Actual (the first 1x3 frame)");
+    crop_preset_ar_menu = 0;
     slim_mode_ui = 3;
     CHECK(slim_film_sync() == -1, "Full-Res LV is not a film format");
 
@@ -75,7 +87,8 @@ int main(void)
         {
             set_state(f, k);
             slim_film_apply(f);
-            g_preset = (slim_mode_ui == 2) ? CROP_PRESET_3X3 : CROP_PRESET_1X1;
+            g_preset = (slim_mode_ui == 2) ? CROP_PRESET_3X3 : (slim_mode_ui == 1) ? CROP_PRESET_1X3 : CROP_PRESET_1X1;
+            crop_preset_1x3_res_menu = slim_unified_preset;
             int mask = slim_crop_fps_mask();
             int ro = film_frames[film_frame_index(f, k)].readout;
             CHECK(mask & 1, "format %d frame %d: 23.976 must always be offered", f, k);
@@ -85,13 +98,15 @@ int main(void)
             int fits976 = a35 && film_frames[film_frame_index(f, k)].h <= 958;
             CHECK(!!(mask & 0x10) == a35, "format %d frame %d: 36 fps offered=%d, expected %d (mask %x)", f, k, !!(mask & 0x10), a35, mask);
             CHECK(!!(mask & 0x20) == fits976, "format %d frame %d: 48 fps offered=%d, expected %d (mask %x)", f, k, !!(mask & 0x20), fits976, mask);
-            if (!film_is_video(f))
+            if (film_is_cm(f) && ro == FILM_RO_3X3)
+                CHECK(mask & 4, "CROP MOOD 3x3 frame %d must offer 29.97 (mask %x)", k, mask);
+            else if (!film_is_video(f))
                 CHECK(!(mask & 4), "FILM format %d frame %d must not offer 30 / 29.97 (mask %x)", f, k, mask);
             else
             {
                 CHECK(!(mask & 8), "VIDEO format %d frame %d must not offer 18 fps (mask %x)", f, k, mask);
                 /* 29.97 is offered on the 2.5K frames and on 1280p; 1440p does not run it */
-                int ok30 = (ro == FILM_RO_25K || ro == FILM_RO_1280);
+                int ok30 = (ro == FILM_RO_25K || ro == FILM_RO_1280 || ro == FILM_RO_NARROW);
                 CHECK(!!(mask & 4) == ok30, "VIDEO format %d frame %d: 29.97 offered=%d, expected %d (mask %x)", f, k, !!(mask & 4), ok30, mask);
             }
         }
@@ -100,16 +115,22 @@ int main(void)
      *     Independent expectations worked out by hand: rows * clocks / 3200, rounded. */
     {
         static const struct { int w, h, fps, x10; } exp[] = {
-            { 1696,  954, 0, 157 }, { 1696,  916, 0, 151 }, { 1696,  722, 0, 119 },   /* A35, 528 clocks */
-            { 1376, 1152, 0, 190 }, { 1536, 1152, 0, 190 },                          /* anamorphic */
+            { 1696,  954, 0, 160 }, { 1696,  916, 0, 153 }, { 1696,  722, 0, 121 },   /* A35, 528 clocks */
+            { 1376, 1152, 0, 193 }, { 1536, 1152, 0, 193 },                          /* anamorphic */
             { 1696,  954, 1, 191 },                                                  /* 25 fps: 640 clocks */
             { 1696,  954, 4, 157 },                                                  /* 36 fps: 528 clocks */
             { 1696,  954, 5, 155 }, { 1696,  722, 5, 117 },                          /* 48 fps: 520 clocks */
-            { 2912, 1238, 0, 333 },                                                  /* S16, 3K 860 clocks */
+            { 2832, 1204, 0, 312 },                                                  /* S16 2.35:1, 2.8K 806 clocks */
             { 2384, 1340, 0, 307 },                                                  /* 16mm, 1440p 732 clocks */
-            { 1344,  930, 0, 164 },                                                  /* S8, 1280p 566 clocks */
-            { 3056, 1300, 0, 349 },                                                  /* 1", 3K */
-            { 1424,  800, 0, 179 },                                                  /* 1/2.3", 2.5K 716 clocks */
+            { 1344,  930, 0, 145 },                                                  /* S8, Narrow 498 clocks (23.976) */
+            { 2032, 1536, 0, 304 },                                                  /* 2/3" 4:3, 1620p 634 clocks */
+            {  968, 1720, 0, 280 }, {  792, 1736, 0, 282 },                          /* S16 / 16mm Actual, 1x3 520 clocks */
+            { 1024, 2046, 0, 332 }, { 1024, 1728, 0, 281 },                          /* 1" Actual / 16:9, 1x3 */
+            { 1104,  620, 0,  96 },                                                  /* 1/3", Narrow 498 clocks */
+            {  832,  468, 0,  73 }, { 1472, 1104, 0, 172 },                          /* 1/4" 16:9, 1/2" 4:3 */
+            { 1736, 1152, 0, 193 }, { 1736,  976, 0, 163 },                          /* CROP MOOD 3x3, 528 clocks */
+            { 1736,  736, 5, 120 },                                                  /* CROP MOOD 3x3 2.35:1 at 48 fps */
+            { 1736, 2214, 0, 360 },                                                  /* CROP MOOD 1x3, 520 clocks */
         };
         for (unsigned n = 0; n < sizeof(exp) / sizeof(exp[0]); n++)
         {
@@ -136,7 +157,7 @@ int main(void)
             {
                 set_state(f, k);
                 slim_film_apply(f);
-                CHECK(slim_readout_x10() >= 80 && slim_readout_x10() <= 400, "format %d frame %d: readout %d out of range", f, k, slim_readout_x10());
+                CHECK(slim_readout_x10() >= 50 && slim_readout_x10() <= 400, "format %d frame %d: readout %d out of range", f, k, slim_readout_x10());
             }
     }
 

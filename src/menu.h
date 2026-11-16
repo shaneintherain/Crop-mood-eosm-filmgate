@@ -333,6 +333,7 @@ extern void menu_remember_selection(struct menu_entry * entry);
 extern void gui_open_menu_at_entry(const char * menu_name, const char * entry_name);
 /** Open last highlighted menu setting (recording-screen touch). */
 extern void gui_open_last_menu_selection(void);
+extern void gui_open_last_menu_selection_from_set(void);
 /** Open the user-marked Custom page directly from Live View. */
 extern void gui_open_custom_menu(void);
 

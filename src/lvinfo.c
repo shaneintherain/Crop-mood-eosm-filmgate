@@ -692,6 +692,9 @@ void lvinfo_align_and_display(struct lvinfo_item * items[], int count, int bar_x
     /* try to borrow the color from the cropmarks; if it's fully transparent, use transparent gray */
     int bg = (items == top_items) ? TOPBAR_BGCOLOR : BOTTOMBAR_BGCOLOR;
     if (bg == 0) bg = COLOR_BG_DARK;
+    /* a film frame that fills the screen (CROP MOOD 3x3 3:2) puts its white frame line on the corner
+     * pixel this samples: the bar came out white, with cream text.  Use the black of the other modes. */
+    if (bg == COLOR_WHITE) bg = COLOR_BLACK;
     if (font_jost_info)    /* Jost, if its font file was loaded at boot; otherwise the stock font */
         default_font = FONT(font_jost_info | FONT_ALIGN_CENTER, COLOR_CREAM, bg);
     else

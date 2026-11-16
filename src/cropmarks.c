@@ -625,6 +625,34 @@ static void FAST default_movie_cropmarks()
         }
     }
 
+    /* HDMI: the bitmap has margins outside the picture area (left of os.x0, right of os.x_max,
+     * above os.y0, below os.y_max) that the loop above never touches.  The frame line of a frame
+     * that reaches the edge of the picture area is drawn there (film_canvas_paint), and stayed
+     * behind when the frame changed: two white lines down the sides in CROP MOOD 1x3 after a
+     * full-height frame (V9 HDMI test).  When a film frame is set, paint the margins black
+     * again (as film_canvas_paint does) and put back this frame's line. */
+    int yb = MIN(os.y_max + 1, BMP_H_PLUS);
+    int has_margin = os.x0 > BMP_W_MINUS || os.x_max < BMP_W_PLUS || os.y0 > BMP_H_MINUS || yb < BMP_H_PLUS;
+    if (cropmarks_x != -1 && cropmarks_y != -1 && has_margin)   /* never on the camera LCD */
+    {
+        int x1 = (crop_x >> 16), x2 = (crop_x & 0xFFFF);
+        int y1 = (crop_y >> 16), y2 = (crop_y & 0xFFFF);
+        if (os.x0 > BMP_W_MINUS)
+            bmp_fill(COLOR_BLACK, BMP_W_MINUS, BMP_H_MINUS, os.x0 - BMP_W_MINUS, BMP_H_PLUS - BMP_H_MINUS);
+        if (os.x_max < BMP_W_PLUS)
+            bmp_fill(COLOR_BLACK, os.x_max, BMP_H_MINUS, BMP_W_PLUS - os.x_max, BMP_H_PLUS - BMP_H_MINUS);
+        if (os.y0 > BMP_H_MINUS)
+            bmp_fill(COLOR_BLACK, BMP_W_MINUS, BMP_H_MINUS, BMP_W_PLUS - BMP_W_MINUS, os.y0 - BMP_H_MINUS);
+        if (yb < BMP_H_PLUS)
+            bmp_fill(COLOR_BLACK, BMP_W_MINUS, yb, BMP_W_PLUS - BMP_W_MINUS, BMP_H_PLUS - yb);
+        if (x2 > x1 && y2 > y1)
+        {
+            bmp_draw_rect(COLOR_WHITE, x1 - 1, y1 - 1, x2 - x1 + 3, y2 - y1 + 3);
+            bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 5, y2 - y1 + 5);
+        }
+        lens_display_set_dirty();   /* the info bars may sit in the margins: draw them again */
+    }
+
     cropmarks_mirror_x = crop_x;
     cropmarks_mirror_y = crop_y;
 }

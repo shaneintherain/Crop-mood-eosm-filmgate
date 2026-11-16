@@ -92,6 +92,7 @@ static GUARDED_BY(GuiMainTask) int show_edmac = 0;
 /* from mlv_play module */
 extern WEAK_FUNC(ret_0) void mlv_play_file(char *filename);
 extern WEAK_FUNC(ret_0) void crop_rec_request_lv_check(void);
+extern void idle_kill_flicker_after_menu();
 
 /* Dual ISO: skip ML raw preview while recording (striped dual RAW on LV). */
 static int dual_iso_skip_raw_preview(void)
@@ -678,13 +679,33 @@ int crop_rec_cropmarks()
  *   2.35  3072x1308 : y = 15/64
  * The film window is centred in the readout, so the frame is centred on the screen.
  * Only calibrated for the camera LCD; other outputs use the generic model. */
+/* does the current sampling match the film frame's readout?  1:1 / 3x3 frames need square
+ * pixels; 1x3 frames need the 1x3 mode (squeeze 1/3: 3 columns binned per pixel) */
+static int film_frame_sampling_ok(int f)
+{
+    if (f <= 0 || f >= COUNT(film_frames))
+        return 0;
+    if (film_readouts[film_frames[f].readout].bin_x == 3)
+        return squeeze_factor > 0.30f && squeeze_factor < 0.36f;
+    return squeeze_factor == 1.0f;
+}
+
+/* the frame drawn on the screen (CROP MOOD 1x3 included: see crop_rec_film_display_format) */
+static int film_display_format(void)
+{
+    int f = crop_rec_film_display_format();
+    if (f <= 0 || f >= COUNT(film_frames))
+        f = crop_rec_film_format();
+    return f;
+}
+
 static int film_frame_possible(void)
 {
     /* The EOS M crop_rec presets run in Canon's x5 zoom state (lv_dispsize == 5),
      * so x5 must be accepted here; x10 (focus zoom) is not. */
-    return crop_rec_film_format() > 0 &&
+    return film_display_format() > 0 &&
            (lv_dispsize == 1 || lv_dispsize == 5) &&
-           squeeze_factor == 1.0f &&
+           film_frame_sampling_ok(film_display_format()) &&
            (is_LCD_Output() || is_480p_Output() || is_1080i_Full_Output() || is_1080i_Info_Output() ||
             ext_monitor_hdmi /* any other HDMI mode (720p ...): generic placement, not measured */);
 }
@@ -697,13 +718,16 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     if (!film_frame_possible())
         return 0;
 
-    int f = crop_rec_film_format();
+    int f = film_display_format();
 
     /* readout width and LCD scale numerator / denominator, from the shared table */
     const struct film_readout * ro = &film_readouts[film_frames[f].readout];
     int rw = ro->w, kn = ro->kn, kd = ro->kd;
 
-    int nw = res_x * 720 / rw;  /* frame size in the 720x480 layer */
+    /* frame size in the 720x480 layer: the readout's preview is fit_w wide (720, or 608 for the
+     * 1620p one); 1x3 previews are desqueezed by the camera, so the same rule holds for them */
+    int fit_w = ro->fit_w;
+    int nw = res_x * fit_w / rw;
     int nh = res_y * kn / kd;
 
     /* 48 fps (A35 frames) reads a shorter sensor readout than the 1160-row one the scales above were
@@ -720,7 +744,17 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
             dy_rows = FILM_48FPS_UP_ROWS_958;
     }
 
-    *x = N2BM_X(360 - nw / 2);
+    /* the recorded window's offset from the readout centre (film_readouts dx / dy), as it is in
+     * update_cropping_offsets (same clamping) */
+    int left_margin = (raw_info.active_area.x1 + 7) & ~7;
+    int top_margin  = (raw_info.active_area.y1 + 1) & ~1;
+    int cx = left_margin + (max_res_x - res_x) / 2;
+    int cy = top_margin  + (max_res_y - res_y) / 2;
+    int off_x = COERCE(cx + ro->dx, left_margin, raw_info.active_area.x2 - res_x) - cx;
+    int off_y = COERCE(cy + ro->dy, top_margin,  raw_info.active_area.y2 - res_y) - cy;
+    dy_rows += off_y;
+
+    *x = N2BM_X(360 - nw / 2 + off_x * fit_w / rw);
     *y = N2BM_Y(240 - nh / 2 + dy_rows * kn / kd);
     *w = N2BM_X(nw) - N2BM_X(0);
     *h = N2BM_Y(nh) - N2BM_Y(0);
@@ -846,11 +880,11 @@ static void refresh_cropmarks_if_changed(void)
     static int last_sig = INT_MIN;
     int sig = (lv ? 1 : 0)
             | (lv_dispsize << 1)
-            | (crop_rec_film_format() << 6)
+            | (film_display_format() << 6)
             | (raw_video_enabled ? 1 << 12 : 0)
             | ((is_LCD_Output() ? 1 : 0) << 13)
             | ((is_480p_Output() ? 1 : 0) << 14)
-            | ((ext_monitor_hdmi ? 1 : 0) << 11);
+            | ((ext_monitor_hdmi ? 1 : 0) << 5);   /* bit 5: the film frame index (up to 63) uses bits 6..11 */
     sig ^= (res_x * 7 + res_y * 13 + skip_x * 17 + skip_y * 19) << 15;
 
     if (sig != last_sig)
@@ -1027,6 +1061,16 @@ void update_cropping_offsets()
         }
     }
 
+    /* film frames: the recorded window sits where the frame is centred on the sensor, which for
+     * some readouts is not the readout centre (dx / dy, measured); kept inside the active area */
+    int film_f = film_format_effective();
+    if (film_f > 0 && film_frame_sampling_ok(film_f) && !FRAMING_PANNING)
+    {
+        const struct film_readout * fro = &film_readouts[film_frames[film_f].readout];
+        sx = COERCE(sx + fro->dx, left_margin, raw_info.active_area.x2 - res_x);
+        sy = COERCE(sy + fro->dy, top_margin,  raw_info.active_area.y2 - res_y);
+    }
+
     skip_x = sx;
     skip_y = sy;
     
@@ -1072,9 +1116,9 @@ void update_resolution_params()
     int den = aspect_ratio_presets_den[aspect_ratio_index];
     res_y = calc_res_y(res_x, max_res_y, num, den, squeeze_factor);
 
-    /* Film Format override (square pixels only) */
+    /* Film Format override (square pixels, or 1x3 for the 1x3 frames) */
     int film_idx = film_format_effective();
-    if (film_idx > 0 && squeeze_factor == 1.0f)
+    if (film_idx > 0 && film_frame_sampling_ok(film_idx))
     {
         int fw = film_frames[film_idx].w;
         int fh = film_frames[film_idx].h;
@@ -1086,7 +1130,9 @@ void update_resolution_params()
             fw = max_res_x;
         }
 
-        res_x = fw & ~15;
+        /* multiple of 8 (raw_pixblock); every film frame is already a multiple of 16, except the
+         * full-width CROP MOOD frames (1736, as in the original Crop Mood presets) */
+        res_x = fw & ~7;
         res_y = film_align_res_y(res_x, fh, max_res_y);
     }
 
@@ -3339,8 +3385,8 @@ int raw_rec_start_ready(void)
 
 /* Event-only diagnostics for unstable LiveView transitions. */
 #define LVRECOV_LOG_FILE "ML/LOGS/LVRECOV.LOG"
-static int (*crop_rec_lv_transition_diag)(char *, int) =
-    MODULE_FUNCTION(crop_rec_lv_transition_diag);
+/* crop_rec_lv_transition_diag: declared in crop_rec.h (weak: returns 0 when crop_rec is not loaded).
+ * The MODULE_FUNCTION pointer used here before never got connected: the log lines had no details. */
 
 static void lvrecov_log_state(void)
 {
@@ -3372,9 +3418,8 @@ static void lvrecov_log_state(void)
     uint32_t edmac_write = edmac_get_base(raw_write_chan);
     int edmac_ready = edmac_read != 0xffffffff && edmac_write != 0xffffffff;
     int invalid = lv && (fps <= 0 || !raw_ready || !geometry_ready || !buffers_ready || !edmac_ready);
-    char guard[128] = "";
-    int guard_signature = crop_rec_lv_transition_diag ?
-        crop_rec_lv_transition_diag(guard, sizeof(guard)) : 0;
+    char guard[320] = "";
+    int guard_signature = crop_rec_lv_transition_diag(guard, sizeof(guard));
 
     if (lv == last_lv && invalid == last_invalid && fps == last_fps && zoom == last_zoom
         && crop == last_crop && ar == last_ar && res_x == last_res_x && res_y == last_res_y
@@ -3394,7 +3439,7 @@ static void lvrecov_log_state(void)
     last_raw_y = raw_info.height;
     last_guard_signature = guard_signature;
 
-    char line[384];
+    char line[704];
     int len = snprintf(line, sizeof(line),
         "%08d %s lv=%d fps=%d zoom=x%d crop=%d ar=%d out=%dx%d raw=%dx%d buf=%08x slots=%d frame=%d ready=%d/%d/%d/%d edmac=%08x/%08x %s\n",
         get_ms_clock(), invalid ? "INVALID" : "STATE",
@@ -4802,6 +4847,10 @@ cleanup:
         raw_recording_state = RAW_IDLE;
 
 #ifndef CONFIG_EOSM
+        /* Live View is coming back at x5: keep Canon's overlay (its x5 box and arrows) off while
+         * it settles, as after closing a menu.  It flashed between the stop and the preview. */
+        if (cam_eos_m && lv)
+            idle_kill_flicker_after_menu();
         redraw();
 #endif
 

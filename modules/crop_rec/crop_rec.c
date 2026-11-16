@@ -92,6 +92,7 @@ static int crop_preset_1x1_res = 0;
 #define CROP_Full_Res  (crop_preset_1x1_res == 5)
 #define CROP_1620p     (crop_preset_1x1_res == 6)
 #define CROP_1080p     (crop_preset_1x1_res == 7)
+#define CROP_Narrow    (crop_preset_1x1_res == 8)   /* FilmGate 1600x1280: S8, 8mm, 1/2", 1/3", 1/4" */
 
 CONFIG_INT("crop.preset_1x3", crop_preset_1x3_res_menu, 1);
 static int crop_preset_1x3_res = 0;
@@ -329,7 +330,7 @@ static int slim_handle_set_button(unsigned int key)
         return 1;
 
     if (lv && is_movie_mode() && !gui_menu_shown() && lv_disp_mode == 0)
-        gui_open_last_menu_selection();
+        gui_open_last_menu_selection_from_set();   /* a second SET closes the menu again */
 
     /* Do not fall through to legacy SET=2 (ISO) handling. */
     return 1;
@@ -977,16 +978,20 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                     cmos_new[7] = 0xA6A;
                 }
                 
+                /* FilmGate: the low bits of cmos_new[7] set the readout's first row in 120-row
+                 * steps (measured with the V9 charts: 1440p, 1280p and 1620p were 98, 140 and 70
+                 * rows below the sensor centre).  One step up each; mlv_lite (film_readouts dx / dy)
+                 * places the recorded window for the rest. */
                 if (CROP_1440p)
                 {
                     cmos_new[5] = 0x2C0;
-                    cmos_new[7] = 0xAA9;
+                    cmos_new[7] = 0xAA8;    /* was 0xAA9 */
                 }
                 
                 if (CROP_1620p)
                 {
                     cmos_new[5] = 0x344 + reg_cmos5;
-                    cmos_new[7] = 0xAC8 + reg_cmos7;
+                    cmos_new[7] = 0xAC7 + reg_cmos7;    /* was 0xAC8 */
                 }
                 
                 if (CROP_2_8K)
@@ -1004,7 +1009,18 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                 if (CROP_1280p || CROP_1080p)
                 {
                     cmos_new[5] = 0x380;
-                    cmos_new[7] = 0xACA;
+                    cmos_new[7] = CROP_1280p ? 0xAC9 : 0xACA;   /* 1280p was 0xACA */
+                }
+                
+                /* Narrow 1600x1280: the 1280p rows (same cmos_new[7]).  cmos_new[5]: bit 5 (0x20) is the
+                 * 3-column binning of the 1x3 presets (0x3E0 squeezed the picture 3x: second Narrow test);
+                 * the first column moves only in 0x40 steps of ~124 px (fitted to the measured 1:1 readouts).
+                 * At 0x3CC a 1536 wide readout sat ~40 px left, so the readout is 64 px wider instead
+                 * (its left edge stays put, its centre moves 32 px right) and mlv_lite's dx does the rest */
+                if (CROP_Narrow)
+                {
+                    cmos_new[5] = 0x3CC;
+                    cmos_new[7] = 0xAC9;
                 }
                 
                 if (CROP_Full_Res)
@@ -1559,69 +1575,143 @@ static unsigned TimerA = 0;
 static unsigned RAW_H = 0;            // RAW width    resolution          0xC0F06804
 static unsigned RAW_V = 0;            // RAW vertical resolution          0xC0F06804
 
-/* True 23.976 fps (24000/1001).
+/* Standard frame rates: 18, 23.976 (24000/1001), 25 and 29.97 (30000/1001).
  *
- * Sensor frame rate = 32 MHz / (A * B), with A = TimerA + 1 and B = TimerB + 1 (the registers
- * hold value - 1).  24000/1001 needs A * B = 1334666.67, which is not a whole number.  Canon's own
- * 24p mode hits it on average by switching Timer B between two neighbouring values; the presets
- * below use one fixed value, so several of them ran 0.01% - 0.05% too fast (e.g. A=528 B=2527
- * gives 23.983 fps, about 1 second too many per hour).
- *
- * After a preset has chosen its timers, move Timer B (only B) to the value that gets A * B closest
- * to the NTSC target.  Timer A is never touched: it sets the line time and its parity must stay as
- * Canon has it (the core FPS engine keeps it for the same reason); an earlier attempt that also moved
- * A produced vertical line artifacts and a low-res preview.
- * Only done for 24p presets (within 1% of 23.976), so 25p / 30p / high-FPS presets are untouched,
- * and Timer B may shrink only while at least 75% of the original vertical blanking (B - RAW_V) remains. */
-#define NTSC24_PRODUCT 1334667   /* 32000000 * 1001 / 24000, rounded */
-#define NTSC30_PRODUCT 1067733   /* 32000000 * 1001 / 30000, rounded */
-/* defined with the Film Format menu code */
-static int slim_video_standard(void);
-static void ntsc24_snap_timers(void)
+ * Sensor frame rate = 32 MHz / (A * B), with A = TimerA + 1 (the line time) and B = TimerB + 1 (lines
+ * per frame).  The presets' fixed timers land a little off (23.964 - 23.990, 25.005, 29.955 - 29.988,
+ * ...).  After a preset has chosen its timers, std_fps_snap() picks the nearest standard rate (only
+ * when the preset is already within 1 % of it, so 36 / 48 fps and the odd high-FPS presets are left
+ * alone) and finds timers that hit it to within 40 ppm (+-0.001 fps):
+ *   - Timer B alone first, when a whole B gets within 100 ppm and the top bar shows the right number.
+ *     Otherwise the line is made longer by 2 clocks at a time (never shorter, at most 1/32 = 3 %
+ *     longer, never in 1x3) and B recalculated.  A moves in steps of 2 so
+ *     its parity stays as Canon has it: an earlier attempt that changed the parity gave vertical line
+ *     artifacts and a low-res preview.
+ *   - B may shrink only while at least 75 % of the preset's vertical blanking (B - RAW_V) remains.
+ *   - When nothing within 3 % gets there, only B is moved (to the nearest whole value).
+ *   - Presets with less than 8 ms of vertical blanking: Timer B only, one line at most.
+ * Returns 1 and the new A / B (not register values) when something changes. */
+#define STD_FPS_TIGHT_CLOCKS 256000     /* 8 ms of vertical blanking, in 32 MHz clocks */
+
+/* what the top bar shows for A x B: fps x 100, rounded (fps_get_current_x1000 is truncated) */
+static int std_fps_shown_x100(int a, int b)
 {
-    if (!is_EOSM) return;
+    int f = (int)(32000000000ULL / ((unsigned long long)a * b));
+    return (f + 5) / 10;
+}
 
-    /* 24p always; 30p only for the VIDEO standard on the 2.5K readout (29.97 fps) */
-    int target;
-    if (Framerate_24)
-        target = NTSC24_PRODUCT;
-    else if (Framerate_30 && crop_preset == CROP_PRESET_1X1 && CROP_2_5K && slim_video_standard())
-        target = NTSC30_PRODUCT;
-    else
-        return;
+static int std_fps_snap(int a0, int b0, int raw_v, int allow_a, int * a_out, int * b_out)
+{
+    /* 9 * 32 MHz / fps: whole numbers for all four rates */
+    static const int t9s[4]  = { 16000000, 12012000, 11520000, 9609600 };   /* 18, 23.976, 25, 29.97 */
+    static const int x100[4] = {     1800,     2398,     2500,    2997 };
 
-    int a = TimerA + 1;
-    int b0 = TimerB + 1;
-    if (a < 2 || b0 < 2) return;
+    if (a0 < 2 || b0 < 2) return 0;
+    int p9 = 9 * a0 * b0;
+    int t9 = 0, want = 0;
+    for (int i = 0; i < 4; i++)
+        if (ABS(p9 - t9s[i]) <= t9s[i] / 100)
+        {
+            t9 = t9s[i]; want = x100[i];
+        }
+    if (!t9) return 0;
 
-    int p0 = a * b0;
-    if (p0 < target - target / 100 || p0 > target + target / 100) return;
+    int tol9 = t9 / 25000;              /* 40 ppm: 23.976 +- 0.001 */
+    int ok9  = t9 / 10000;              /* 100 ppm: good enough when the top bar shows it right */
+    int err0 = ABS(p9 - t9);
+    if (err0 <= tol9 || (err0 <= ok9 && std_fps_shown_x100(a0, b0) == want)) return 0;
 
-    int err0 = ABS(p0 - target);
-    int blank0 = b0 - (int)RAW_V;      /* original vertical blanking, in lines */
-    int best_b = b0, best_err = err0;
-    int b_floor = target / a;
+    int blank0 = b0 - raw_v;
+    int b_min = (raw_v > 0 && blank0 > 0) ? raw_v + (3 * blank0) / 4 : b0;
 
+    /* A tight preset (less than 8 ms between the end of one readout and the start of the next:
+     * 1x3 Highest, 1440p at 25 fps) failed to record with a longer line or 2 lines fewer (V9 test).
+     * There, only Timer B moves, and by one line at most, as V8 did. */
+    if (raw_v > 0 && blank0 * a0 < STD_FPS_TIGHT_CLOCKS)
+    {
+        int best = b0, best_err = err0;
+        for (int b = b0 - 1; b <= b0 + 1; b += 2)
+        {
+            int err = ABS(9 * a0 * b - t9);
+            if (b > raw_v && err < best_err) { best = b; best_err = err; }
+        }
+        if (best == b0) return 0;
+        *a_out = a0; *b_out = best;
+        return 1;
+    }
+
+    /* 1. Timer B only (the safest change): the nearest B that shows the right number */
+    int bb = 0, bb_err = 0, bn = 0, bn_err = 0;
     for (int k = 0; k < 2; k++)
     {
-        int b = b_floor + k;
-        if (b < 2) continue;
+        int b = t9 / (9 * a0) + k;
+        if (b < b_min) continue;
+        int err = ABS(9 * a0 * b - t9);
+        if (std_fps_shown_x100(a0, b) == want && (!bb || err < bb_err)) { bb = b; bb_err = err; }
+        if (!bn || err < bn_err) { bn = b; bn_err = err; }
+    }
+    if (bb && bb_err <= ok9)
+        goto done_b;
 
-        /* keep most of the original blanking when Timer B gets smaller */
-        if (b < b0 && (blank0 <= 0 || (b - (int)RAW_V) * 4 < blank0 * 3)) continue;
-
-        int err = ABS(a * b - target);
-        if (err < best_err)
+    /* 2. a longer line (from the preset's own, in steps of 2, at most 3 %) that a whole B brings
+     *    within 40 ppm */
+    if (allow_a)
+    {
+        for (int a = a0 + 2; a <= a0 + a0 / 32; a += 2)
         {
-            best_err = err; best_b = b;
+            int b_floor = t9 / (9 * a);
+            for (int k = 0; k < 2; k++)
+            {
+                int b = b_floor + k;
+                if (b < b_min) continue;
+                if ((b - raw_v) * a < STD_FPS_TIGHT_CLOCKS) continue;
+                if (ABS(9 * a * b - t9) <= tol9)
+                {
+                    *a_out = a; *b_out = b;
+                    return 1;
+                }
+            }
         }
     }
 
-    /* only change something when it is clearly better */
-    if (best_err < err0 && err0 > 13)
+    /* 3. none: Timer B only - the B that shows the right number when it is within 400 ppm
+     *    (+-0.01 fps), else the nearest B */
+    if (!(bb && bb_err <= 4 * ok9))
     {
-        TimerB = best_b - 1;
+        if (!bn || bn_err >= err0) return 0;
+        bb = bn;
     }
+
+done_b:
+    if (bb == b0) return 0;
+    *a_out = a0; *b_out = bb;
+    return 1;
+}
+
+static void std_fps_snap_timers(void)
+{
+    if (!is_EOSM) return;
+    /* 1x3: Timer B only.  A longer line in 1x3 2.35:1 Highest gave a lagging preview and recording
+     * that stopped at once (V9 test). */
+    int allow_a = (crop_preset != CROP_PRESET_1X3);
+
+    /* This runs from the register hook: for every register Canon writes, every frame, also while
+     * recording.  The search (loops, 64-bit divisions) is only done when the preset's timers
+     * change; after that the answer is reused.  Written and read from the same (Canon's) task. */
+    static unsigned in_a = 0, in_b = 0, in_v = 0, out_a = 0, out_b = 0;
+    static int in_allow = -1;
+    if (TimerA != in_a || TimerB != in_b || RAW_V != in_v || allow_a != in_allow)
+    {
+        int a = TimerA + 1, b = TimerB + 1;
+        if (!std_fps_snap(TimerA + 1, TimerB + 1, RAW_V, allow_a, &a, &b))
+        {
+            a = TimerA + 1; b = TimerB + 1;
+        }
+        in_a = TimerA; in_b = TimerB; in_v = RAW_V; in_allow = allow_a;
+        out_a = a - 1; out_b = b - 1;
+    }
+    TimerA = out_a;
+    TimerB = out_b;
 }
 
 static unsigned Preview_Control = 0;        // Flag tells we want full real-time preview
@@ -1903,6 +1993,40 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         Preview_Control_Basic = 0;
     }
     
+    /* FilmGate Narrow: the 1280p readout cut to 1600 columns, for the small frames (S8, 8mm, 1/2", 1/3",
+     * 1/4").  A shorter line: 490-498 clocks instead of 566 (12-13 % less rolling shutter), and 29.97 fps.
+     * RAW_H = width / 4 + 34 and TimerA = RAW_H + 51, as in every other 1:1 preset here. */
+    if (CROP_Narrow)
+    {
+        if (is_EOSM)
+        {
+            RAW_H    = 0x1B2 + reg_width;
+            RAW_V    = 0x51D + reg_height;
+            /* the line is 486 clocks at the least; each rate takes the shortest line (Timer A + 1) for
+             * which a whole Timer B gives the exact rate to 3 decimals, as ML shows it (486 gave
+             * 23.978, 24.997, 29.969, 17.999).  32 MHz / (A * B): */
+            if (Framerate_24) { TimerA = 0x1F1; TimerB = 0xA77; }  /* 498 * 2680: 23.9765 */
+            if (Framerate_25) { TimerA = 0x1ED; TimerB = 0xA1E; }  /* 494 * 2591: 25.0009 */
+            if (Framerate_30) { TimerA = 0x1E9; TimerB = 0x882; }  /* 490 * 2179: 29.9707 */
+            if (Framerate_18) { TimerA = 0x1E9; TimerB = 0xE2B; }  /* 490 * 3628: 18.0006 */
+        }
+
+        Preview_H     = 1596;
+        Preview_V     = 1280;
+        Preview_R     = 0x19000D;
+
+        /* (out << 16) | in, as 1280p (69 / 128 for 1916 px): 0x6A in for 1596 px fills the whole width,
+         * so the preview is stretched sideways (1.2x) for now; an unstretched preview comes later. */
+        YUV_HD_S_H    = 0x45006A;
+        YUV_HD_S_V    = 0x250044;
+
+        Black_Bar     = 0;
+        Preview_Control = 1;
+        EDMAC_24_Redirect = 0;
+        EDMAC_9_Vertical_Change = 0;
+        Preview_Control_Basic = 0;
+    }
+    
     if (CROP_1080p)
     {
         if (is_EOSM)
@@ -1995,8 +2119,8 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
         }
     }
 
-    /* true 23.976 fps (see ntsc24_snap_timers) */
-    ntsc24_snap_timers();
+    /* exact 18 / 23.976 / 25 / 29.97 fps (see std_fps_snap) */
+    std_fps_snap_timers();
 
     /* get rid of moving Dual ISO lines by tweaking Timer B a tiny bit */
     if (fix_dual_iso_flicker && dual_iso_is_enabled())
@@ -2394,8 +2518,8 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
         }
     }
 
-    /* true 23.976 fps (see ntsc24_snap_timers) */
-    ntsc24_snap_timers();
+    /* exact 18 / 23.976 / 25 / 29.97 fps (see std_fps_snap) */
+    std_fps_snap_timers();
 
     /* get rid of moving Dual ISO lines by tweaking Timer B a tiny bit */
     if (fix_dual_iso_flicker && dual_iso_is_enabled())
@@ -2617,8 +2741,8 @@ static inline uint32_t reg_override_3X3(uint32_t reg, uint32_t old_val)
     Preview_Control_Basic = 0;
     REG_C0F383DC_Tuning = 0;
 
-    /* true 23.976 fps (see ntsc24_snap_timers) */
-    ntsc24_snap_timers();
+    /* exact 18 / 23.976 / 25 / 29.97 fps (see std_fps_snap) */
+    std_fps_snap_timers();
 
     /* get rid of moving Dual ISO lines by tweaking Timer B a tiny bit */
     if (fix_dual_iso_flicker && dual_iso_is_enabled())
@@ -3176,7 +3300,16 @@ int GetShiftValue()
             {
                 /* values are the centring offset in bytes: lines * line pitch + 2 * pixels from the left */
                 if (is_LCD_Output())  return crop_rec_preview_fit() ? 0x43F0 : 0x7BC0;   /* 12 or 22 lines of 1440, 56 px */
-                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x10EF4 : 0x2772C;   /* Fit: first photo showed it ~65 px too far right */
+                /* Fit over 1080i.  The shift is lines * 3840 + 2 * pixels: the picture buffer there is
+                 * 1920 px wide (not the 1620 of the line pitch register; found from two chart photos,
+                 * V9: 0x10EF4 = 18 lines + 122 px sat 10.4 % of the frame width left and 5 % low;
+                 * 0x640 = 0 lines + 800 px sat 41 % right, wrapped round, and vertically centred).
+                 * Centre: 0 lines, 122 + 136 = 258 px (0x204; third photo: centred within 3 px).
+                 * The usable picture is about 1280 px wide there and the frame needs about 1309, so
+                 * a sliver of artifacts (1 % of the frame) shows just inside the right frame line.
+                 * 18 px further right (0x228) only moved it to the left edge, wider.  A clean edge
+                 * needs the preview scaled about 3 % smaller on this output (not done). */
+                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x204 : 0x2772C;
                 if (is_480p_Output()) return 0xB9E0;     /* same picture as the 1440p one */
                 if (is_1080i_Info_Output()) return 0x33B58;
                 return 0;
@@ -3516,6 +3649,13 @@ static void FAST PATH_SelectPathDriveMode_hook(uint32_t* regs, uint32_t* stack, 
         }
     }
     
+    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 8)    // Narrow: fills the screen, as 1280p
+    {
+        Shift_Preview = 0;
+        Clear_Artifacts = 0;
+        EDMAC_9_Vertical_Change = 0;
+    }
+
     if (crop_preset_1x1_res == 6)    // CROP_1620p
     {
         Shift_Preview = 1;
@@ -3688,10 +3828,33 @@ static void eosm_lv_guard_set_zoom(int zoom)
 }
 #else
 int crop_rec_lv_transition_busy(void) { return 0; }
+
+/* Diagnostics for ML/LOGS/LVRECOV.LOG (written by mlv_lite when the returned signature changes,
+ * never while recording): which output Canon is driving, and whether the preview route is set the
+ * way the preset wants it.  For the HDMI problems of the V9 tests (black picture after a 1x3
+ * switch, strip of artifacts in 2/3" 4:3), which cannot be seen from here. */
+static int lv_check_display_luma_max(void);
+static int lv_check_route_ok(void);
 int crop_rec_lv_transition_diag(char *buffer, int size)
 {
-    if (buffer && size > 0) buffer[0] = '\0';
-    return 0;
+    if (!buffer || size <= 0) return 0;
+    buffer[0] = '\0';
+    if (!is_EOSM || !lv || !PathDriveMode) return 0;
+
+    int out   = PathDriveMode->OutputType;  /* 0 LCD, 3 1080i full, 4 1080i info, 7 480p */
+    int pzoom = PathDriveMode->zoom;
+    int route = lv_check_route_ok();
+    int luma  = lv_check_display_luma_max();
+    snprintf(buffer, size,
+        "fg out=%d pzoom=%d preset=%d res=%d patch=%d route=%d luma=%d is=%x/%x/%x/%x/%x want=%x/%x/%x/%x/%x shift=%x/%d fit=%d",
+        out, pzoom, (int)CROP_PRESET_MENU, (int)crop_preset_1x1_res, patch_active, route, luma,
+        shamem_read(0xC0F11B8C), shamem_read(0xC0F11BCC), shamem_read(0xC0F11BC8),
+        shamem_read(0xC0F11ACC), shamem_read(0xC0F04210),
+        YUV_HD_S_H, YUV_HD_S_V, YUV_HD_S_V_E, YUV_LV_S_V, YUV_LV_Buf,
+        GetShiftValue(), Shift_Preview, crop_rec_preview_fit());
+    return (out & 15) | ((pzoom & 15) << 4) | (route << 8) | ((luma <= 20) << 9) |
+           (((int)CROP_PRESET_MENU & 15) << 10) | (((int)crop_preset_1x1_res & 15) << 14) |
+           ((patch_active & 1) << 18);
 }
 static void eosm_lv_guard_request(void) {}
 #endif
@@ -3741,7 +3904,7 @@ static void update_patch()
         crop_preset_ar      = crop_preset_ar_menu;
         crop_preset_fps     = crop_preset_fps_menu;
         /* 18 fps exists only in the 1:1 1280p preset; anywhere else fall back to 24 */
-        if (crop_preset_fps == 3 && !(CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res_menu == 4))
+        if (crop_preset_fps == 3 && !(CROP_PRESET_MENU == CROP_PRESET_1X1 && (crop_preset_1x1_res_menu == 4 || crop_preset_1x1_res_menu == 8)))
             crop_preset_fps = 0;
         /* 36 / 48 fps exist only for the 3x3 3:2 (A35) readout, and only where the menu allows them */
         if (crop_preset_fps >= 4 &&
@@ -3960,6 +4123,10 @@ static MENU_UPDATE_FUNC(crop_preset_1x1_res_update)
     {
         MENU_SET_HELP("2160x1620 @ 23.976 FPS");
     }
+    if (crop_preset_1x1_res_menu == 8)
+    {
+        MENU_SET_HELP("1600x1280 @ 18, 23.976, 25 and 29.97 FPS (FilmGate small formats)");
+    }
 }
 
 static MENU_UPDATE_FUNC(crop_preset_1x3_res_update)
@@ -4121,6 +4288,7 @@ static MENU_UPDATE_FUNC(crop_preset_ar_update)
         if (crop_preset_1x1_res_menu == 5) MENU_SET_VALUE("3:2");     // CROP_Full_Res
         if (crop_preset_1x1_res_menu == 6) MENU_SET_VALUE("4:3");     // CROP_1620p
         if (crop_preset_1x1_res_menu == 7) MENU_SET_VALUE("16:9");    // CROP_1080p
+        if (crop_preset_1x1_res_menu == 8) MENU_SET_VALUE("5:4");     // Narrow 1600x1280
         MENU_SET_WARNING(MENU_WARN_ADVICE, "This option doesn't work in 1:1 crop.");
     }
 }
@@ -4355,7 +4523,7 @@ static struct menu_entry slim_info_button_menu[] = {
         .edit_mode = EM_INLINE_ADJUST,
         .icon_type = IT_DICE,
         .help      = "Choose what SET does on the movie LiveView screen.",
-        .help2     = "Last settings opens the last changed ML setting, like a LiveView screen tap.",
+        .help2     = "Last settings: SET opens the last setting you changed; SET again goes back.",
     },
     {
         .name      = "Up/Down Button",
@@ -4389,16 +4557,16 @@ static int slim_bit_depth_ui = 2;   /* 0=10 1=11 2=12 3=14 → bit_depth_analog 
 static int slim_touch_crop_ready_at = 0;
 #define SLIM_TOUCH_CROP_SETTLE_MS 900
 
-/* 1x1 Aspect Ratio UI: 0=2.33:1, 1=2.35:1, 2=16:9, 3=3:2, 4=4:3 */
+/* 1x1 Aspect Ratio UI: 0=2.33:1, 1=2.35:1, 2=16:9, 3=3:2, 4=4:3, 5=Narrow (FilmGate frames only) */
 static int slim_1x1_ar = 2; /* default 16:9 */
-__attribute__((unused)) static const char * const slim_1x1_ar_labels[5] = {
-    "2.33:1", "2.35:1", "16:9", "3:2", "4:3"
+__attribute__((unused)) static const char * const slim_1x1_ar_labels[6] = {
+    "2.33:1", "2.35:1", "16:9", "3:2", "4:3", "5:4"
 };
 
 /* ---- Film Format menu ------------------------------------------------------
  * The Movie menu offers eleven formats in two Standards (menu row "Standard"):
  *   FILM   Academy 35mm, A35 Anamorphic, S16, 16mm, S8, 8mm   (the default)
- *   VIDEO  video sensor sizes at 1:1: 1", 2/3", 1/2", 1/2.3", 1/3", 1/4"
+ *   VIDEO  video sensor sizes: 1", 2/3", 1/2", 1/3", 1/4"
  * The old Mode / Aspect Ratio / Preset choices are no longer exposed.  Rows are reused:
  *   "Mode" row         -> Film Format  (or Sensor Size in the VIDEO standard)
  *   "Aspect Ratio" row -> Frame        (Actual / 16:9 Crop / 1.85:1 Crop ...)
@@ -4450,14 +4618,17 @@ static int slim_film_menu_readout(void)
     {
         case 2: /* 3x3 3:2 */
             return crop_preset_ar_menu == 4 ? FILM_RO_3X3 : -1;
+        case 1: /* 1x3 Highest 2.35:1 (CROP MOOD) */
+            return (crop_preset_ar_menu == 3 && slim_unified_preset == 0) ? FILM_RO_1X3 : -1;
         case 0:
             switch (slim_1x1_ar)
             {
                 case 0: return FILM_RO_25K;
-                case 1: return slim_unified_preset == 0 ? FILM_RO_3K : -1; /* 2.8K Higher is legacy */
+                case 1: return slim_unified_preset == 0 ? FILM_RO_3K : FILM_RO_28K; /* 3K Highest / 2.8K Higher */
                 case 2: return FILM_RO_1440;
                 case 3: return FILM_RO_1280;
-                case 4: return -1;          /* 1620p 4:3 is not a film format (no 2/3" 4:3 frame) */
+                case 4: return FILM_RO_1620; /* 1620p 4:3: 2/3" 4:3 */
+                case 5: return FILM_RO_NARROW;
             }
     }
     return -1;
@@ -4485,14 +4656,19 @@ static int slim_film_active_readout(void)
         return -1;
     if (CROP_PRESET_MENU == CROP_PRESET_3X3)
         return crop_preset_3x3_res_menu == 2 ? FILM_RO_3X3 : -1;
+    if (CROP_PRESET_MENU == CROP_PRESET_1X3)
+        return (crop_preset_1x3_res_menu == 0 && crop_preset_ar_menu == 3) ? FILM_RO_1X3 : -1;
     if (CROP_PRESET_MENU == CROP_PRESET_1X1)
     {
         switch (crop_preset_1x1_res_menu)
         {
             case 0: return FILM_RO_25K;
+            case 1: return FILM_RO_28K;
             case 2: return FILM_RO_3K;
             case 3: return FILM_RO_1440;
             case 4: return FILM_RO_1280;
+            case 6: return FILM_RO_1620;
+            case 8: return FILM_RO_NARROW;
         }
     }
     return -1;
@@ -4511,11 +4687,37 @@ int crop_rec_shutter_record()
     return is_EOSM && Shutter_rec;
 }
 
-/* 1 when the active recording format is one of the FILM standard formats (shutter shown as an angle) */
+/* 1 when the active recording format is one of the FILM standard formats (shutter shown as an angle).
+ * VIDEO shows Gain, CROP MOOD shows ISO and shutter speed, as in the original Crop Mood. */
 int crop_rec_film_standard()
 {
     int fmt = slim_film_active();
-    return fmt >= 0 && !film_is_video(fmt);
+    return fmt >= 0 && film_standard(fmt) == 0;
+}
+
+static void slim_crop_sync_from_backend(void);
+
+/* Bottom bar of the Movie menu: sampling of the frame picked in the menu, and the stretch needed in post */
+int crop_rec_menu_footer(char * buf, int size)
+{
+    if (!buf || size <= 0)
+        return 0;
+    slim_crop_sync_from_backend();
+    int fmt = slim_film_sync();
+    if (fmt < 0)
+        return 0;
+    int frame = slim_film_frame_get(fmt);
+    int i = film_frame_index(fmt, frame);
+    int ro = film_frames[i].readout;
+    if (film_readouts[ro].bin_x > 1)
+        snprintf(buf, size, "1x3 > Stretch 3x in post");
+    else if (fmt == 1)  /* A35 Anamorphic: the lens squeezes, not the sensor */
+        snprintf(buf, size, "3x3 > Anamorphic lens: Stretch %s in post", frame == 0 ? "2x" : "1.33x");
+    else if (ro == FILM_RO_3X3)
+        snprintf(buf, size, "3x3 > No stretch");
+    else
+        snprintf(buf, size, "1:1 > No stretch");
+    return 1;
 }
 
 /* 1 when the active recording format is one of the VIDEO standard sizes (ISO is shown as Gain) */
@@ -4531,6 +4733,22 @@ int crop_rec_film_format()
     int fmt = film_pick(slim_film_active_readout(), slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
     if (fmt < 0)
         return 0; /* not a film format */
+    /* CROP MOOD 1x3 records the whole (squeezed) readout, as the original preset did: for
+     * mlv_lite it is a plain crop_rec mode, not a window cut from the readout */
+    if (film_is_cm(fmt) && film_frames[film_frame_index(fmt, frame)].readout == FILM_RO_1X3)
+        return 0;
+    return film_frame_index(fmt, frame);
+}
+
+/* The frame to draw on the screen: as crop_rec_film_format(), and also CROP MOOD 1x3, which records
+ * the whole readout (so is no window for mlv_lite) but still gets its frame line around the picture.
+ * Without it the 3x3 frame line stayed on the screen after switching 3x3 -> 1x3 (V9 test). */
+int crop_rec_film_display_format()
+{
+    int frame;
+    int fmt = film_pick(slim_film_active_readout(), slim_film_fmt, slim_film_frame_get(slim_film_fmt), &frame);
+    if (fmt < 0)
+        return 0;
     return film_frame_index(fmt, frame);
 }
 
@@ -4575,7 +4793,7 @@ static void slim_crop_apply_3x3_from_ar(void)
 /* Map 1x1 AR (+ Preset for 2.35:1) → res index, WxH, FPS mask. */
 static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
 {
-    slim_1x1_ar = COERCE(slim_1x1_ar, 0, 4);
+    slim_1x1_ar = COERCE(slim_1x1_ar, 0, 5);
 
     if (slim_1x1_ar == 0)
     {
@@ -4619,6 +4837,15 @@ static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
         *w = 1920; *h = 1280;
         /* FILM: 23.976 / 25 / 18 (Super 8 and 8mm).  VIDEO: 23.976 / 25 / 29.97 (TimerB 0x75D = 29.977,
          * untested on this readout; the original 1280p preset never offered 30). */
+        *fps_mask = slim_video_standard() ? 0x7 : 0xB;
+        slim_unified_preset = 0;
+    }
+    else if (slim_1x1_ar == 5)
+    {
+        /* Narrow → 1600x1280 (FilmGate S8, 8mm, 1/2", 1/3", 1/4").  FILM: 23.976 / 25 / 18;
+         * VIDEO: 23.976 / 25 / 29.97 */
+        *res_idx = 8;
+        *w = 1600; *h = 1280;
         *fps_mask = slim_video_standard() ? 0x7 : 0xB;
         slim_unified_preset = 0;
     }
@@ -4666,6 +4893,10 @@ static void slim_crop_sync_from_backend(void)
                 break;
             case 6: /* 1620p 4:3 */
                 slim_1x1_ar = 4;
+                slim_unified_preset = 0;
+                break;
+            case 8: /* Narrow */
+                slim_1x1_ar = 5;
                 slim_unified_preset = 0;
                 break;
             default:
@@ -4831,16 +5062,32 @@ static int slim_film_frame_height(void)
  * in reg_override_1X1 / reg_override_3X3. */
 static int slim_line_clocks(void)
 {
+    /* the line after std_fps_snap(): some rates take a slightly longer line to land exactly */
+    int fps = crop_preset_fps_menu;
     switch (slim_film_menu_readout())
     {
         case FILM_RO_3X3:
-            if (crop_preset_fps_menu == 1) return 0x27F + 1;     /* 25 fps */
-            if (crop_preset_fps_menu == 5) return 0x207 + 1;     /* 48 fps (738 or 958 row readout) */
-            return 0x20F + 1;                                    /* 23.976 / 36 fps */
+            if (fps == 1) return 0x27F + 1;                      /* 25 fps */
+            if (fps == 5) return 0x207 + 1;                      /* 48 fps (738 or 958 row readout) */
+            if (fps == 0) return 0x217 + 1;                      /* 23.976 (snapped from 0x20F) */
+            if (fps == 2) return 0x213 + 1;                      /* 29.97 (snapped from 0x20F) */
+            return 0x20F + 1;                                    /* 36 fps */
         case FILM_RO_3K:   return 0x35B + 1;
+        case FILM_RO_28K:                                        /* 1:1 2.8K 2.35:1 */
+            return (fps == 1) ? 0x325 + 1 : 0x33D + 1;           /* 23.976 snapped from 0x325 */
         case FILM_RO_1440: return 0x2DB + 1;
-        case FILM_RO_1280: return 0x235 + 1;
-        case FILM_RO_25K:  return 0x2CB + 1;
+        case FILM_RO_1280:
+            return (fps == 1) ? 0x23D + 1 : 0x235 + 1;
+        case FILM_RO_25K:
+            if (fps == 1) return 0x2D3 + 1;
+            if (fps == 2) return 0x2CF + 1;
+            return 0x2CB + 1;
+        case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest (Timer B only) */
+        case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
+        case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
+            if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
+            if (fps == 2 || fps == 3) return 0x1E9 + 1;          /* 29.97 / 18 fps */
+            return 0x1F1 + 1;                                    /* 23.976 */
     }
     return 0;
 }
@@ -4897,8 +5144,11 @@ static int slim_crop_fps_mask(void)
         int ar = COERCE(crop_preset_ar_menu, 0, 4);
         if (ar == 4)
         {
-            /* 3:2 (A35, A35 Anamorphic) → 23.976 / 25 / 36; no 30 in FILM */
+            /* 3:2 (A35, A35 Anamorphic) → 23.976 / 25 / 36; no 30 in FILM.  CROP MOOD 3x3 also
+             * offers 29.97 (as the original 3x3 preset did) */
             int mask = 0x1 | 0x2 | 0x10;
+            if (film_is_cm(slim_film_fmt))
+                mask |= 0x4;
             /* 48 only where the recorded frame fits in a shorter readout
              * (A35 16:9, 1.85, 2.35; not the 1152-row anamorphic frames) */
             int h = slim_film_frame_height();
@@ -4935,7 +5185,7 @@ static void slim_film_apply(int fmt)
 {
     fmt = COERCE(fmt, 0, FILM_FORMAT_COUNT - 1);
     slim_film_fmt = fmt;
-    slim_unified_preset = 0; /* every film readout is a single Highest mode */
+    slim_unified_preset = 0; /* every film readout is a Highest mode, except 2.8K (Higher, set below) */
     switch (film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].readout)
     {
         case FILM_RO_3X3:  slim_mode_ui = 2; crop_preset_ar_menu = 4; break; /* 3x3 3:2 */
@@ -4943,15 +5193,19 @@ static void slim_film_apply(int fmt)
         case FILM_RO_1440: slim_mode_ui = 0; slim_1x1_ar = 2; break;         /* 16:9 */
         case FILM_RO_1280: slim_mode_ui = 0; slim_1x1_ar = 3; break;         /* 3:2 */
         case FILM_RO_25K:  slim_mode_ui = 0; slim_1x1_ar = 0; break;         /* 2.33:1 */
+        case FILM_RO_1X3:  slim_mode_ui = 1; crop_preset_ar_menu = 3; break; /* 1x3 Highest 2.35:1 */
+        case FILM_RO_1620: slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
+        case FILM_RO_28K:  slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1; break; /* 2.8K Higher */
+        case FILM_RO_NARROW: slim_mode_ui = 0; slim_1x1_ar = 5; break;       /* Narrow 1600x1280 */
         default:           slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
     }
     slim_crop_apply_mode();
 }
 
-/* "Standard" row: FILM <-> VIDEO.  Each standard remembers the format last used in it
+/* "Standard" row: FILM -> VIDEO -> CROP MOOD.  Each standard remembers the format last used in it
  * (until the next start; then it begins at its first format). */
-static int slim_std_last[2] = { 0, FILM_FILM_COUNT };
-static int slim_standard_ui = 0;   /* 0 = FILM, 1 = VIDEO: only mirrors the saved format for the menu */
+static int slim_std_last[3] = { 0, FILM_FILM_COUNT, FILM_CM_FIRST };
+static int slim_standard_ui = 0;   /* 0 = FILM, 1 = VIDEO, 2 = CROP MOOD: only mirrors the saved format for the menu */
 
 static MENU_SELECT_FUNC(slim_crop_standard_select)
 {
@@ -4963,18 +5217,21 @@ static MENU_SELECT_FUNC(slim_crop_standard_select)
     cur = slim_film_sync();
     if (cur < 0)
         cur = slim_film_fmt;
-    std = film_is_video(cur) ? 1 : 0;
+    std = film_standard(cur);
     slim_std_last[std] = cur;
-    slim_film_apply(slim_std_last[1 - std]);
+    slim_film_apply(slim_std_last[(std + (delta < 0 ? 2 : 1)) % 3]);
 }
 
 static MENU_UPDATE_FUNC(slim_crop_standard_update)
 {
     slim_crop_sync_from_backend();
     slim_film_sync();
-    slim_standard_ui = film_is_video(slim_film_fmt) ? 1 : 0;
-    MENU_SET_VALUE("%s", slim_standard_ui ? "VIDEO" : "FILM");
-    MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 1\", 2/3\", 1/2\", 1/2.3\", 1/3\", 1/4\" sensor sizes.");
+    slim_standard_ui = film_standard(slim_film_fmt);
+    MENU_SET_VALUE("%s", slim_standard_ui == 2 ? "CROP MOOD" : slim_standard_ui ? "VIDEO" : "FILM");
+    if (slim_standard_ui == 2)
+        MENU_SET_HELP("CROP MOOD: the original full-width 3x3 and 1x3 modes.");
+    else
+        MENU_SET_HELP("FILM: motion picture film gates. VIDEO: 1\", 2/3\", 1/2\", 1/3\", 1/4\" sensor sizes.");
     MENU_SET_ENABLED(1);
 }
 
@@ -4987,7 +5244,7 @@ static MENU_SELECT_FUNC(slim_crop_mode_select)
         fmt = 0; /* leaving a legacy mode: always start at A35, whichever way was pressed */
     else
     {
-        /* cycle inside the current standard (A35 .. 8mm, or 1" .. 1/4"), see film_step() */
+        /* cycle inside the current standard (A35 .. 8mm, 1" .. 1/4", or 3x3 / 1x3), see film_step() */
         fmt = film_step(fmt, delta);
     }
     slim_film_apply(fmt);
@@ -4997,12 +5254,16 @@ static MENU_UPDATE_FUNC(slim_crop_mode_update)
 {
     slim_crop_sync_from_backend();
     int fmt = slim_film_sync();
-    MENU_SET_NAME(film_is_video(slim_film_fmt) ? "Sensor Size" : "Film Format");
+    MENU_SET_NAME(film_is_cm(slim_film_fmt) ? "Mode" : film_is_video(slim_film_fmt) ? "Sensor Size" : "Film Format");
     if (fmt >= 0)
     {
         MENU_SET_VALUE("%s", film_formats[fmt].name);
-        if (film_is_video(fmt))
-            MENU_SET_HELP("Video sensor size at 1:1. Sets the sensor readout and the recorded window.");
+        if (film_is_cm(fmt))
+            MENU_SET_HELP(film_frames[film_formats[fmt].first].readout == FILM_RO_1X3
+                ? "1x3: full sensor width, desqueeze 3x horizontally in post. The preview is desqueezed."
+                : "3x3: full sensor width, binned 3x3.");
+        else if (film_is_video(fmt))
+            MENU_SET_HELP("Video sensor size. Sets the sensor readout and the recorded window.");
         else
             MENU_SET_HELP("Film gate. Sets the sensor readout and the recorded window.");
     }
@@ -5069,7 +5330,7 @@ static void slim_crop_shown_res(int *w, int *h)
     {
         int fmt = slim_film_active() >= 0 ? slim_film_active() : slim_film_sync();
         int i = film_frame_index(fmt, slim_film_frame_get(fmt));
-        *w = film_frames[i].w;
+        *w = film_frame_desq_w(i);   /* 1x3: the picture after desqueezing */
         *h = film_frames[i].h;
     }
 }
@@ -5084,16 +5345,21 @@ static MENU_UPDATE_FUNC(slim_crop_preset_update)
         int film_fmt = slim_film_sync();
         if (film_fmt >= 0)
         {
-            MENU_SET_NAME("Recorded Size");
-            {
-                int i = film_frame_index(film_fmt, slim_film_frame_get(film_fmt));
-                MENU_SET_VALUE("%dx%d", film_frames[i].w, film_frames[i].h);
-                /* Readout speed on the same row, like the shutter row shows angle and speed together */
-                int t = slim_readout_x10();
-                if (t > 0)
-                    MENU_SET_RINFO("%d.%d ms", t / 10, t % 10);
-            }
-            MENU_SET_HELP("Size of the recorded picture, and the time the sensor takes to read it out top to bottom (rolling shutter; lower is better). Calculated, not measured. Read-only.");
+            int i = film_frame_index(film_fmt, slim_film_frame_get(film_fmt));
+            int bin = film_readouts[film_frames[i].readout].bin_x;
+            /* 1x3 frames: the size of the picture after desqueezing, and the row says so;
+             * the sampling and the file size are in the help line at the bottom */
+            MENU_SET_NAME(bin > 1 ? "Desqueezed Size" : "Recorded Size");
+            MENU_SET_VALUE("%dx%d", film_frame_desq_w(i), film_frames[i].h);
+            /* Readout speed on the same row, like the shutter row shows angle and speed together */
+            int t = slim_readout_x10();
+            if (t > 0)
+                MENU_SET_RINFO("%d.%d ms", t / 10, t % 10);
+            if (bin > 1)
+                MENU_SET_HELP("1x3 sampling: the file is %dx%d; stretch it %dx horizontally in post. Readout time calculated.", film_frames[i].w, film_frames[i].h, bin);
+            else
+                MENU_SET_HELP("%s sampling. Size of the recorded picture and its readout time (rolling shutter; lower is better). Calculated.",
+                              film_frames[i].readout == FILM_RO_3X3 ? "3x3" : "1:1");
             MENU_SET_ENABLED(0);
             return;
         }
@@ -5136,7 +5402,10 @@ static MENU_UPDATE_FUNC(slim_crop_ar_update)
         return;
     }
     MENU_SET_VALUE("%s", film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].frame);
-    MENU_SET_HELP("Frame inside the %s %s: Actual size or a crop.", film_formats[fmt].name, film_is_video(fmt) ? "sensor" : "gate");
+    if (film_is_cm(fmt))
+        MENU_SET_HELP("Shape of the full-width %s frame.", film_formats[fmt].name);
+    else
+        MENU_SET_HELP("Frame inside the %s %s: Actual size or a crop.", film_formats[fmt].name, film_is_video(fmt) ? "sensor" : "gate");
     MENU_SET_ENABLED(film_formats[fmt].count > 1);
 }
 
@@ -5308,11 +5577,9 @@ static MENU_UPDATE_FUNC(slim_crop_fps_update)
         return;
     }
 
-    static const char * labels[] = { "23.976", "25", "30", "18", "36", "48" };
-    if (slim_video_standard() && crop_preset_fps_menu == 2)
-        MENU_SET_VALUE("29.97");   /* VIDEO standard: 2.5K readout snapped to 29.97 */
-    else
-        MENU_SET_VALUE("%s", labels[COERCE(crop_preset_fps_menu, 0, 5)]);
+    /* "30" runs at 29.97 in every preset (std_fps_snap) */
+    static const char * labels[] = { "23.976", "25", "29.97", "18", "36", "48" };
+    MENU_SET_VALUE("%s", labels[COERCE(crop_preset_fps_menu, 0, 5)]);
 
     /* Only one valid rate → show it greyed (read-only). */
     int mask = slim_crop_fps_mask();
@@ -5445,10 +5712,8 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
             }
             else
             {
-                static const char *labels[] = { "23.976", "25", "30", "18", "36", "48" };
-                snprintf(value, size, "%s",
-                    (slim_video_standard() && crop_preset_fps_menu == 2) ? "29.97" :
-                    labels[COERCE(crop_preset_fps_menu, 0, 5)]);
+                static const char *labels[] = { "23.976", "25", "29.97", "18", "36", "48" };
+                snprintf(value, size, "%s", labels[COERCE(crop_preset_fps_menu, 0, 5)]);
             }
             enabled = bits > 1;
         }
@@ -5474,12 +5739,12 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
  * does not offer the source ratio (for example 4:3 when leaving 1x1). */
 __attribute__((unused)) static int slim_crop_current_ratio_x1000(void)
 {
-    static const int ratios_1x1[] = { 2330, 2350, 1778, 1500, 1333 };
+    static const int ratios_1x1[] = { 2330, 2350, 1778, 1500, 1333, 1250 };
     static const int ratios_1x3[] = { 1778, 2000, 2200, 2350, 2390 };
     static const int ratios_3x3[] = { 1778, 2000, 2200, 2350, 1500 };
 
     if (slim_mode_ui == 0)
-        return ratios_1x1[COERCE(slim_1x1_ar, 0, 4)];
+        return ratios_1x1[COERCE(slim_1x1_ar, 0, 5)];
     if (slim_mode_ui == 2)
         return ratios_3x3[COERCE(crop_preset_ar_menu, 0, 4)];
     return ratios_1x3[COERCE(crop_preset_ar_menu, 0, 4)];
@@ -5541,8 +5806,10 @@ static void *crop_rec_touch_exports[] __attribute__((used)) = {
     (void *)&crop_rec_touch_get_value,
     (void *)&crop_rec_custom_adjust,
     (void *)&crop_rec_film_format,
+    (void *)&crop_rec_film_display_format,
     (void *)&crop_rec_film_standard,
     (void *)&crop_rec_video_standard,
+    (void *)&crop_rec_menu_footer,
     (void *)&crop_rec_shutter_record,
     (void *)&crop_rec_lv_transition_busy,
     (void *)&crop_rec_lv_transition_diag,
@@ -5555,11 +5822,11 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .priv       = &slim_standard_ui,
         .select     = slim_crop_standard_select,
         .update     = slim_crop_standard_update,
-        .max        = 1,
-        .choices    = CHOICES("FILM", "VIDEO"),
+        .max        = 2,
+        .choices    = CHOICES("FILM", "VIDEO", "CROP MOOD"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
-        .help       = "FILM or VIDEO sensor-size formats.",
+        .help       = "FILM, VIDEO sensor-size or CROP MOOD formats.",
     },
     {
         .name       = "Mode",
@@ -5615,7 +5882,7 @@ static struct menu_entry crop_rec_menu_eosm[] =
         .select     = slim_crop_fps_select,
         .update     = slim_crop_fps_update,
         .max        = 3,
-        .choices    = CHOICES("23.976", "25", "30", "18"),
+        .choices    = CHOICES("23.976", "25", "29.97", "18"),
         .edit_mode  = EM_INLINE_ADJUST,
         .depends_on = DEP_LIVEVIEW | DEP_MOVIE_MODE,
         .help       = "Frame rates supported by the current configuration.",
@@ -5646,8 +5913,8 @@ static struct menu_entry crop_rec_menu[] =
                 .name       = "Preset:",   // CROP_PRESET_1X1
                 .priv       = &crop_preset_1x1_res_menu,
                 .update     = crop_preset_1x1_res_update,
-                .max        = 7,
-                .choices    = CHOICES("2.5K", "2.8K", "3K", "1440p", "1280p", "Full-Res LV", "1620p 4:3", "1920x1080p"),
+                .max        = 8,
+                .choices    = CHOICES("2.5K", "2.8K", "3K", "1440p", "1280p", "Full-Res LV", "1620p 4:3", "1920x1080p", "Narrow"),
                 .help       = "Choose 1:1 preset.",
                 .shidden    = 1,
             },
@@ -6750,9 +7017,23 @@ extern void idle_kill_flicker_after_menu();
 
 /* Canon redraws its x5 screen (with arrows) into the overlay layer while the zoom steps run, and
  * those steps block, so a single black fill is painted over.  Keep refilling from a small
- * background task for the whole refresh. */
+ * background task for the whole refresh.
+ *
+ * The task takes ML's overlay lock only for each fill, never for the whole cover: the code that
+ * runs under the cover (PauseLiveView, the idle logic, property handlers) takes that lock too,
+ * and would otherwise wait for the cover to time out.
+ *
+ * (Until V9 the task was stopped the moment it was created: task_create() returns the task's id,
+ * an even non-zero number, which was read as "failed".  Only the first fill was ever painted,
+ * which is why the x1 / x5 steps could still be seen.) */
 static volatile int slim_cover_on = 0;
 static volatile int slim_cover_task_alive = 0;
+static volatile int slim_cover_lv_restart = 0;  /* Live View is being restarted under the cover */
+static int slim_cover_up = 0;                   /* a cover was put up and not lifted yet (poll task only) */
+
+extern int boot_logo_is_active(void);
+extern int get_global_draw_setting();
+extern int ml_shutdown_requested;
 
 static void slim_cover_black(void)
 {
@@ -6761,30 +7042,32 @@ static void slim_cover_black(void)
 
 static void slim_cover_task(void *unused)
 {
-    /* Hold ML's overlay lock for the whole cover so ML's own bars and info text cannot draw between
-     * the black fills (that showed as flicker).  Canon's own drawing does not use this lock, so the
-     * black is still refilled over it. */
     int t0 = get_ms_clock();
-    AcquireRecursiveLock(bmp_lock, 0);
-    while (slim_cover_on && lv && !gui_menu_shown() && !RECORDING && get_ms_clock() - t0 < SLIM_COVER_MAX_MS)
+    /* the cover stays up across a Live View restart (1x3 switch), where lv is 0 for a moment */
+    while (slim_cover_on && (lv || slim_cover_lv_restart) && !gui_menu_shown() && !RECORDING &&
+           !ml_shutdown_requested && get_ms_clock() - t0 < SLIM_COVER_MAX_MS)
     {
-        bmp_fill(COLOR_BLACK, BMP_W_MINUS, BMP_H_MINUS, BMP_TOTAL_WIDTH, BMP_TOTAL_HEIGHT);
+        slim_cover_black();
         msleep(20);
     }
-    ReleaseRecursiveLock(bmp_lock);
+    slim_cover_on = 0;
     slim_cover_task_alive = 0;
 }
 
 static void slim_cover_start(void)
 {
+    /* the start-up splash covers the screen itself (and repaints itself): leave it alone */
+    if (boot_logo_is_active())
+        return;
     slim_cover_black();
+    slim_cover_up = 1;
     if (slim_cover_task_alive)
         return;
     slim_cover_on = 1;
     slim_cover_task_alive = 1;
     /* task slots are scarce (a persistent extra task made mlv_lite fail to boot): if there is
-     * none free, just skip the cover */
-    if (task_create("slim_cover", 0x1c, 0x1000, slim_cover_task, (void*)0))
+     * none free, just skip the cover.  task_create() returns an odd number when it fails. */
+    if ((uint32_t) task_create("slim_cover", 0x1c, 0x1000, slim_cover_task, (void*)0) & 1)
     {
         slim_cover_on = 0;
         slim_cover_task_alive = 0;
@@ -6793,23 +7076,60 @@ static void slim_cover_start(void)
 
 static void slim_cover_hold_and_release(int hold_ms)
 {
+    if (!slim_cover_up)
+        return;     /* no cover was put up (start-up splash): nothing to lift */
+    slim_cover_up = 0;
+
     int t = get_ms_clock();
     while (get_ms_clock() - t < hold_ms && lv && !gui_menu_shown() && !RECORDING)
+    {
+        if (!slim_cover_task_alive)
+            slim_cover_black();     /* no task (no free slot): keep it black from here */
         msleep(40);
+    }
     slim_cover_on = 0;
     int n = 0;
     while (slim_cover_task_alive && n++ < 50)
         msleep(20);
 
     /* Lift the black WITHOUT redraw(): redraw() repaints Canon's own dialog, which brings Canon's
-     * x5 arrows back for a couple of frames.  Clear the overlay and ask ML to redraw its own
-     * things (film framing, info text, AF frame) instead.  If the framing is somehow missing,
-     * mlv_lite's own safety net still does a full redraw a moment later. */
-    BMP_LOCK( clrscr(); )
+     * x5 arrows back for a couple of frames.  When the film frame is known, go straight from black
+     * to the finished frame (black outside, frame line, picture inside), so the picture is never
+     * seen without its bars; otherwise clear the overlay.  Then ask ML to redraw its own things
+     * (info text, AF frame).  If the framing is somehow missing, mlv_lite's own safety net still
+     * does a full redraw a moment later. */
+    if (lv && !gui_menu_shown())
+    {
+        BMP_LOCK(
+            if (!((get_global_draw_setting() & 1) && is_movie_mode() && film_canvas_paint(1)))
+                clrscr();
+        )
+    }
     afframe_set_dirty();
     crop_set_dirty(10);
     menu_set_dirty();
     lens_display_set_dirty();
+}
+
+/* x1 -> x5, as every preset needs.  Right after Live View came back (*fresh), under the cover, so
+ * the full x1 picture and the jump to x5 are not seen; any other time (focus zoom and so on) as it
+ * always was.  One covered try only: if x5 cannot be reached, the screen must not stay black. */
+static void slim_zoom_x5(int * fresh)
+{
+    if (*fresh && !RECORDING && is_movie_mode())
+    {
+        *fresh = 0;
+        idle_kill_flicker_after_menu();
+        slim_cover_start();
+        set_zoom(5);
+        idle_kill_flicker_after_menu();
+        slim_cover_hold_and_release(SLIM_COVER_HOLD_MS);
+    }
+    else
+    {
+        *fresh = 0;
+        set_zoom(5);
+    }
 }
 
 /* when closing ML menu, check whether we need to refresh the LiveView */
@@ -6844,6 +7164,37 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 #endif
 
     int menu_shown = gui_menu_shown();
+
+    /* Live View was off (Canon's menu, playback): when it comes back it starts at x1 and is taken
+     * to x5 below.  Remember, to do that step under the cover.  Not at start-up: the splash covers
+     * that one. */
+    static int slim_lv_fresh = 0;
+    static int slim_lv_seen = 0;
+    static int slim_lv_was_off = 0;
+    static int slim_lv_back_ms = 0;
+    if (!lv)
+    {
+        /* a real exit only, not ML pausing Live View (after a recording, 1x3 switch) */
+        if (!LV_PAUSED)
+            slim_lv_was_off = slim_lv_seen;
+    }
+    else
+    {
+        if (slim_lv_was_off)
+        {
+            slim_lv_was_off = 0;
+            slim_lv_fresh = 1;
+            slim_lv_back_ms = get_ms_clock();
+            /* back from playback (Canon's or the MLV player) or Canon's menu: check the picture
+             * a moment later, as after a recording, and recover it if it is black (V8 report:
+             * leaving the player often ended on a black screen until a power cycle) */
+            crop_rec_request_lv_check();
+        }
+        slim_lv_seen = 1;
+        /* only for the first moments after it is back: later x1 steps are something else */
+        if (slim_lv_fresh && get_ms_clock() - slim_lv_back_ms > 3000)
+            slim_lv_fresh = 0;
+    }
 #ifdef CONFIG_EOSM
     /* Cover every path back into Movie Live View, including Canon menus
      * (which may not set gui_menu_shown), recording stop and boot. */
@@ -6911,12 +7262,32 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 
             if (!lv_check_is_healthy() && lv_dispsize == 5)
             {
-                /* same recovery the old record-stop code ran every time */
+                /* same recovery the old record-stop code ran every time; under the cover, so the
+                 * x1 picture and Canon's x5 screen are not seen */
                 info_led_on();
+                idle_kill_flicker_after_menu();
+                slim_cover_start();
                 gui_uilock(UILOCK_EVERYTHING);
                 set_zoom(1);
                 set_zoom(5);
+                /* still not right (S16 2.35:1 stayed black after a recording, V9 test): restart
+                 * Live View once, the step that brings the picture back after a 1x3 switch */
+                wait_lv_frames(3);
+                if (lv && lv_dispsize == 5 && !lv_check_is_healthy())
+                {
+                    slim_cover_lv_restart = 1;
+                    PauseLiveView();
+                    if (slim_cover_up)
+                        slim_cover_black();
+                    msleep(100);
+                    ResumeLiveView();
+                    if (slim_cover_up)
+                        slim_cover_black();
+                    slim_cover_lv_restart = 0;
+                }
                 gui_uilock(UILOCK_NONE);
+                idle_kill_flicker_after_menu();
+                slim_cover_hold_and_release(SLIM_COVER_HOLD_MS);
                 info_led_off();
             }
         }
@@ -6969,6 +7340,44 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                     set_zoom(old_zoom);
                     gui_uilock(UILOCK_NONE);
                     info_led_off();
+                }
+                /* Switching between a 1x3 mode and a 1:1 / 3x3 one (e.g. S16 1.85:1 -> S16 2.35:1)
+                 * left the preview black until the camera was restarted (V9 test).  Restart Live
+                 * View once, as after every recording, which rebuilds Canon's preview path. */
+                {
+                    static int last_1x3 = -1;
+                    int now_1x3 = (CROP_PRESET_MENU == CROP_PRESET_1X3);
+                    /* also at start-up straight into 1x3: CROP MOOD 1x3 stayed black after
+                     * turning the camera on until 3x3 and back (V9 test) */
+                    int switched = (last_1x3 == -1) ? now_1x3 : (now_1x3 != last_1x3);
+                    if (switched && lv && !RECORDING)
+                    {
+                        gui_uilock(UILOCK_EVERYTHING);
+                        slim_cover_lv_restart = 1;  /* keep the cover up while lv is 0 */
+                        PauseLiveView();
+                        if (slim_cover_up)
+                            slim_cover_black();     /* PauseLiveView clears the overlay */
+                        msleep(100);
+                        ResumeLiveView();
+                        if (slim_cover_up)
+                            slim_cover_black();
+                        slim_cover_lv_restart = 0;
+                        /* it still came back black now and then (1" Actual -> 2/3" 4:3, 16mm Actual
+                         * -> 16:9; V9 test): check, and bounce the zoom when it is not right, as
+                         * after a recording */
+                        wait_lv_frames(3);
+                        /* (An always-on bounce over HDMI was tried for the black picture there
+                         * and made it worse: 1" -> 2/3" 4:3 was then black every time.) */
+                        if (lv && !lv_check_is_healthy())
+                        {
+                            int old_zoom = lv_dispsize == 1 ? 5 : lv_dispsize;
+                            set_zoom(old_zoom == 5 ? 1 : 5);
+                            set_zoom(old_zoom);
+                        }
+                        gui_uilock(UILOCK_NONE);
+                        crop_rec_request_lv_check();    /* and once more a moment later */
+                    }
+                    last_1x3 = now_1x3;
                 }
                 idle_kill_flicker_after_menu();     /* Canon settles after the zoom steps: hold again */
                 slim_cover_hold_and_release(SLIM_COVER_HOLD_MS);
@@ -7035,7 +7444,7 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                 }
                 else
                 {
-                    if (lv_dispsize == 1) set_zoom(5);
+                    if (lv_dispsize == 1) slim_zoom_x5(&slim_lv_fresh);
                 }
             }
 
@@ -7056,7 +7465,7 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 
             if (!is_manual_focus() && lv_af_mode == 1)
             {
-                if (lv_dispsize == 1) set_zoom(5);
+                if (lv_dispsize == 1) slim_zoom_x5(&slim_lv_fresh);
             }
             }
         }
@@ -7728,6 +8137,7 @@ static LVINFO_UPDATE_FUNC(crop_info)
                     if (CROP_1280p)    snprintf(buffer, sizeof(buffer), "1280p");
                     if (CROP_1080p)    snprintf(buffer, sizeof(buffer), "1080p");
                     if (CROP_1620p)    snprintf(buffer, sizeof(buffer), "1620p");
+                    if (CROP_Narrow)   snprintf(buffer, sizeof(buffer), "Narrow");
                     if (CROP_Full_Res) snprintf(buffer, sizeof(buffer), "FLV");
                     break;
                 case CROP_PRESET_1X3:
@@ -7970,7 +8380,7 @@ static unsigned int raw_info_update_cbr(unsigned int unused)
 static const struct setting_range crop_settings[] = {
     SETTING(crop_preset_index,          1,       3,      1),  /* slim: 1..3 (3x3 / 1x1 / 1x3) */
     SETTING(crop_preset_ar_menu,        0,       4,      4),
-    SETTING(crop_preset_1x1_res_menu,   0,       7,      3),
+    SETTING(crop_preset_1x1_res_menu,   0,       8,      3),
     SETTING(crop_preset_1x3_res_menu,   0,       3,      1),
     SETTING(crop_preset_3x3_res_menu,   0,       2,      2),
     SETTING(crop_preset_fps_menu,       0,       5,      0),
