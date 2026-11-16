@@ -7330,7 +7330,11 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                          * -> 16:9; V9 test): check, and bounce the zoom when it is not right, as
                          * after a recording */
                         wait_lv_frames(3);
-                        if (lv && !lv_check_is_healthy())
+                        /* Over HDMI always bounce: there the restart left the picture black
+                         * (S16 / 16mm Actual -> a 1:1 frame) or with a strip of artifacts
+                         * (1" -> 2/3" 4:3) while the check found nothing wrong; the zoom steps
+                         * that closing a menu runs put it right (V9 HDMI test). */
+                        if (lv && (!lv_check_is_healthy() || !is_LCD_Output()))
                         {
                             int old_zoom = lv_dispsize == 1 ? 5 : lv_dispsize;
                             set_zoom(old_zoom == 5 ? 1 : 5);
