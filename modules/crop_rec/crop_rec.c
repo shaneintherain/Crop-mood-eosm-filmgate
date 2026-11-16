@@ -3819,10 +3819,33 @@ static void eosm_lv_guard_set_zoom(int zoom)
 }
 #else
 int crop_rec_lv_transition_busy(void) { return 0; }
+
+/* Diagnostics for ML/LOGS/LVRECOV.LOG (written by mlv_lite when the returned signature changes,
+ * never while recording): which output Canon is driving, and whether the preview route is set the
+ * way the preset wants it.  For the HDMI problems of the V9 tests (black picture after a 1x3
+ * switch, strip of artifacts in 2/3" 4:3), which cannot be seen from here. */
+static int lv_check_display_luma_max(void);
+static int lv_check_route_ok(void);
 int crop_rec_lv_transition_diag(char *buffer, int size)
 {
-    if (buffer && size > 0) buffer[0] = '\0';
-    return 0;
+    if (!buffer || size <= 0) return 0;
+    buffer[0] = '\0';
+    if (!is_EOSM || !lv || !PathDriveMode) return 0;
+
+    int out   = PathDriveMode->OutputType;  /* 0 LCD, 3 1080i full, 4 1080i info, 7 480p */
+    int pzoom = PathDriveMode->zoom;
+    int route = lv_check_route_ok();
+    int luma  = lv_check_display_luma_max();
+    snprintf(buffer, size,
+        "fg out=%d pzoom=%d preset=%d res=%d patch=%d route=%d luma=%d is=%x/%x/%x/%x/%x want=%x/%x/%x/%x/%x shift=%x/%d fit=%d",
+        out, pzoom, (int)CROP_PRESET_MENU, (int)crop_preset_1x1_res, patch_active, route, luma,
+        shamem_read(0xC0F11B8C), shamem_read(0xC0F11BCC), shamem_read(0xC0F11BC8),
+        shamem_read(0xC0F11ACC), shamem_read(0xC0F04210),
+        YUV_HD_S_H, YUV_HD_S_V, YUV_HD_S_V_E, YUV_LV_S_V, YUV_LV_Buf,
+        GetShiftValue(), Shift_Preview, crop_rec_preview_fit());
+    return (out & 15) | ((pzoom & 15) << 4) | (route << 8) | ((luma <= 20) << 9) |
+           (((int)CROP_PRESET_MENU & 15) << 10) | (((int)crop_preset_1x1_res & 15) << 14) |
+           ((patch_active & 1) << 18);
 }
 static void eosm_lv_guard_request(void) {}
 #endif
@@ -7330,11 +7353,9 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                          * -> 16:9; V9 test): check, and bounce the zoom when it is not right, as
                          * after a recording */
                         wait_lv_frames(3);
-                        /* Over HDMI always bounce: there the restart left the picture black
-                         * (S16 / 16mm Actual -> a 1:1 frame) or with a strip of artifacts
-                         * (1" -> 2/3" 4:3) while the check found nothing wrong; the zoom steps
-                         * that closing a menu runs put it right (V9 HDMI test). */
-                        if (lv && (!lv_check_is_healthy() || !is_LCD_Output()))
+                        /* (An always-on bounce over HDMI was tried for the black picture there
+                         * and made it worse: 1" -> 2/3" 4:3 was then black every time.) */
+                        if (lv && !lv_check_is_healthy())
                         {
                             int old_zoom = lv_dispsize == 1 ? 5 : lv_dispsize;
                             set_zoom(old_zoom == 5 ? 1 : 5);

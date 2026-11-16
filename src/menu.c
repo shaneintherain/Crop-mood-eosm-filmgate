@@ -4225,6 +4225,13 @@ menu_display(
         /* Movie page: small grey note in the empty bar at the bottom (sampling, stretch in post) */
         if (!submenu_level && menu_grid_is_launched() && menu->name && streq(menu->name, "Movie"))
             menu_draw_movie_footer();
+        /* Settings page: when this build was made, to tell test builds apart on the camera */
+        if (!submenu_level && menu_grid_is_launched() && menu->name && streq(menu->name, "Settings"))
+        {
+            int fnt = FONT(FONT_MED, UI_MUTED, MENU_BG_COLOR_HEADER_FOOTER);
+            int h = (int)fontspec_font(fnt)->height;
+            bmp_printf(fnt | FONT_ALIGN_RIGHT, 704, 452 - h / 2, "Build %s", build_date);
+        }
 #endif
     }
 
