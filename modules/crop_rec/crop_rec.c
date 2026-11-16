@@ -3305,9 +3305,11 @@ int GetShiftValue()
                  * V9: 0x10EF4 = 18 lines + 122 px sat 10.4 % of the frame width left and 5 % low;
                  * 0x640 = 0 lines + 800 px sat 41 % right, wrapped round, and vertically centred).
                  * Centre: 0 lines, 122 + 136 = 258 px (0x204; third photo: centred within 3 px).
-                 * The picture ends about 1 % short of the frame's right edge there (a sliver of
-                 * artifacts just inside the frame line), so 18 px more: 276 px. */
-                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x228 : 0x2772C;
+                 * The usable picture is about 1280 px wide there and the frame needs about 1309, so
+                 * a sliver of artifacts (1 % of the frame) shows just inside the right frame line.
+                 * 18 px further right (0x228) only moved it to the left edge, wider.  A clean edge
+                 * needs the preview scaled about 3 % smaller on this output (not done). */
+                if (is_1080i_Full_Output()) return crop_rec_preview_fit() ? 0x204 : 0x2772C;
                 if (is_480p_Output()) return 0xB9E0;     /* same picture as the 1440p one */
                 if (is_1080i_Info_Output()) return 0x33B58;
                 return 0;
