@@ -182,6 +182,26 @@ int main(void)
         CHECK(slim_film_frame_get(f) == film_formats[f].count - 1, "format %d: stored 3 must clamp to %d, got %d", f, film_formats[f].count - 1, slim_film_frame_get(f));
     CHECK(slim_film_frames <= (1 << (2 * FILM_FORMAT_COUNT)) - 1, "frames field fits its range");
 
+    /* --- S16 / 16mm / 1" saved on the full-width 1x3 readout by an older build -> 1x3 Narrow --- */
+    for (int f = 0; f < FILM_FORMAT_COUNT; f++)
+    {
+        reset_defaults();
+        crop_preset_index = 2; crop_preset_1x3_res_menu = 0; crop_preset_ar_menu = 3; slim_film_fmt = f;
+        crop_settings_load();
+        int expect = (!film_is_cm(f) && film_format_has_readout(f, FILM_RO_1X3N)) ? 4 : 0;
+        CHECK(crop_preset_1x3_res_menu == expect, "format %d on old 1x3 Highest 2.35:1: preset %d, expected %d", f, crop_preset_1x3_res_menu, expect);
+        crop_settings_load();
+        CHECK(crop_preset_1x3_res_menu == expect, "format %d: second load must change nothing", f);
+    }
+    reset_defaults();
+    crop_preset_index = 2; crop_preset_1x3_res_menu = 1; crop_preset_ar_menu = 3; slim_film_fmt = 2;
+    crop_settings_load();
+    CHECK(crop_preset_1x3_res_menu == 1, "1x3 Higher is left alone");
+    reset_defaults();
+    crop_preset_index = 2; crop_preset_1x3_res_menu = 4; crop_preset_ar_menu = 3; slim_film_fmt = 2;
+    crop_settings_load();
+    CHECK(crop_preset_1x3_res_menu == 4, "1x3 Narrow (4) is a valid saved value");
+
     printf("settings_tests: %d checks, %d failed\n", checks, failures);
     return failures != 0;
 }

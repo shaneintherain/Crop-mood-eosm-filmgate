@@ -48,7 +48,7 @@ int main(void)
         CHECK(fr->w % 8 == 0, "frame %d (%s): width %d is not a multiple of 8", i, fr->name, fr->w);
         if (fr->w == 1736)
             CHECK(i >= film_formats[FILM_CM_FIRST].first, "frame %d (%s): only CROP MOOD frames may be 1736 wide", i, fr->name);
-        else if (fr->readout != FILM_RO_1X3)
+        else if (film_readouts[fr->readout].bin_x != 3)
             CHECK(fr->w % 16 == 0, "frame %d (%s): width %d is not a multiple of 16", i, fr->name, fr->w);
         CHECK(fr->h % 2 == 0, "frame %d (%s): height %d is odd", i, fr->name, fr->h);
         CHECK(fr->name[0] && fr->gate[0] && fr->mode[0] && fr->frame[0], "frame %d has an empty text", i);
@@ -157,16 +157,18 @@ int main(void)
         CHECK(film_pick(FILM_RO_28K, 3, 0, &fr) == 2 && fr == 3, "2.8K from 16mm -> S16 2.35:1");
         CHECK(film_pick(FILM_RO_28K, 9, 0, &fr) == 2 && fr == 3, "2.8K from 1/3\" -> S16 2.35:1 (the only 2.8K frame)");
         CHECK(film_pick(FILM_RO_28K, 2, 0, &fr) == 2 && fr == 3, "S16 on 2.8K: saved 1x3 frame repaired to 2.35:1");
-        CHECK(film_pick(FILM_RO_1X3, 2, 2, &fr) == 2 && fr == 2, "S16 1.85:1 (1x3) is kept on the 1x3 readout");
-        CHECK(film_pick(FILM_RO_1X3, 3, 2, &fr) == 3 && fr == 0, "16mm on 1x3: saved 1:1 frame repaired to Actual");
-        CHECK(film_pick(FILM_RO_1X3, 6, 1, &fr) == 6 && fr == 1, "1\" 16:9 is kept on the 1x3 readout");
+        CHECK(film_pick(FILM_RO_1X3N, 2, 2, &fr) == 2 && fr == 2, "S16 1.85:1 (1x3) is kept on the 1x3 Narrow readout");
+        CHECK(film_pick(FILM_RO_1X3N, 3, 2, &fr) == 3 && fr == 0, "16mm on 1x3 Narrow: saved 1:1 frame repaired to Actual");
+        CHECK(film_pick(FILM_RO_1X3N, 6, 1, &fr) == 6 && fr == 1, "1\" 16:9 is kept on the 1x3 Narrow readout");
         CHECK(film_pick(FILM_RO_1620, 7, 0, &fr) == 7 && fr == 1, "1620p -> 2/3\" 4:3");
         CHECK(film_pick(FILM_RO_1440, 7, 1, &fr) == 7 && fr == 0, "1440p from 2/3\" 4:3 -> 2/3\" 16:9");
         CHECK(film_pick(FILM_RO_NARROW, 2, 0, &fr) == 4 && fr == 0, "Narrow from S16 -> S8");
         CHECK(film_pick(FILM_RO_NARROW, 9, 0, &fr) == 9 && fr == 0, "Narrow keeps 1/3\" 16:9");
         CHECK(film_pick(FILM_RO_3X3, 11, 2, &fr) == 11 && fr == 2, "CROP MOOD 3x3 2.35:1 is kept on the 3x3 readout");
         CHECK(film_pick(FILM_RO_3X3, 12, 0, &fr) == 0 && fr == 0, "3x3 readout from 1x3 -> A35");
-        CHECK(film_pick(FILM_RO_1X3, 0, 0, &fr) == 2 && fr == 0, "1x3 readout from A35 -> S16 Actual (first format with it)");
+        CHECK(film_pick(FILM_RO_1X3N, 0, 0, &fr) == 2 && fr == 0, "1x3 Narrow readout from A35 -> S16 Actual (first format with it)");
+        CHECK(film_pick(FILM_RO_1X3, 0, 0, &fr) == 12 && fr == 0, "full-width 1x3 readout from A35 -> CROP MOOD 1x3 (the only one on it)");
+        CHECK(film_pick(FILM_RO_1X3, 2, 0, &fr) == 12 && fr == 0, "full-width 1x3 readout from S16 -> CROP MOOD 1x3 (S16 is on Narrow now)");
         CHECK(film_pick(FILM_RO_1X3, 12, 0, &fr) == 12 && fr == 0, "CROP MOOD 1x3 is kept on the 1x3 readout");
         /* every frame of every format maps back to itself */
         for (int f = 0; f < FILM_FORMAT_COUNT; f++)

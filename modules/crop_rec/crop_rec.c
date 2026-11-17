@@ -100,6 +100,7 @@ static int crop_preset_1x3_res = 0;
 #define Anam_Higher    (crop_preset_1x3_res == 1)
 #define Anam_Medium    (crop_preset_1x3_res == 2)
 #define Anam_FLV    (crop_preset_1x3_res == 3)
+#define Anam_Narrow (crop_preset_1x3_res == 4)   /* FilmGate 1x3 Narrow 1072x2214 (TEST): S16, 16mm Actual, 1" */
 
 static CONFIG_INT("crop.preset_3x3", crop_preset_3x3_res_menu, 2); /* default: mv1080 3:2 = S35 */
 static int crop_preset_3x3_res = 0;
@@ -1108,6 +1109,15 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                 {
                     cmos_new[5] = 0x20 + CMOS_5_Debug;
                     cmos_new[7] = 0xC00 + CMOS_7_Debug;
+                }
+                /* FilmGate 1x3 Narrow: the rows of 1x3 2.35:1 Highest (same cmos_new[7]); the first column
+                 * 8 steps of ~124 sensor columns in (0x20 = the 1x3 binning bit, + 8 x 0x40), so the
+                 * readout is the middle 3216 sensor columns (1072 binned).  Same step size as the
+                 * Medium / Higher 1x3 presets (0xA0, 0xE0, 0x1A0), which are centred the same way */
+                if (Anam_Narrow)
+                {
+                    cmos_new[5] = 0x220;
+                    cmos_new[7] = 0xB05;
                 }
             break;
 
@@ -2156,7 +2166,31 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
 
 static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
 {
-    if (Anam_FLV)
+    if (Anam_Narrow)
+    {
+        /* FilmGate 1x3 Narrow (TEST): 1072 columns x the 2214 rows of 1x3 2.35:1 Highest.
+         * RAW_H = width / 4 + 34, Preview_H = width - 4, YUV_HD_S_H = width / 4 + 3, as every other
+         * 1x3 preset here; rows, Preview_V and YUV_HD_S_V as 2.35:1 Highest.
+         * The line: the other 1x3 presets never go below 0x1FF (512 clocks).  This one tries the
+         * shortest line the 1:1 presets use for this width (RAW_H + 52 or more), per rate the line
+         * for which a whole Timer B is within 25 ppm of the rate (std_fps_snap tunes Timer B):
+         *   23.976: 356 x 3749 (+17 ppm)   25: 362 x 3536 (-25 ppm)   29.97: 360 x 2966 (-25 ppm) */
+        if (is_EOSM)
+        {
+            RAW_H         = 0x12E + reg_width;
+            RAW_V         = 0x8C3 + reg_height;
+            if (Framerate_25)      { TimerA = 0x169; TimerB = 0xDCF; }
+            else if (Framerate_30) { TimerA = 0x167; TimerB = 0xB95; }
+            else                   { TimerA = 0x163; TimerB = 0xEA4; }
+        }
+
+        Preview_H     = 1068;
+        Preview_V     = 2214;
+        Preview_R     = 0x1D000D;
+        YUV_HD_S_H    = 0x105010F;
+        YUV_HD_S_V    = 0x1050341;
+    }
+    else if (Anam_FLV)
     {
         RAW_H         = 0x1D4 + reg_width;  // from mv1080 mode
         RAW_V         = 0xDB3 + reg_height;
@@ -4618,7 +4652,9 @@ static int slim_film_menu_readout(void)
     {
         case 2: /* 3x3 3:2 */
             return crop_preset_ar_menu == 4 ? FILM_RO_3X3 : -1;
-        case 1: /* 1x3 Highest 2.35:1 (CROP MOOD) */
+        case 1: /* 1x3 Highest 2.35:1 (CROP MOOD), or the FilmGate 1x3 Narrow (preset 4) */
+            if (crop_preset_ar_menu == 3 && slim_unified_preset == 4)
+                return FILM_RO_1X3N;
             return (crop_preset_ar_menu == 3 && slim_unified_preset == 0) ? FILM_RO_1X3 : -1;
         case 0:
             switch (slim_1x1_ar)
@@ -4657,7 +4693,11 @@ static int slim_film_active_readout(void)
     if (CROP_PRESET_MENU == CROP_PRESET_3X3)
         return crop_preset_3x3_res_menu == 2 ? FILM_RO_3X3 : -1;
     if (CROP_PRESET_MENU == CROP_PRESET_1X3)
+    {
+        if (crop_preset_1x3_res_menu == 4 && crop_preset_ar_menu == 3)
+            return FILM_RO_1X3N;
         return (crop_preset_1x3_res_menu == 0 && crop_preset_ar_menu == 3) ? FILM_RO_1X3 : -1;
+    }
     if (CROP_PRESET_MENU == CROP_PRESET_1X1)
     {
         switch (crop_preset_1x1_res_menu)
@@ -4908,7 +4948,8 @@ static void slim_crop_sync_from_backend(void)
     else if (CROP_PRESET_MENU == CROP_PRESET_1X3)
     {
         slim_mode_ui = 1;
-        slim_unified_preset = COERCE(crop_preset_1x3_res_menu, 0, 2);
+        /* 4 = FilmGate 1x3 Narrow (no Preset choice of its own: picked through the Film Format) */
+        slim_unified_preset = crop_preset_1x3_res_menu == 4 ? 4 : COERCE(crop_preset_1x3_res_menu, 0, 2);
     }
     else if (CROP_PRESET_MENU == CROP_PRESET_3X3)
     {
@@ -4935,7 +4976,8 @@ static void slim_crop_apply_unified_preset(void)
         slim_crop_apply_3x3_from_ar();
         return;
     }
-    slim_unified_preset = COERCE(slim_unified_preset, 0, 2);
+    if (slim_unified_preset != 4)   /* 4: FilmGate 1x3 Narrow */
+        slim_unified_preset = COERCE(slim_unified_preset, 0, 2);
     if (slim_mode_ui == 1 || CROP_PRESET_MENU == CROP_PRESET_1X3)
         crop_preset_1x3_res_menu = slim_unified_preset;
 }
@@ -4992,6 +5034,12 @@ static void slim_crop_expected_res(int *w, int *h)
 
     if (CROP_PRESET_MENU == CROP_PRESET_OFF)
         return;
+
+    if (CROP_PRESET_MENU == CROP_PRESET_1X3 && crop_preset_1x3_res_menu == 4)
+    {
+        *w = 1072; *h = 2214;   /* FilmGate 1x3 Narrow */
+        return;
+    }
 
     if (CROP_PRESET_MENU == CROP_PRESET_1X3)
     {
@@ -5083,6 +5131,10 @@ static int slim_line_clocks(void)
             if (fps == 2) return 0x2CF + 1;
             return 0x2CB + 1;
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest (Timer B only) */
+        case FILM_RO_1X3N:                                       /* 1x3 Narrow (Timer B only after these) */
+            if (fps == 1) return 0x169 + 1;                      /* 25 fps */
+            if (fps == 2) return 0x167 + 1;                      /* 29.97 */
+            return 0x163 + 1;                                    /* 23.976 */
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
         case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
             if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
@@ -5124,6 +5176,9 @@ static int slim_crop_fps_mask(void)
 
     if (CROP_PRESET_MENU == CROP_PRESET_1X3)
     {
+        /* FilmGate 1x3 Narrow: 23.976 / 25, and 29.97 for the VIDEO sizes (FILM has no 30) */
+        if (crop_preset_1x3_res_menu == 4)
+            return 0x1 | 0x2 | (slim_video_standard() ? 0x4 : 0);
         int p = COERCE(crop_preset_1x3_res_menu, 0, 2);
         int ar = crop_preset_ar_menu;
         if (p == 0) return 0x1;                 /* Highest: fixed ~24 only */
@@ -5194,6 +5249,7 @@ static void slim_film_apply(int fmt)
         case FILM_RO_1280: slim_mode_ui = 0; slim_1x1_ar = 3; break;         /* 3:2 */
         case FILM_RO_25K:  slim_mode_ui = 0; slim_1x1_ar = 0; break;         /* 2.33:1 */
         case FILM_RO_1X3:  slim_mode_ui = 1; crop_preset_ar_menu = 3; break; /* 1x3 Highest 2.35:1 */
+        case FILM_RO_1X3N: slim_mode_ui = 1; crop_preset_ar_menu = 3; slim_unified_preset = 4; break; /* 1x3 Narrow */
         case FILM_RO_1620: slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
         case FILM_RO_28K:  slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1; break; /* 2.8K Higher */
         case FILM_RO_NARROW: slim_mode_ui = 0; slim_1x1_ar = 5; break;       /* Narrow 1600x1280 */
@@ -5942,8 +5998,8 @@ static struct menu_entry crop_rec_menu[] =
                 .name       = "Preset: ",  // CROP_PRESET_1X3
                 .priv       = &crop_preset_1x3_res_menu,
                 .update     = crop_preset_1x3_res_update,
-                .max        = 3,
-                .choices    = CHOICES("Highest", "Higher", "Medium", "Full-Res LV"),  // dummy choices, strings are being changed depending on aspect ratio and res
+                .max        = 4,
+                .choices    = CHOICES("Highest", "Higher", "Medium", "Full-Res LV", "Narrow"),  // dummy choices, strings are being changed depending on aspect ratio and res
                 .help       = "Choose 1x3 preset.",
                 .shidden    = 1,
             },
@@ -7366,7 +7422,10 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
                  * View once, as after every recording, which rebuilds Canon's preview path. */
                 {
                     static int last_1x3 = -1;
-                    int now_1x3 = (CROP_PRESET_MENU == CROP_PRESET_1X3);
+                    /* 1 = full-width 1x3, 2 = FilmGate 1x3 Narrow: a change between the two
+                     * restarts Live View as well (other columns, other line length) */
+                    int now_1x3 = (CROP_PRESET_MENU == CROP_PRESET_1X3)
+                        ? (crop_preset_1x3_res_menu == 4 ? 2 : 1) : 0;
                     /* also at start-up straight into 1x3: CROP MOOD 1x3 stayed black after
                      * turning the camera on until 3x3 and back (V9 test) */
                     int switched = (last_1x3 == -1) ? now_1x3 : (now_1x3 != last_1x3);
@@ -8401,7 +8460,7 @@ static const struct setting_range crop_settings[] = {
     SETTING(crop_preset_index,          1,       3,      1),  /* slim: 1..3 (3x3 / 1x1 / 1x3) */
     SETTING(crop_preset_ar_menu,        0,       4,      4),
     SETTING(crop_preset_1x1_res_menu,   0,       8,      3),
-    SETTING(crop_preset_1x3_res_menu,   0,       3,      1),
+    SETTING(crop_preset_1x3_res_menu,   0,       4,      1),  /* 4: FilmGate 1x3 Narrow */
     SETTING(crop_preset_3x3_res_menu,   0,       2,      2),
     SETTING(crop_preset_fps_menu,       0,       5,      0),
     SETTING(crop_preset_fps_reduce,     0,       1,      1),
@@ -8465,6 +8524,15 @@ static void crop_settings_load(void)
             INFO_button = 6;
         crop_settings_ver = 5;
     }
+
+    /* FilmGate 1x3 Narrow: S16, 16mm Actual and 1" moved from the full-width 1x3 readout to the
+     * narrow one.  A config saved on one of them by an older build (1x3 Highest 2.35:1) goes to the
+     * narrow readout, so it stays on its format instead of turning into CROP MOOD 1x3.  Checked on
+     * every load: after the move the condition can no longer be true. */
+    if (crop_preset_index == 2 && crop_preset_1x3_res_menu == 0 && crop_preset_ar_menu == 3 &&
+        slim_film_fmt >= 0 && slim_film_fmt < FILM_FORMAT_COUNT && !film_is_cm(slim_film_fmt) &&
+        film_format_has_readout(slim_film_fmt, FILM_RO_1X3N))
+        crop_preset_1x3_res_menu = 4;
 
     /* never lower the number (a config file touched by a newer build keeps its version) */
     if (crop_settings_ver < CROP_SETTINGS_VERSION)

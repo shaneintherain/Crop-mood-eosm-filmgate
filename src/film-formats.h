@@ -29,7 +29,7 @@
 
 /* Sensor readouts the formats are cut from (the crop_rec 1:1 / 3x3 modes).  kn/kd is the
  * scale of one readout pixel on the camera's 720x480 LCD layer (used for the black-bar frame). */
-enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_1620, FILM_RO_28K, FILM_RO_NARROW, FILM_RO_COUNT };
+enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_1620, FILM_RO_28K, FILM_RO_NARROW, FILM_RO_1X3N, FILM_RO_COUNT };
 
 struct film_readout
 {
@@ -65,6 +65,12 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
                                                  * columns move only in ~124 px steps (cmos_new[5]); 1536 wide sat
                                                  * ~40 px left (LCD), so 1600 wide (centre 32 px right) and dx 8.
                                                  * Preview stretched to the full width for now (1.2x sideways) */
+    { 1072, 2214,  9,  65, 3, 720,   0,   0 },  /* 1x3 Narrow (FilmGate, TEST): the 1x3 2.35:1 rows, only the middle
+                                                 * 3216 sensor columns (first column 8 steps of 124 in, cmos_new[5]
+                                                 * 0x220).  For the 1x3 frames that are not full width (S16, 16mm,
+                                                 * 1").  Shorter lines: ~32 % less rolling shutter, if the sensor
+                                                 * accepts a line under 0x1FF in 1x3.  Preview stretched sideways
+                                                 * to the full width for now (as Narrow); the frame line follows */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */
@@ -93,15 +99,15 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     { "A35 Anamorphic 1.33x",1536,1152, "1.33x anamorphic gate (4:3)",       "3x3 3:2 1736x1160", "1.33x 4:3", FILM_RO_3X3 },
     /* Super 16: the tall frames in 1x3 (1:1 cannot read that many rows at 24 fps), 2.35:1 at 1:1.
      * 1x3 widths: 968 x 3 = 2904 (gate 2912); heights multiples of 8 (uncompressed alignment) */
-    { "Super 16 Actual",     968, 1720, "12.52x7.41mm gate (1x3: 2904x1720 desqueezed)", "1x3 2.35:1 1736x2214", "Actual",      FILM_RO_1X3 },
-    { "Super 16 16:9 Crop",  968, 1632, "Super 16 gate width, cropped to 16:9 (1x3)",    "1x3 2.35:1 1736x2214", "16:9 Crop",   FILM_RO_1X3 },
-    { "Super 16 1.85:1 Crop",968, 1568, "Super 16 gate width, cropped to 1.85:1 (1x3)",  "1x3 2.35:1 1736x2214", "1.85:1 Crop", FILM_RO_1X3 },
+    { "Super 16 Actual",     968, 1720, "12.52x7.41mm gate (1x3: 2904x1720 desqueezed)", "1x3 Narrow 1072x2214", "Actual",      FILM_RO_1X3N },
+    { "Super 16 16:9 Crop",  968, 1632, "Super 16 gate width, cropped to 16:9 (1x3)",    "1x3 Narrow 1072x2214", "16:9 Crop",   FILM_RO_1X3N },
+    { "Super 16 1.85:1 Crop",968, 1568, "Super 16 gate width, cropped to 1.85:1 (1x3)",  "1x3 Narrow 1072x2214", "1.85:1 Crop", FILM_RO_1X3N },
     /* 2.35:1 from the 2.8K readout: 2832x1204 (the readout gives 1206 rows; uncompressed needs a multiple
      * of 4).  12.18 mm wide, 97 % of the 12.52 mm gate and 2.5 % narrower than Actual, so the window can
      * move 24 px left to the sensor centre.  24 / 25 fps, 806 clocks per line (3K: 860) */
     { "Super 16 2.35:1 Crop",2832,1204, "Super 16 gate width (97 %), cropped to 2.35:1","1:1 2.35:1 2880x1206 Higher", "2.35:1 Crop", FILM_RO_28K },
     /* 16mm: Actual in 1x3 (792 x 3 = 2376, gate 2386), the crops at 1:1 */
-    { "16mm Actual",         792, 1736, "10.26x7.49mm gate (1x3: 2376x1736 desqueezed)", "1x3 2.35:1 1736x2214", "Actual",      FILM_RO_1X3 },
+    { "16mm Actual",         792, 1736, "10.26x7.49mm gate (1x3: 2376x1736 desqueezed)", "1x3 Narrow 1072x2214", "Actual",      FILM_RO_1X3N },
     { "16mm 16:9 Crop",     2384, 1340, "16mm gate width, cropped to 16:9",  "1:1 16:9 2560x1440", "16:9 Crop", FILM_RO_1440 },
     { "16mm 1.85:1 Crop",   2384, 1288, "16mm gate width, cropped to 1.85:1","1:1 16:9 2560x1440", "1.85:1 Crop", FILM_RO_1440 },
     { "16mm 2.35:1 Crop",   2384, 1012, "16mm gate width, cropped to 2.35:1","1:1 16:9 2560x1440", "2.35:1 Crop", FILM_RO_1440 },
@@ -114,8 +120,8 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     /* ---- VIDEO standard: video sensor sizes at 1:1 pixel scale (4.30 um per pixel) ---- */
     /* 1" type (13.2 x 8.8 mm, 3:2), in 1x3 (1:1 cannot read that many rows of that width at 24 fps):
      * full width, 1024 x 3 = 3072 (0.01 mm over 13.2 mm) */
-    { "1\" Actual",         1024, 2046, "1\" sensor (13.2 x 8.8 mm), 3:2 (1x3: 3072x2046)",            "1x3 2.35:1 1736x2214", "Actual",    FILM_RO_1X3 },
-    { "1\" 16:9 Crop",      1024, 1728, "1\" sensor width (13.2 mm), cropped to 16:9 (1x3: 3072x1728)", "1x3 2.35:1 1736x2214", "16:9 Crop", FILM_RO_1X3 },
+    { "1\" Actual",         1024, 2046, "1\" sensor (13.2 x 8.8 mm), 3:2 (1x3: 3072x2046)",            "1x3 Narrow 1072x2214", "Actual",    FILM_RO_1X3N },
+    { "1\" 16:9 Crop",      1024, 1728, "1\" sensor width (13.2 mm), cropped to 16:9 (1x3: 3072x1728)", "1x3 Narrow 1072x2214", "16:9 Crop", FILM_RO_1X3N },
     /* 2/3" (8.8 x 6.6 mm) */
     { "2/3\" 16:9 Crop",    2032, 1144, "2/3\" sensor width (8.8 mm), cropped to 16:9",   "1:1 16:9 2560x1440",  "16:9 Crop",  FILM_RO_1440 },
     { "2/3\" 4:3",          2032, 1536, "2/3\" sensor (8.8 x 6.6 mm), 4:3",              "1:1 4:3 2160x1620",   "4:3",        FILM_RO_1620 },
