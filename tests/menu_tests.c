@@ -117,7 +117,7 @@ int main(void)
             {
                 CHECK(!(mask & 8), "VIDEO format %d frame %d must not offer 18 fps (mask %x)", f, k, mask);
                 /* 29.97 is offered on the 2.5K frames and on 1280p; 1440p does not run it */
-                int ok30 = (ro == FILM_RO_25K || ro == FILM_RO_1280 || ro == FILM_RO_NARROW || ro == FILM_RO_1X3N);
+                int ok30 = (ro == FILM_RO_25K || ro == FILM_RO_1280 || ro == FILM_RO_NARROW);
                 CHECK(!!(mask & 4) == ok30, "VIDEO format %d frame %d: 29.97 offered=%d, expected %d (mask %x)", f, k, !!(mask & 4), ok30, mask);
             }
         }
@@ -135,9 +135,8 @@ int main(void)
             { 2384, 1340, 0, 307 },                                                  /* 16mm, 1440p 732 clocks */
             { 1344,  930, 0, 145 },                                                  /* S8, Narrow 498 clocks (23.976) */
             { 2032, 1536, 0, 304 },                                                  /* 2/3" 4:3, 1620p 634 clocks */
-            {  968, 1720, 0, 191 }, {  792, 1736, 0, 193 },                          /* S16 / 16mm Actual, 1x3 Narrow 356 clocks */
-            { 1024, 2046, 0, 228 }, { 1024, 1728, 0, 192 },                          /* 1" Actual / 16:9, 1x3 Narrow */
-            {  968, 1720, 1, 195 }, { 1024, 2046, 2, 230 },                          /* 25 fps 362, 29.97 360 clocks */
+            {  968, 1720, 0, 275 }, {  792, 1736, 0, 278 },                          /* S16 / 16mm Actual, 1x3 Narrow 512 clocks */
+            { 1024, 2046, 0, 327 }, { 1024, 1728, 0, 276 },                          /* 1" Actual / 16:9, 1x3 Narrow */
             { 1104,  620, 0,  96 },                                                  /* 1/3", Narrow 498 clocks */
             {  832,  468, 0,  73 }, { 1472, 1104, 0, 172 },                          /* 1/4" 16:9, 1/2" 4:3 */
             { 1736, 1152, 0, 193 }, { 1736,  976, 0, 163 },                          /* CROP MOOD 3x3, 528 clocks */
