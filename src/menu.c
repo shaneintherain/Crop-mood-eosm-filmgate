@@ -280,6 +280,21 @@ static void slim_draw_chevron(int tip_x, int cy, int dir, int depth, int height,
     }
 }
 
+/* Main menu rows: chevrons 14 px tall (chosen from the mockups); the edge next to the value
+ * stays where the bigger chevron's was, so the values and touch targets do not move. */
+#define SLIM_ROW_CHEVRON_H 14
+
+static void slim_draw_chevron_sized(int tip_x, int cy, int height, int h2, int dir, int color)
+{
+    /* where the open side of the full-size chevron was (as slim_draw_arrow_left/right draw it) */
+    int depth = MAX((height * 6) / 10, 2);
+    int h_full = SLIM_ARROW_SCALE(height);
+    int d_full = MAX((h_full * 6) / 10, 2);
+    int base = tip_x + dir * (depth - d_full + MIN(d_full, MAX(h_full / 2, 2)));
+    int d2 = MIN(MAX((h2 * 6) / 10, 2), MAX(h2 / 2, 2));
+    slim_draw_chevron(base - dir * d2, cy, dir, d2, h2, color);
+}
+
 static void slim_draw_arrow_left(int tip_x, int cy, int height, int color)
 {
     int depth = MAX((height * 6) / 10, 2);
@@ -3264,7 +3279,7 @@ skip_name:
     int left_touch_target = -1;
     if (draw_left_arrow)
     {
-        slim_draw_arrow_left(xval, value_cy, tri_h, arrow_color);
+        slim_draw_chevron_sized(xval, value_cy, tri_h, SLIM_ROW_CHEVRON_H, 1, arrow_color);
         left_touch_target = slim_touch_arrow_target_count;
         slim_touch_arrow_add(entry,
             xval - arrow_w - arrow_pad - 16, y + 2,
@@ -3307,7 +3322,7 @@ skip_name:
     if (draw_right_arrow)
     {
         int x_after_value = x_value + val_width + arrow_pad + arrow_w;
-        slim_draw_arrow_right(x_after_value, value_cy, tri_h, arrow_color);
+        slim_draw_chevron_sized(x_after_value, value_cy, tri_h, SLIM_ROW_CHEVRON_H, -1, arrow_color);
         int right_touch_x1 = x_after_value - 16;
         slim_touch_arrow_add(entry,
             right_touch_x1, y + 2,
