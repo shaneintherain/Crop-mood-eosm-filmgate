@@ -32,6 +32,69 @@ static void lvinfo_upper(char * dst, const char * src, int size)
 
 extern uint32_t font_jost_info;   /* rbf_font.c */
 
+/* Values with unit labels (see LVINFO_UNIT): the unit parts use the smaller Jost in grey,
+ * on the item's background, sitting on the same baseline as the value. */
+static int lvinfo_unit_font(int fnt)
+{
+    return FONT(FONT_MED, COLOR_GRAY(60), FONT_BG(fnt));
+}
+
+static int lvinfo_left_font(int fnt)
+{
+    return (fnt & ~(FONT_ALIGN_MASK | FONT_TEXT_WIDTH_MASK)) | FONT_ALIGN_LEFT;
+}
+
+/* Measures (and with draw=1 prints) the value and unit parts; returns the total width. */
+static int lvinfo_text_parts(int fnt, const char * s, int x, int y, int draw)
+{
+    char seg[64];
+    int w = 0;
+    int unit = 0;
+    const char * p = s;
+    int main_h = fontspec_font(fnt)->height;
+    int unit_h = fontspec_font(lvinfo_unit_font(fnt))->height;
+
+    while (1)
+    {
+        const char * e = strchr(p, LVINFO_UNIT[0]);
+        int n = e ? (int)(e - p) : (int)strlen(p);
+        if (n > 0)
+        {
+            int f = unit ? lvinfo_unit_font(fnt) : lvinfo_left_font(fnt);
+            snprintf(seg, MIN(n + 1, (int)sizeof(seg)), "%s", p);
+            if (draw)
+                bmp_printf(f, x + w, unit ? y + MAX(main_h - unit_h, 0) : y, "%s", seg);
+            w += bmp_string_width(f, seg);
+        }
+        if (!e)
+            break;
+        p = e + 1;
+        unit = !unit;
+    }
+    return w;
+}
+
+static int lvinfo_text_width(int fnt, const char * s)
+{
+    if (!strchr(s, LVINFO_UNIT[0]))
+        return bmp_string_width(fnt, s);
+    return lvinfo_text_parts(fnt, s, 0, 0, 0);
+}
+
+static void lvinfo_text_print(int fnt, int x, int y, const char * s)
+{
+    if (!strchr(s, LVINFO_UNIT[0]))
+    {
+        bmp_printf(fnt, x, y, "%s", s);
+        return;
+    }
+    int w = lvinfo_text_parts(fnt, s, 0, 0, 0);
+    int align = fnt & FONT_ALIGN_MASK;
+    int left = align == FONT_ALIGN_CENTER ? x - w / 2 :
+               align == FONT_ALIGN_RIGHT ? x - w : x;
+    lvinfo_text_parts(fnt, s, left, y, 1);
+}
+
 static int lvinfo_film_color(int c)
 {
     if (c == COLOR_WHITE || c == COLOR_CYAN || c == COLOR_LIGHT_BLUE ||
@@ -60,17 +123,19 @@ static int lvinfo_touch_menu_enabled[2] = { 1, 1 };
 static int lvinfo_touch_feedback_slot = -1;
 static int lvinfo_touch_feedback_sign;
 
-/* The single-value editor is square.  Crop mode + resolution share a wider
- * rectangle with the same height.  Input uses these exact bounds too. */
+/* The editor is one Quick Menu style tile (solid orange), centred above the
+ * picture; it widens for long values.  Input uses the same bounds. */
 #define LVINFO_TOUCH_BOX_Y          150
-#define LVINFO_TOUCH_BOX_H          180
-#define LVINFO_TOUCH_SINGLE_X       270
-#define LVINFO_TOUCH_SINGLE_W       180
-#define LVINFO_TOUCH_CROP_X         105
-#define LVINFO_TOUCH_CROP_W         510
-#define LVINFO_TOUCH_UP_TIP_Y       (LVINFO_TOUCH_BOX_Y + 28)
-#define LVINFO_TOUCH_VALUE_Y        (LVINFO_TOUCH_UP_TIP_Y + 42)
-#define LVINFO_TOUCH_DOWN_TIP_Y     (LVINFO_TOUCH_VALUE_Y + 82)
+#define LVINFO_TOUCH_BOX_H          168
+#define LVINFO_TOUCH_CX             360
+#define LVINFO_TOUCH_MAX_W          400
+#define LVINFO_TOUCH_UP_TIP_Y       (LVINFO_TOUCH_BOX_Y + 22)
+#define LVINFO_TOUCH_DOWN_TIP_Y     (LVINFO_TOUCH_BOX_Y + 146)
+static int lvinfo_touch_box_w = 168;
+
+extern int slim_touch_tile_width(const char *text);
+extern void slim_touch_tile_draw(int cx, int box_y, int box_w, const char *label,
+                                 const char *text, int enabled, int flash);
 
 static const char * lvinfo_touch_field_name(enum lvinfo_touch_field field)
 {
@@ -83,6 +148,7 @@ static const char * lvinfo_touch_field_name(enum lvinfo_touch_field field)
         case LVINFO_TOUCH_CROP:     return "Crop info";
         case LVINFO_TOUCH_FPS:      return "FPS";
         case LVINFO_TOUCH_BIT_DEPTH:return "Bitdepth info";
+        case LVINFO_TOUCH_FRAME:    return "Frame info";
         default:                    return 0;
     }
 }
@@ -139,30 +205,27 @@ static const char * lvinfo_touch_field_value(enum lvinfo_touch_field field)
     }
 }
 
-static void lvinfo_touch_draw_arrow(int cx, int tip_y, int up, int color)
+static const char * lvinfo_touch_field_label(enum lvinfo_touch_field field)
 {
-    const int height = 26;
-    bmp_draw_antialiased_triangle(cx, tip_y, up ? 2 : 3,
-                                  30, height, color);
+    switch (field)
+    {
+        case LVINFO_TOUCH_APERTURE: return "APERTURE";
+        case LVINFO_TOUCH_SHUTTER:  return "SHUTTER";
+        case LVINFO_TOUCH_ISO:      return gain_display() ? "GAIN" : "ISO";
+        case LVINFO_TOUCH_WB:       return "WB";
+        case LVINFO_TOUCH_CROP:     return "FORMAT";
+        case LVINFO_TOUCH_FRAME:    return "FRAME";
+        case LVINFO_TOUCH_FPS:      return "FPS";
+        case LVINFO_TOUCH_BIT_DEPTH:return "BITS";
+        default:                    return "";
+    }
 }
 
-static void lvinfo_touch_draw_value(int slot, int cx, int value_y,
-                                    const char *value, int enabled)
+/* Fields whose value and availability come from the crop module's menu. */
+static int lvinfo_touch_field_is_menu(enum lvinfo_touch_field field)
 {
-    int color = enabled ? COLOR_WHITE : COLOR_GRAY(50);
-    int width = bmp_string_width(FONT_CANON, value);
-    int up_color = enabled ? COLOR_ORANGE : color;
-    int down_color = enabled ? COLOR_ORANGE : color;
-
-    if (enabled && lvinfo_touch_feedback_slot == slot)
-    {
-        if (lvinfo_touch_feedback_sign > 0) up_color = COLOR_WHITE;
-        if (lvinfo_touch_feedback_sign < 0) down_color = COLOR_WHITE;
-    }
-    lvinfo_touch_draw_arrow(cx, LVINFO_TOUCH_UP_TIP_Y, 1, up_color);
-    bmp_printf(FONT(FONT_CANON, color, NO_BG_ERASE),
-               cx - width / 2, value_y, "%s", value);
-    lvinfo_touch_draw_arrow(cx, LVINFO_TOUCH_DOWN_TIP_Y, 0, down_color);
+    return field == LVINFO_TOUCH_CROP || field == LVINFO_TOUCH_FRAME ||
+           field == LVINFO_TOUCH_FPS || field == LVINFO_TOUCH_BIT_DEPTH;
 }
 
 static void lvinfo_touch_draw_editor(void)
@@ -170,32 +233,21 @@ static void lvinfo_touch_draw_editor(void)
     if (lvinfo_touch_field == LVINFO_TOUCH_NONE)
         return;
 
-    int value_y = LVINFO_TOUCH_VALUE_Y;
+    int menu = lvinfo_touch_field_is_menu(lvinfo_touch_field);
+    const char *value = menu ? lvinfo_touch_menu_value[0]
+                             : lvinfo_touch_field_value(lvinfo_touch_field);
+    int enabled = menu ? lvinfo_touch_menu_enabled[0] : 1;
+    int flash = lvinfo_touch_feedback_slot == 0 ? lvinfo_touch_feedback_sign : 0;
+    int w = MIN(slim_touch_tile_width(value), LVINFO_TOUCH_MAX_W);
 
-    if (lvinfo_touch_field == LVINFO_TOUCH_CROP)
-    {
-        bmp_fill(COLOR_BLACK, LVINFO_TOUCH_CROP_X, LVINFO_TOUCH_BOX_Y,
-                 LVINFO_TOUCH_CROP_W, LVINFO_TOUCH_BOX_H);
-        lvinfo_touch_draw_value(0, 232, value_y, lvinfo_touch_menu_value[0],
-                                lvinfo_touch_menu_enabled[0]);
-        lvinfo_touch_draw_value(1, 488, value_y, lvinfo_touch_menu_value[1],
-                                lvinfo_touch_menu_enabled[1]);
-    }
-    else
-    {
-        const char *value =
-            (lvinfo_touch_field == LVINFO_TOUCH_FPS ||
-             lvinfo_touch_field == LVINFO_TOUCH_BIT_DEPTH)
-            ? lvinfo_touch_menu_value[0]
-            : lvinfo_touch_field_value(lvinfo_touch_field);
-        int enabled =
-            (lvinfo_touch_field == LVINFO_TOUCH_FPS ||
-             lvinfo_touch_field == LVINFO_TOUCH_BIT_DEPTH)
-            ? lvinfo_touch_menu_enabled[0] : 1;
-        bmp_fill(COLOR_BLACK, LVINFO_TOUCH_SINGLE_X, LVINFO_TOUCH_BOX_Y,
-                 LVINFO_TOUCH_SINGLE_W, LVINFO_TOUCH_BOX_H);
-        lvinfo_touch_draw_value(0, 360, value_y, value, enabled);
-    }
+    /* the tile only grows while open, so a shorter value never leaves a stale edge */
+    if (w < lvinfo_touch_box_w)
+        bmp_fill(COLOR_EMPTY, LVINFO_TOUCH_CX - lvinfo_touch_box_w / 2, LVINFO_TOUCH_BOX_Y,
+                 lvinfo_touch_box_w, LVINFO_TOUCH_BOX_H);
+    lvinfo_touch_box_w = w;
+    slim_touch_tile_draw(LVINFO_TOUCH_CX, LVINFO_TOUCH_BOX_Y, w,
+                         lvinfo_touch_field_label(lvinfo_touch_field),
+                         value, enabled, flash);
 }
 
 /* fixme: false thread safety warning
@@ -251,7 +303,7 @@ void lvinfo_update_items(struct lvinfo_item * items[], int count, int override_f
         {
             char up[64];
             lvinfo_upper(up, items[i]->value, sizeof(up));
-            items[i]->width = bmp_string_width(fnt, up);
+            items[i]->width = lvinfo_text_width(fnt, up);
         }
         if (!items[i]->height)
         {
@@ -649,7 +701,7 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
             /* no custom draw? use our default print routine */
             char up[64];
             lvinfo_upper(up, items[i]->value, sizeof(up));
-            bmp_printf(fnt, x, y, "%s", up);
+            lvinfo_text_print(fnt, x, y, up);
         }
 
         if (lvinfo_touch_field_name(lvinfo_touch_field) &&
@@ -913,6 +965,7 @@ enum lvinfo_touch_field lvinfo_touch_field_at(int x, int y)
             else if (!strcmp(name, "Crop info")) candidate = LVINFO_TOUCH_CROP;
             else if (!strcmp(name, "FPS")) candidate = LVINFO_TOUCH_FPS;
             else if (!strcmp(name, "Bitdepth info")) candidate = LVINFO_TOUCH_BIT_DEPTH;
+            else if (!strcmp(name, "Frame info")) candidate = LVINFO_TOUCH_FRAME;
 
             /* Expanded targets may overlap; the closest visible field wins. */
             if (candidate != LVINFO_TOUCH_NONE && distance < best_distance)
@@ -942,6 +995,7 @@ void lvinfo_touch_editor_open(enum lvinfo_touch_field field)
     lvinfo_touch_menu_value[1][0] = '\0';
     lvinfo_touch_menu_enabled[0] = 1;
     lvinfo_touch_menu_enabled[1] = 1;
+    lvinfo_touch_box_w = 168;
     lens_display_set_dirty();
 }
 
@@ -949,9 +1003,9 @@ void lvinfo_touch_editor_close(void)
 {
     lvinfo_touch_field = LVINFO_TOUCH_NONE;
     lvinfo_touch_feedback_slot = -1;
-    bmp_fill(COLOR_EMPTY, LVINFO_TOUCH_CROP_X - 2,
+    bmp_fill(COLOR_EMPTY, LVINFO_TOUCH_CX - LVINFO_TOUCH_MAX_W / 2 - 2,
              LVINFO_TOUCH_BOX_Y - 2,
-             LVINFO_TOUCH_CROP_W + 4, LVINFO_TOUCH_BOX_H + 4);
+             LVINFO_TOUCH_MAX_W + 4, LVINFO_TOUCH_BOX_H + 4);
     lens_display_set_dirty();
 }
 
@@ -982,44 +1036,28 @@ int lvinfo_touch_editor_item_enabled(int slot)
 
 int lvinfo_touch_editor_hit_test(int x, int y, int *slot, int *sign)
 {
-    int box_x;
-    int box_w;
-    int arrow_cx;
-    int arrow_left;
-    int arrow_right;
+    int box_x = LVINFO_TOUCH_CX - lvinfo_touch_box_w / 2;
+    int arrow_left = LVINFO_TOUCH_CX - 65;
+    int arrow_right = LVINFO_TOUCH_CX + 65;
 
     if (slot) *slot = -1;
     if (sign) *sign = 0;
     if (lvinfo_touch_field == LVINFO_TOUCH_NONE)
         return 0;
 
-    box_x = lvinfo_touch_field == LVINFO_TOUCH_CROP
-        ? LVINFO_TOUCH_CROP_X : LVINFO_TOUCH_SINGLE_X;
-    box_w = lvinfo_touch_field == LVINFO_TOUCH_CROP
-        ? LVINFO_TOUCH_CROP_W : LVINFO_TOUCH_SINGLE_W;
-    if (x < box_x || x >= box_x + box_w ||
+    if (x < box_x || x >= box_x + lvinfo_touch_box_w ||
         y < LVINFO_TOUCH_BOX_Y || y >= LVINFO_TOUCH_BOX_Y + LVINFO_TOUCH_BOX_H)
         return 0;
 
-    if (lvinfo_touch_field == LVINFO_TOUCH_CROP)
-        *slot = x < LVINFO_TOUCH_CROP_X + LVINFO_TOUCH_CROP_W / 2 ? 0 : 1;
-    else
-        *slot = 0;
+    *slot = 0;
 
-    arrow_cx = lvinfo_touch_field == LVINFO_TOUCH_CROP
-        ? (*slot == 0 ? 232 : 488) : 360;
-    arrow_left = arrow_cx - 65;
-    arrow_right = arrow_cx + 65;
-
-    /* Visible triangle is 60x26; use a comfortable 130x62 target around it,
-     * without turning the rest of the black box into an adjustment target. */
+    /* Comfortable 130 px wide targets around each chevron: the top and bottom
+     * thirds of the tile; the value in the middle does nothing. */
     if (x >= arrow_left && x <= arrow_right &&
-        y >= LVINFO_TOUCH_UP_TIP_Y - 18 &&
-        y <= LVINFO_TOUCH_UP_TIP_Y + 43)
+        y < LVINFO_TOUCH_UP_TIP_Y + 40)
         *sign = 1;
     else if (x >= arrow_left && x <= arrow_right &&
-             y >= LVINFO_TOUCH_DOWN_TIP_Y - 43 &&
-             y <= LVINFO_TOUCH_DOWN_TIP_Y + 18)
+             y > LVINFO_TOUCH_DOWN_TIP_Y - 40)
         *sign = -1;
 
     return 1;

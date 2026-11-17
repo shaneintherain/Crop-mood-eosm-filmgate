@@ -5648,7 +5648,8 @@ int crop_rec_touch_adjust(int control, int delta)
             break;
         case 1:
             slim_crop_sync_from_backend();
-            slim_crop_preset_select(0, delta); /* Frame */
+            /* Frame: same direction as the Quick Menu (Up = towards the bigger frame) */
+            slim_crop_preset_select(0, -delta);
             break;
         case 2: slim_crop_fps_select(0, delta); break;
         case 3: slim_crop_bit_select(0, delta); break;
@@ -5724,6 +5725,25 @@ int crop_rec_touch_get_value(int control, int slot, char *value, int size,
             slim_bit_depth_ui == 0 ? "10 Bit" :
             slim_bit_depth_ui == 1 ? "11 Bit" :
             slim_bit_depth_ui == 2 ? "12 Bit" : "14 Bit");
+    }
+    else if (control == 3)
+    {
+        /* Frame of the current film format, as the bottom bar shows it */
+        int fmt = slim_film_sync();
+        if (fmt < 0)
+        {
+            snprintf(value, size, "-");
+            enabled = 0;
+        }
+        else
+        {
+            snprintf(value, size, "%s",
+                film_frames[film_frame_index(fmt, slim_film_frame_get(fmt))].frame);
+            int n = strlen(value);
+            if (n > 5 && streq(value + n - 5, " Crop"))
+                value[n - 5] = 0;
+            enabled = film_formats[fmt].count > 1;
+        }
     }
     else
     {
@@ -8250,7 +8270,7 @@ static LVINFO_UPDATE_FUNC(frame_info)
 /* Display Bitdepth in ML bottom bar */
 static LVINFO_UPDATE_FUNC(bitdepth_info)
 {
-    LVINFO_BUFFER(8);
+    LVINFO_BUFFER(16);
 
     int lossless_format = which_output_format() >= 3;
     /* which_output_format() == 0 means 14-bit uncompressed
@@ -8258,10 +8278,10 @@ static LVINFO_UPDATE_FUNC(bitdepth_info)
      * which_output_format() == 2 means 10-bit uncompressed  */
     if (patch_active && is_movie_mode())
     {
-        if ((OUTPUT_14BIT && lossless_format) || which_output_format() == 0) snprintf(buffer, sizeof(buffer), "14 Bit");
-        if ((OUTPUT_12BIT && lossless_format) || which_output_format() == 1) snprintf(buffer, sizeof(buffer), "12 Bit");
-        if ( OUTPUT_11BIT && lossless_format)                                snprintf(buffer, sizeof(buffer), "11 Bit");
-        if ((OUTPUT_10BIT && lossless_format) || which_output_format() == 2) snprintf(buffer, sizeof(buffer), "10 Bit");
+        if ((OUTPUT_14BIT && lossless_format) || which_output_format() == 0) snprintf(buffer, sizeof(buffer), "14" LVINFO_UNIT " BIT");
+        if ((OUTPUT_12BIT && lossless_format) || which_output_format() == 1) snprintf(buffer, sizeof(buffer), "12" LVINFO_UNIT " BIT");
+        if ( OUTPUT_11BIT && lossless_format)                                snprintf(buffer, sizeof(buffer), "11" LVINFO_UNIT " BIT");
+        if ((OUTPUT_10BIT && lossless_format) || which_output_format() == 2) snprintf(buffer, sizeof(buffer), "10" LVINFO_UNIT " BIT");
         item->color_fg = COLOR_GREEN1;
     }
 }

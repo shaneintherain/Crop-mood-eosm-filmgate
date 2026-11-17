@@ -189,8 +189,8 @@ static int slim_tab_current = -1;   /* page index shown, -1 = not a tab page (e.
 static void slim_touch_scroll_repeat(int timer, void *opaque);
 static int slim_touch_handle_scroll(int x, int y, int pressed);
 static int slim_touch_handle_grid_back(int x, int y);
-static void slim_draw_scroll_arrow_up(int cx, int cy, int size, int color);
-static void slim_draw_scroll_arrow_down(int cx, int cy, int size, int color);
+__attribute__((unused)) static void slim_draw_scroll_arrow_up(int cx, int cy, int size, int color);
+__attribute__((unused)) static void slim_draw_scroll_arrow_down(int cx, int cy, int size, int color);
 
 static void slim_touch_arrow_reset(void)
 {
@@ -267,12 +267,40 @@ static int entry_is_slim_style(struct menu_entry * entry, int in_submenu)
 /* Arrows are drawn at 3/4 of the slot size (slots and touch boxes keep the full size);
  * the flat base stays where it was, next to the value. */
 #define SLIM_ARROW_SCALE(h) MAX(((h) * 3) / 4, 6)
+/* A thin chevron in the footprint of the old solid arrow: the tip at tip_x, opening towards
+ * tip_x + dir * depth; 2 px thick. */
+static void slim_draw_chevron(int tip_x, int cy, int dir, int depth, int height, int color)
+{
+    int half = MAX(height / 2, 2);
+    int d = MIN(depth, half);       /* 45 degrees at the most: reads as a chevron, not a wedge */
+    for (int t = 0; t < 2; t++)
+    {
+        draw_line(tip_x + dir * t, cy, tip_x + dir * (d + t), cy - half, color);
+        draw_line(tip_x + dir * t, cy, tip_x + dir * (d + t), cy + half, color);
+    }
+}
+
+/* Main menu rows: chevrons 14 px tall (chosen from the mockups); the edge next to the value
+ * stays where the bigger chevron's was, so the values and touch targets do not move. */
+#define SLIM_ROW_CHEVRON_H 14
+
+static void slim_draw_chevron_sized(int tip_x, int cy, int height, int h2, int dir, int color)
+{
+    /* where the open side of the full-size chevron was (as slim_draw_arrow_left/right draw it) */
+    int depth = MAX((height * 6) / 10, 2);
+    int h_full = SLIM_ARROW_SCALE(height);
+    int d_full = MAX((h_full * 6) / 10, 2);
+    int base = tip_x + dir * (depth - d_full + MIN(d_full, MAX(h_full / 2, 2)));
+    int d2 = MIN(MAX((h2 * 6) / 10, 2), MAX(h2 / 2, 2));
+    slim_draw_chevron(base - dir * d2, cy, dir, d2, h2, color);
+}
+
 static void slim_draw_arrow_left(int tip_x, int cy, int height, int color)
 {
     int depth = MAX((height * 6) / 10, 2);
     int h2 = SLIM_ARROW_SCALE(height);
     int depth2 = MAX((h2 * 6) / 10, 2);
-    bmp_draw_antialiased_triangle(tip_x + depth - depth2, cy, 0, depth2, h2, color);
+    slim_draw_chevron(tip_x + depth - depth2, cy, 1, depth2, h2, color);
 }
 
 /* Filled ► — tip points right (flat base on left, narrow on right). */
@@ -281,7 +309,7 @@ static void slim_draw_arrow_right(int tip_x, int cy, int height, int color)
     int depth = MAX((height * 6) / 10, 2);
     int h2 = SLIM_ARROW_SCALE(height);
     int depth2 = MAX((h2 * 6) / 10, 2);
-    bmp_draw_antialiased_triangle(tip_x - depth + depth2, cy, 1, depth2, h2, color);
+    slim_draw_chevron(tip_x - depth + depth2, cy, -1, depth2, h2, color);
 }
 #endif
 
@@ -2615,6 +2643,7 @@ static void menu_clean_footer()
 #ifdef CONFIG_SLIM_MENUS
     /* No grey help strip — keep the reclaim area solid black with the menu body. */
     bmp_fill(MENU_BG_COLOR_HEADER_FOOTER, 0, 430, 720, 50);
+    bmp_fill(UI_LINE, 0, 430, 720, 1);      /* hairline above the bottom bar */
 #else
     int h = 50;
     if (is_menu_active("Help")) h = font_med.height * 3 + 2;
@@ -3051,17 +3080,18 @@ entry_print(
     {
         /* Film Edge: the selected row is a solid cream block (like the quick menu),
          * other rows get a thin divider line. Drawn before the text. */
+        /* Refined look: the selected row is a solid orange bar; no divider lines between rows
+         * (the spacing separates them). */
         if (SLIM_ROW_SEL(entry))
             bmp_fill(UI_SEL, 10, y, 666, h - 1);
-        else
-            bmp_fill(UI_LINE, 10, y + h - 1, 666, 1);
     }
 
     if (slim_style && !customize_mode && !junkie_mode)
     {
         /* Canon Gothic — native camera UI font (smoother than RBF bitmap fonts). */
         /* Film Edge: selected row black on cream, other rows in softer grey. */
-        int fg = SLIM_ROW_SEL(entry) ? UI_SEL_TEXT : UI_TEXT;
+        /* row titles in a soft grey (the values stay white); black on the orange bar */
+        int fg = SLIM_ROW_SEL(entry) ? UI_SEL_TEXT : UI_LABEL;
         /* read-only rows use enabled=0 and stay muted. */
         if (info->warning_level == MENU_WARN_NOT_WORKING
             || (info->enabled == 0 && !IS_BOOL(entry)))
@@ -3116,12 +3146,11 @@ skip_name:
         !junkie_mode;
     int draw_left_arrow = draw_tri_arrows;
     int draw_right_arrow = draw_tri_arrows;
-    int arrow_color = UI_ARROW;
-    if (draw_tri_arrows && slim_locked)
-        arrow_color = SLIM_ROW_SEL(entry) ? UI_SEL_MUTED : UI_MUTED;
-    else if (draw_tri_arrows && SLIM_ROW_SEL(entry))
-        arrow_color = UI_SEL_TEXT;
-    /* degree rings follow the value text, not the (dimmer) arrows */
+    /* chevrons: black on the orange bar, soft grey on the other rows (darker when locked) */
+    int arrow_color = SLIM_ROW_SEL(entry)
+        ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
+        : (slim_locked ? UI_LINE : UI_ARROW);
+    /* degree rings follow the value text, not the arrows */
     int ring_color = SLIM_ROW_SEL(entry) ? (slim_locked ? UI_SEL_MUTED : UI_SEL_TEXT)
                                      : (slim_locked ? UI_MUTED : UI_TEXT);
     int fonth = fontspec_font(fnt)->height;
@@ -3250,7 +3279,7 @@ skip_name:
     int left_touch_target = -1;
     if (draw_left_arrow)
     {
-        slim_draw_arrow_left(xval, value_cy, tri_h, arrow_color);
+        slim_draw_chevron_sized(xval, value_cy, tri_h, SLIM_ROW_CHEVRON_H, 1, arrow_color);
         left_touch_target = slim_touch_arrow_target_count;
         slim_touch_arrow_add(entry,
             xval - arrow_w - arrow_pad - 16, y + 2,
@@ -3293,7 +3322,7 @@ skip_name:
     if (draw_right_arrow)
     {
         int x_after_value = x_value + val_width + arrow_pad + arrow_w;
-        slim_draw_arrow_right(x_after_value, value_cy, tri_h, arrow_color);
+        slim_draw_chevron_sized(x_after_value, value_cy, tri_h, SLIM_ROW_CHEVRON_H, -1, arrow_color);
         int right_touch_x1 = x_after_value - 16;
         slim_touch_arrow_add(entry,
             right_touch_x1, y + 2,
@@ -4761,20 +4790,17 @@ show_vscroll(struct menu * parent){
         int arrow_h = 34;
         int track_y = y_lo + arrow_h;
         int track_bottom = h_bot - arrow_h;
-        int track_h = MAX(1, track_bottom - track_y);
-        int size = MAX(8, track_h * menu_len / max);
-        int y = track_y + ((track_h - size) * (pos-1) / MAX(max-1, 1));
+        /* the thumb uses the whole height (no arrows drawn); the top and bottom 34 px
+         * stay invisible tap targets for scrolling one step */
+        int thumb_h = MAX(1, h_bot - y_lo);
+        int size = MAX(8, thumb_h * menu_len / max);
+        int y = y_lo + ((thumb_h - size) * (pos-1) / MAX(max-1, 1));
         /* Keep the complete arrow inside the 720px bitmap edge. */
         int x = 688;
         int bar_w = 24;
 
-        /* Minimal scrollbar: orange thumb and white Canon-style arrows only. */
-        bmp_fill(UI_DIM, x + 9, y, 6, size);
-        int arrow_size = MAX(slim_ui_font_height() - 4, 18);
-        slim_draw_scroll_arrow_up(x + bar_w / 2, y_lo + arrow_size / 2 + 2,
-            arrow_size, UI_DIM);
-        slim_draw_scroll_arrow_down(x + bar_w / 2, h_bot - arrow_size / 2 - 2,
-            arrow_size, UI_DIM);
+        /* Minimal scrollbar: just the grey thumb, no arrows */
+        bmp_fill(UI_DIM, x + 9, y, 4, size);
         slim_touch_scroll_x1 = x;
         slim_touch_scroll_x2 = x + bar_w;
         slim_touch_scroll_up_y1 = y_lo;
@@ -4879,7 +4905,7 @@ void menus_display(
     int bgs = UI_BG;
     int bgu = MENU_BG_COLOR_HEADER_FOOTER;
     int fgu = COLOR_WHITE;
-    int fgs = UI_SEL;
+    int fgs = UI_ACCENT;
 
     if (customize_mode) fgs = get_customize_color();
 
@@ -4928,17 +4954,32 @@ void menus_display(
                     /* D-pad on the tab strip: the open tab becomes an orange block */
                     int block = on && slim_tab_focus;
                     int tbg = block ? UI_SEL : bgu;
-                    uint32_t tf = slim_ui_font_spec(block ? UI_SEL_TEXT : on ? UI_TEXT : UI_DIM, tbg);
-                    int tw = bmp_string_width(tf, slim_tabs[t]);
+                    /* refined look: smaller tab names, letter-spaced 2 px */
+                    uint32_t tf = FONT(FONT_MED, block ? UI_SEL_TEXT : on ? UI_TEXT : UI_DIM, tbg);
+                    const int spacing = 2;
+                    const char * name = slim_tabs[t];
+                    int n = strlen(name);
+                    int tw = 0;
+                    for (int c = 0; c < n; c++)
+                    {
+                        char ch[2] = { name[c], 0 };
+                        tw += bmp_string_width(tf, ch) + (c < n - 1 ? spacing : 0);
+                    }
+                    int ty = y + (header_h - (int)fontspec_font(tf)->height) / 2;
                     if (block)
                         bmp_fill(UI_SEL, tx - 8, y + 4, tw + 16, header_h - 8);
-                    bmp_printf(tf, tx, title_y, "%s", slim_tabs[t]);
-                    if (on && !block)
-                        bmp_fill(UI_SEL, tx, y + header_h - 4, tw, 4);
+                    for (int c = 0, cx = tx; c < n; c++)
+                    {
+                        char ch[2] = { name[c], 0 };
+                        bmp_printf(tf, cx, ty, "%s", ch);
+                        cx += bmp_string_width(tf, ch) + spacing;
+                    }
+                    if (on)
+                        bmp_fill(UI_ACCENT, tx, y + header_h - 3, tw, 2);
                     /* touch box: the label plus half the gap on each side */
-                    slim_tab_x1[t] = tx - 13;
-                    slim_tab_x2[t] = tx + tw + 13;
-                    tx += tw + 26;
+                    slim_tab_x1[t] = tx - 15;
+                    slim_tab_x2[t] = tx + tw + 15;
+                    tx += tw + 30;
                 }
             }
             else
@@ -7713,7 +7754,7 @@ static void draw_longpress_indicator(struct longpress * longpress)
 
         /* blues, matching the menus */
         int color = (!pressed)  ? UI_DIM   :  /* button just released */
-                    (n >= 25/2) ? UI_SEL   :  /* long press event fired */
+                    (n >= 25/2) ? UI_ACCENT :  /* long press event fired */
                                   UI_DIM   ;  /* on the way to long press */
         fill_circle(x, y, 2, color);
     }

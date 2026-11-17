@@ -2697,10 +2697,10 @@ static LVINFO_UPDATE_FUNC(picstyle_update)
 static LVINFO_UPDATE_FUNC(temp_update)
 {
   #ifdef EFIC_CELSIUS
-    LVINFO_BUFFER(8);
+    LVINFO_BUFFER(12);
     
     int t = EFIC_CELSIUS;
-    snprintf(buffer, sizeof(buffer), "%d"SYM_DEGREE"C", t);
+    snprintf(buffer, sizeof(buffer), "%d" LVINFO_UNIT " " SYM_DEGREE "C", t);
     if (t >= 60)
     {
         item->color_bg = COLOR_RED;
@@ -2724,7 +2724,7 @@ static LVINFO_UPDATE_FUNC(mvi_number_update)
 
 static LVINFO_UPDATE_FUNC(fps_update)
 {
-    LVINFO_BUFFER(8);
+    LVINFO_BUFFER(16);
 
     if (is_movie_mode())
     {
@@ -2738,14 +2738,14 @@ static LVINFO_UPDATE_FUNC(fps_update)
                 f = standard[i];
         int f100 = (f + 5) / 10;        /* two decimals, rounded: 23.976 -> 23.98 */
         if (ABS(f - 36000) <= 60)
-            snprintf(buffer, sizeof(buffer), "36fps");
+            snprintf(buffer, sizeof(buffer), "36" LVINFO_UNIT " FPS");
         else if (ABS(f - 48000) <= 60)
-            snprintf(buffer, sizeof(buffer), "48fps");
+            snprintf(buffer, sizeof(buffer), "48" LVINFO_UNIT " FPS");
         else if (f100 % 100 == 0)       /* whole rates: 18fps, 25fps, 50fps */
-            snprintf(buffer, sizeof(buffer), "%dfps", f100 / 100);
+            snprintf(buffer, sizeof(buffer), "%d" LVINFO_UNIT " FPS", f100 / 100);
         else
             snprintf(buffer, sizeof(buffer),
-                "%2d.%02d",
+                "%2d.%02d" LVINFO_UNIT " FPS",
                 f100 / 100, f100 % 100
             );
     }
@@ -2753,7 +2753,7 @@ static LVINFO_UPDATE_FUNC(fps_update)
 
 static LVINFO_UPDATE_FUNC(free_space_update)
 {
-    LVINFO_BUFFER(8);
+    LVINFO_BUFFER(16);
     
     if (RECORDING)
     {
@@ -2768,7 +2768,7 @@ static LVINFO_UPDATE_FUNC(free_space_update)
     int fsgf = (fsgr * 10) >> 15;
 
     snprintf(buffer, sizeof(buffer), 
-        "%d.%dGB",
+        "%d.%d" LVINFO_UNIT " GB",
         fsg,
         fsgf
     );
@@ -2788,7 +2788,7 @@ static LVINFO_UPDATE_FUNC(focal_len_update)
     LVINFO_BUFFER(16);
     if (lens_info.lens_exists)
     {
-        snprintf(buffer, sizeof(buffer), "%d%s",
+        snprintf(buffer, sizeof(buffer), "%d" LVINFO_UNIT " %s",
                crop_info ? (lens_info.focal_len * SENSORCROPFACTOR + 5) / 10 : lens_info.focal_len,
                crop_info ? "eq" : "mm"     /* the small "mm" symbol is not in the bar font */
         );
@@ -2815,11 +2815,15 @@ static LVINFO_UPDATE_FUNC(is_update)
 
 static LVINFO_UPDATE_FUNC(av_update)
 {
-    LVINFO_BUFFER(8);
+    LVINFO_BUFFER(16);
 
     if (lens_info.raw_aperture && lens_info.lens_exists)
     {
-        snprintf(buffer, sizeof(buffer), lens_format_aperture(lens_info.raw_aperture));
+        /* "F" as a small grey label in front of the number */
+        const char * a = lens_format_aperture(lens_info.raw_aperture);
+        if (a[0] == SYM_F_SLASH[0])
+            a++;
+        snprintf(buffer, sizeof(buffer), LVINFO_UNIT "F " LVINFO_UNIT "%s", a);
     }
     
 #ifndef CONFIG_SLIM_MENUS  /* slim builds run with Expo Override on by default: no marker */
@@ -2904,7 +2908,7 @@ static LVINFO_UPDATE_FUNC(iso_update)
     }
     else if (dual_iso_is_enabled())
     {
-        snprintf(buffer, sizeof(buffer), SYM_ISO"%d/%d", 
+        snprintf(buffer, sizeof(buffer), LVINFO_UNIT "ISO " LVINFO_UNIT "%d/%d",
             raw2iso(lens_info.iso_analog_raw),
             raw2iso(dual_iso_get_recovery_iso())
         );
@@ -2913,7 +2917,7 @@ static LVINFO_UPDATE_FUNC(iso_update)
     {
         /* VIDEO standard: Gain in dB instead of ISO (no ISO symbol) */
         int gain_mode = gain_display();
-        snprintf(buffer, sizeof(buffer), "%s", gain_mode ? "" : SYM_ISO);
+        snprintf(buffer, sizeof(buffer), "%s", gain_mode ? "" : LVINFO_UNIT "ISO " LVINFO_UNIT);
         
         if (!lens_info.raw_iso)
         {
@@ -3011,13 +3015,13 @@ static LVINFO_UPDATE_FUNC(wb_update)
     
     if( lens_info.wb_mode == WB_KELVIN )
     {
-        snprintf(buffer, sizeof(buffer), "%dK", lens_info.kelvin);
+        snprintf(buffer, sizeof(buffer), LVINFO_UNIT "WB " LVINFO_UNIT "%dK", lens_info.kelvin);
     }
     else
     {
-        snprintf(buffer, sizeof(buffer), "%s",
+        snprintf(buffer, sizeof(buffer), LVINFO_UNIT "WB " LVINFO_UNIT "%s",
             (uniwb_is_active()      ? "UniWB"  :
-            (lens_info.wb_mode == 0 ? "AutoWB" : 
+            (lens_info.wb_mode == 0 ? "Auto" : 
             (lens_info.wb_mode == 1 ? "Sunny"  :
             (lens_info.wb_mode == 2 ? "Cloudy" : 
             (lens_info.wb_mode == 3 ? "Tungst." : 

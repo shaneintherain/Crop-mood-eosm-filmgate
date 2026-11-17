@@ -685,6 +685,86 @@ static void rr_tile(int x, int y, int w, int h, int outline, int fill)
     rr_fill(x + 2, y + 2, w - 4, h - 4, rr6, 6, fill);
 }
 
+/* Live View touch editor: one Quick Menu style tile, solid orange with black text and
+ * chevrons (dark grey when the setting is locked).  Same row layout as a Quick Menu tile:
+ * label at +6, up chevron at +22, value at +64, down chevron at +146, 168 px tall. */
+static void slim_touch_tile_value(const char *text, char *value, int size, int *draw_degree)
+{
+    int n;
+    snprintf(value, size, "%s", text ? text : "");
+    n = strlen(value);
+    *draw_degree = 0;
+    if (n > 0 && value[n - 1] == SYM_DEGREE[0])
+    {
+        value[n - 1] = '\0';
+        *draw_degree = 1;
+    }
+}
+
+int slim_touch_tile_width(const char *text)
+{
+    char value[40];
+    int draw_degree;
+    int w;
+    font * qf = rbf_quick_value_font();
+    slim_touch_tile_value(text, value, sizeof(value), &draw_degree);
+    w = qf ? rbf_str_width(qf, value)
+           : bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value);
+    return COERCE(w + (draw_degree ? 16 : 0) + 48, 168, 400);
+}
+
+void slim_touch_tile_draw(int cx, int box_y, int box_w, const char *label,
+                          const char *text, int enabled, int flash)
+{
+    char value[40];
+    int draw_degree;
+    int box_h = 168;
+    int box_x = cx - box_w / 2;
+    int bg = enabled ? UI_SEL : UI_TILE;
+    int fg = enabled ? UI_SEL_TEXT : UI_MUTED;
+    int value_y = box_y + 64;
+    font * qf = rbf_quick_value_font();
+
+    slim_touch_tile_value(text, value, sizeof(value), &draw_degree);
+    rr_tile(box_x, box_y, box_w, box_h, bg, bg);
+    if (label && label[0])
+        bmp_printf(FONT(FONT_SMALL, enabled ? UI_SEL_TEXT : UI_DIM, bg),
+                   cx - (int)strlen(label) * 4, box_y + 6, "%s", label);
+
+    int qw = qf ? rbf_str_width(qf, value) : 0;
+    if (qf && qw + (draw_degree ? 16 : 0) <= box_w - 8)
+    {
+        int value_x = cx - (qw + (draw_degree ? 16 : 0)) / 2;
+        rbf_draw_string(qf, value_x, value_y - 2, value, FONT(0, fg, bg));
+        if (draw_degree)
+        {
+            draw_circle(value_x + qw + 8, value_y + 10, 5, fg);
+            draw_circle(value_x + qw + 8, value_y + 10, 4, fg);
+        }
+    }
+    else
+    {
+        int width = bmp_string_width(slim_ui_font_spec(COLOR_WHITE, COLOR_BLACK), value);
+        int value_x = cx - (width + (draw_degree ? 12 : 0)) / 2;
+        if (width > box_w - 8)
+        {
+            int w2 = bmp_string_width(FONT_MED_LARGE, value);
+            bmp_printf(FONT(FONT_MED_LARGE, fg, bg), cx - w2 / 2, value_y + 6, "%s", value);
+        }
+        else
+        {
+            bmp_printf(slim_ui_font_spec(fg, bg), value_x, value_y, "%s", value);
+            if (draw_degree)
+            {
+                draw_circle(value_x + width + 6, value_y + 7, 4, fg);
+                draw_circle(value_x + width + 6, value_y + 7, 3, fg);
+            }
+        }
+    }
+    quick_screen_arrow(cx, box_y + 22, 1, enabled && flash > 0 ? COLOR_WHITE : fg);
+    quick_screen_arrow(cx, box_y + 146, 0, enabled && flash < 0 ? COLOR_WHITE : fg);
+}
+
 void menu_quick_screen_draw(void)
 {
     int index;
@@ -694,10 +774,18 @@ void menu_quick_screen_draw(void)
         /* the Standard (FILM / VIDEO / CROP MOOD) the cells belong to */
         struct menu_display_info std_info;
         char * std = menu_get_str_value_from_script("Movie", "Standard", &std_info);
+        /* "QUICK MENU" small, grey and letter-spaced; the Standard after it in the large white font.
+         * y 14 puts the small font on the same baseline as the large one at y 4. */
+        uint32_t qf = FONT(FONT_MED, UI_DIM, UI_BG);
+        int qx = 16;
+        for (const char *c = "QUICK MENU"; *c; c++)
+        {
+            char ch[2] = { *c, 0 };
+            bmp_printf(qf, qx, 14, "%s", ch);
+            qx += bmp_string_width(qf, ch) + 2;
+        }
         if (std && std[0])
-            bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), 16, 4, "QUICK MENU > %s", std);
-        else
-            bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), 16, 4, "QUICK MENU");
+            bmp_printf(slim_ui_font_spec(UI_TEXT, UI_BG), qx + 12, 4, "%s", std);
     }
     /* divider under the title; the bottom 50 px stay plain background, like the other pages */
     bmp_fill(UI_LINE, 0, 47, 720, 1);
@@ -734,7 +822,7 @@ void menu_quick_screen_draw(void)
               [QS_SHUTTER] = "SHUTTER", [QS_ISO] = "ISO", [QS_WB] = "WB", [QS_APERTURE] = "APERTURE" };
 
         /* Film Edge cell: thin outline, or the whole box solid cream when selected */
-        /* dark look: solid tile, orange when selected, no outline */
+        /* refined look: dark panel; the selected one solid orange with black text and chevrons */
         rr_tile(box_x, box_y, box_w, box_h, tile_bg, tile_bg);
 
         color = !enabled ? UI_MUTED : selected ? UI_SEL_TEXT : UI_TEXT;
@@ -970,7 +1058,7 @@ void menu_grid_draw(void)
         int fg = selected ? UI_SEL_TEXT : UI_TEXT;
         int tile_bg = selected ? UI_SEL : UI_TILE;
 
-        /* dark look: solid tile, orange when selected, the same as the quick menu cells */
+        /* the same as the quick menu cells: solid orange when selected */
         rr_tile(x, y, w, h, tile_bg, tile_bg);
 
         /* Shared bottom baseline for all four labels. */
@@ -1073,6 +1161,10 @@ void menu_quick_screen_draw(void) { }
 int menu_quick_screen_handle_touch(int x, int y) { (void)x; (void)y; return 1; }
 void menu_quick_screen_touch_release(void) { }
 int menu_quick_screen_handle_key(int button_code) { (void)button_code; return 1; }
+int slim_touch_tile_width(const char *text) { (void)text; return 168; }
+void slim_touch_tile_draw(int cx, int box_y, int box_w, const char *label,
+                          const char *text, int enabled, int flash)
+{ (void)cx; (void)box_y; (void)box_w; (void)label; (void)text; (void)enabled; (void)flash; }
 int menu_white_card_wb_is_active(void) { return 0; }
 void menu_white_card_wb_open(void) { }
 void menu_white_card_wb_close(void) { }

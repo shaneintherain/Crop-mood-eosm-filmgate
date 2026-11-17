@@ -2450,6 +2450,9 @@ static LVINFO_UPDATE_FUNC(recording_status)
     if (!measured_write_speed) return;
 
     prev_color = item->color_bg = update_status(buffer, sizeof(buffer));
+    /* refined look: no grey box behind the time while all is well; the amber / red / blue
+     * warning boxes stay */
+    if (item->color_bg == UI_PILL) item->color_bg = COLOR_BLACK;
     if (prev_color == 19) item->color_fg = COLOR_BLACK;   /* dark text on amber */
 }
 

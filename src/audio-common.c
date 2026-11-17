@@ -361,7 +361,7 @@ draw_meter(
     /* Solid bar: white, amber from -12 dB, red from -3 dB, on a dark grey track.
      * Every pixel is drawn exactly once per refresh (no clearing first), so it does not flicker.
      * No peak-hold marker: the bar simply follows the level. */
-    const int bar_x0 = x_origin + AUDIO_METER_OFFSET * 4;
+    const int bar_x0 = x_origin + AUDIO_METER_LABEL_W;
     const int w = (int) width;
     const int fast = COERCE((int32_t)w + db_peak_fast * (int32_t)w / 40, 0, w);
     const int amber_x = w - 12 * w / 40;
@@ -372,18 +372,27 @@ draw_meter(
     {
         int x0 = edges[band], x1 = edges[band + 1];
         int xl = COERCE(fast, x0, x1);          /* lit part of this band */
+        /* refined look: a thin (4 px) bar in the middle of the meter's row; the rest of the row
+         * is filled with the bar background, so every pixel is still drawn once per refresh */
+        const int bh = MIN(4, (int) meter_height - 2);
+        const int by = y_origin + ((int) meter_height - bh) / 2;
+        bmp_fill(COLOR_BLACK, bar_x0 + x0, y_origin + 1, x1 - x0, by - (y_origin + 1));
+        bmp_fill(COLOR_BLACK, bar_x0 + x0, by + bh, x1 - x0, y_origin + (int) meter_height - 1 - (by + bh));
         if (xl > x0)
-            bmp_fill(lit_color[band], bar_x0 + x0, y_origin + 1, xl - x0, (int) meter_height - 2);
+            bmp_fill(lit_color[band], bar_x0 + x0, by, xl - x0, bh);
         if (x1 > xl)
-            bmp_fill(UI_PILL, bar_x0 + xl, y_origin + 1, x1 - xl, (int) meter_height - 2);
+            bmp_fill(UI_PILL, bar_x0 + xl, by, x1 - xl, bh);
     }
 
-    // Write the current level
-    bmp_printf( FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), x_origin, y_origin, "%s %02d", label, MIN(db_peak, -1) );
+    /* refined look: only the channel letter (L / R) in grey; no input name, no dB value */
+    (void) db_peak;
+    /* no "%c" here: the camera's printf does not handle it (it filled the whole bar with the letter) */
+    char letter[4] = { label[0], ' ', ' ', 0 };
+    bmp_printf( FONT(FONT_SMALL, COLOR_GRAY(60), COLOR_BLACK), x_origin, y_origin, "%s", letter );
 }
 
 
-static void
+__attribute__((unused)) static void
 draw_ticks(
    int x_origin,
    int y_origin,
@@ -495,8 +504,8 @@ static void draw_meters(void)
         return;
     }
 
+    /* refined look: two thin bars, no tick marks between them */
     draw_meter( x0, y0 + 0, 10, &audio_levels[0], left_label, width);
-    draw_ticks( x0, y0 + 10, 2, width);
     draw_meter( x0, y0 + 12, 10, &audio_levels[1], right_label, width);
 
         if (gui_menu_shown() && alc_enable)
@@ -514,7 +523,7 @@ static LVINFO_UPDATE_FUNC(audio_meter_update)
     {
         /* if it's alone, draw it big; if not, draw it smaller */
         int is_big = fontspec_width(item->fontspec) >= fontspec_width(FONT_MED_LARGE);
-        int label_width = AUDIO_METER_OFFSET*4;
+        int label_width = AUDIO_METER_LABEL_W;
         item->width = MIN((is_big ? 720 : 360) / 40 * 40, 720-item->x);
         audio_meter_font = item->fontspec;
         if (audio_tc_mode())

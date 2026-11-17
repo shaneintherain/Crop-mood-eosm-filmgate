@@ -180,6 +180,11 @@ static void mlv_play_fit_left(char *left, const char *right)
 #define PB_TEXT     COLOR_WHITE
 #define PB_DIM      COLOR_WHITE
 #define PB_TRACK    2      /* extra pixels between letters */
+/* refined look (test): the selected button is a solid orange capsule with black content,
+ * secondary text in grey.  Not yet confirmed that Canon's PLAY palette keeps these colours. */
+#define PB_SEL      COLOR_ORANGE
+#define PB_SEL_TEXT COLOR_BLACK
+#define PB_GREY     COLOR_GRAY(60)
 
 static int pb_isqrt(int v)
 {
@@ -315,28 +320,58 @@ static void mlv_play_draw_info(screen_msg_t *m, int clear)
     int ty1 = y0 + 9;
     int ty2 = ty1 + fh + 3;
     int card_h = (ty2 + fh + 9) - y0;
-
-    /* frame counter pill, as wide as the biggest counter of this clip ("1284/3601" -> "3601/3601") */
-    char widest[SCREEN_MSG_LEN];
-    const char *slash = strchr(m->botRight, '/');
-    const char *total = slash ? slash + 1 : m->botRight;
-    snprintf(widest, sizeof(widest), "%s/%s", total, total);
-    int pill_w = bmp_string_width(FONT_MED, widest) + 28;
-    int pill_x = x1 - 12 - pill_w;
-    int pill_y = ty2 - 3;
-    int pill_h = fh + 6;
+    int grey = FONT(FONT_MED, PB_GREY, COLOR_BG);
+    int white = FONT(FONT_MED, PB_TEXT, COLOR_BG);
 
     if (clear)
     {
         bmp_fill(COLOR_EMPTY, 0, 0, 720, y0 + card_h + 4);
-        pb_round_rect(x0, y0, x1 - x0, card_h, 18, COLOR_BG);
-        pb_round_rect(pill_x, pill_y, pill_w, pill_h, pill_h / 2, PB_NAVY);
+        pb_round_rect(x0, y0, x1 - x0, card_h, 12, COLOR_BG);
     }
 
-    bmp_printf(FONT(FONT_MED, PB_DIM, COLOR_BG), x0 + 18, ty1, "%s", m->topLeft);
-    bmp_printf(FONT(FONT_MED, PB_DIM, COLOR_BG) | FONT_ALIGN_RIGHT, x1 - 18, ty1, "%s", m->topRight);
-    bmp_printf(FONT(FONT_MED, PB_TEXT, COLOR_BG), x0 + 18, ty2, "%s", m->botLeft);
-    bmp_printf(FONT(FONT_MED, PB_TEXT, PB_NAVY) | FONT_ALIGN_RIGHT, pill_x + pill_w - 14, ty2, "%s", m->botRight);
+    /* first line: date on the left, lens on the right, both small grey labels */
+    bmp_printf(grey, x0 + 18, ty1, "%s", m->topLeft);
+    bmp_printf(grey | FONT_ALIGN_RIGHT, x1 - 18, ty1, "%s", m->topRight);
+
+    /* second line: clip name in white, then its details in grey (split at the first double space) */
+    {
+        char name[SCREEN_MSG_LEN];
+        snprintf(name, sizeof(name), "%s", m->botLeft);
+        char *details = strstr(name, "  ");
+        if (details)
+        {
+            *details = 0;
+            details += 2;
+        }
+        int w = bmp_printf(white, x0 + 18, ty2, "%s", name);
+        if (details && *details)
+            bmp_printf(grey, x0 + 18 + w + 12, ty2, "%s", details);
+    }
+
+    /* frame counter on the right: current frame in white, " / total" in grey.  Cleared to
+     * the width of the biggest counter of this clip, so a shorter number leaves nothing behind. */
+    {
+        char cur[SCREEN_MSG_LEN];
+        char total[SCREEN_MSG_LEN];
+        char widest[SCREEN_MSG_LEN];
+        snprintf(cur, sizeof(cur), "%s", m->botRight);
+        char *slash = strchr(cur, '/');
+        total[0] = 0;
+        if (slash)
+        {
+            snprintf(total, sizeof(total), " / %s", slash + 1);
+            *slash = 0;
+        }
+        snprintf(widest, sizeof(widest), "%s", slash ? slash + 1 : cur);
+        int tw = bmp_string_width(grey, total);
+        int cw = bmp_string_width(white, cur);
+        int ww = bmp_string_width(white, widest);
+        int right = x1 - 18;
+        bmp_fill(COLOR_BG, right - tw - ww, ty2, ww - cw, fh);
+        bmp_printf(white, right - tw - cw, ty2, "%s", cur);
+        if (total[0])
+            bmp_printf(grey, right - tw, ty2, "%s", total);
+    }
 }
 
 typedef struct 
@@ -942,12 +977,12 @@ static uint32_t mlv_play_osd_draw()
         for(uint32_t pos = 0; pos < COUNT(mlv_play_osd_items); pos++)
         {
             int selected = (pos == mlv_play_osd_item);
-            int bg = selected ? PB_SKY : PB_NAVY;
-            int fg = selected ? PB_NAVY : PB_TEXT;
+            int bg = selected ? PB_SEL : PB_NAVY;
+            int fg = selected ? PB_SEL_TEXT : PB_TEXT;
 
             if (selected)
             {
-                pb_round_rect(cx, y + 7, width[pos], cap_h, cap_h / 2, PB_SKY);
+                pb_round_rect(cx, y + 7, width[pos], cap_h, cap_h / 2, PB_SEL);
             }
 
             if (kind[pos] == PB_TEXT_BUTTON)
@@ -2308,7 +2343,8 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
                         focusMode = "MF";
                     }
                     
-                    snprintf(buffer->messages.topRight, SCREEN_MSG_LEN, "%s, %dmm, %s, %s", lens_block.lensName, lens_block.focalLength, lens_block.stabilizerMode?"IS":"no IS", focusMode);
+                    snprintf(buffer->messages.topRight, SCREEN_MSG_LEN, "%s   %d MM", lens_block.lensName, lens_block.focalLength);
+                    (void) focusMode;
                 }
                     
                 if(rtci_block.timestamp)
@@ -2316,7 +2352,7 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
                     snprintf(buffer->messages.topLeft, SCREEN_MSG_LEN, "%02d.%02d.%04d %02d:%02d:%02d", rtci_block.tm_mday, rtci_block.tm_mon + 1, 1900 + rtci_block.tm_year, rtci_block.tm_hour, rtci_block.tm_min, rtci_block.tm_sec);
                 }
                 
-                snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s  %dx%d %dbpp%s", mlv_play_short_name(filename), rawi_block.xRes, rawi_block.yRes, rawi_block.raw_info.bits_per_pixel, (main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92)?" LJ92":"");
+                snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s  %dx%d   %d BIT%s", mlv_play_short_name(filename), rawi_block.xRes, rawi_block.yRes, rawi_block.raw_info.bits_per_pixel, (main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92)?"   LJ92":"");
                 snprintf(buffer->messages.botRight, SCREEN_MSG_LEN, "%d/%d", vidf_block.frameNumber + 1, frame_count);
                 mlv_play_fit_left(buffer->messages.botLeft, buffer->messages.botRight);
                 

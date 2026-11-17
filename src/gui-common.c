@@ -116,9 +116,11 @@ static int slim_crop_rec_transition_busy(void)
  * choices without creating a lock-order dependency in the overlay task. */
 static void slim_touch_lv_refresh_menu_editor(enum lvinfo_touch_field field)
 {
+    /* one value per field: Film Format, Frame, FPS or Bit Depth */
     int control = field == LVINFO_TOUCH_CROP ? 0 :
                   field == LVINFO_TOUCH_FPS ? 1 :
-                  field == LVINFO_TOUCH_BIT_DEPTH ? 2 : -1;
+                  field == LVINFO_TOUCH_BIT_DEPTH ? 2 :
+                  field == LVINFO_TOUCH_FRAME ? 3 : -1;
     char value[32] = "--";
     int enabled = 0;
 
@@ -130,13 +132,6 @@ static void slim_touch_lv_refresh_menu_editor(enum lvinfo_touch_field field)
         lvinfo_touch_editor_set_item(0, value, enabled);
     else
         lvinfo_touch_editor_set_item(0, value, 0);
-    if (control == 0)
-    {
-        enabled = 0;
-        value_ok = crop_rec_touch_get_value(
-            control, 1, value, sizeof(value), &enabled);
-        lvinfo_touch_editor_set_item(1, value, value_ok && enabled);
-    }
 }
 
 static void slim_touch_lv_refresh_menu_editor_delayed(int timer, void *opaque)
@@ -158,9 +153,11 @@ static void slim_touch_lv_apply_pending_menu_change(int timer, void *opaque)
     slim_touch_pending_menu_change = 0;
     if (slim_touch_pending_field == LVINFO_TOUCH_CROP)
     {
-        changed = crop_rec_touch_adjust(
-            slim_touch_pending_slot == 0 ? 0 : 1,
-            slim_touch_pending_sign);
+        changed = crop_rec_touch_adjust(0, slim_touch_pending_sign);
+    }
+    else if (slim_touch_pending_field == LVINFO_TOUCH_FRAME)
+    {
+        changed = crop_rec_touch_adjust(1, slim_touch_pending_sign);
     }
     else if (slim_touch_pending_field == LVINFO_TOUCH_FPS)
     {
@@ -209,6 +206,7 @@ static void slim_touch_lv_change_field(enum lvinfo_touch_field field,
             kelvin_toggle((void *)-1, sign);
             break;
         case LVINFO_TOUCH_CROP:
+        case LVINFO_TOUCH_FRAME:
             deferred = 1;
             slim_touch_pending_menu_change = 1;
             slim_touch_pending_field = field;
@@ -278,8 +276,8 @@ static int slim_touch_lv_direct_editor(struct event * event)
      * editor a fraction of a second later. */
     slim_touch_tap_count = 0;
     slim_touch_tap_deadline = 0;
-    if (field == LVINFO_TOUCH_CROP || field == LVINFO_TOUCH_FPS ||
-        field == LVINFO_TOUCH_BIT_DEPTH)
+    if (field == LVINFO_TOUCH_CROP || field == LVINFO_TOUCH_FRAME ||
+        field == LVINFO_TOUCH_FPS || field == LVINFO_TOUCH_BIT_DEPTH)
         delayed_call(20, slim_touch_lv_refresh_menu_editor_delayed, 0);
     return 1;
 }
