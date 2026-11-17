@@ -1116,8 +1116,7 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                  * Medium / Higher 1x3 presets (0xA0, 0xE0, 0x1A0), which are centred the same way */
                 if (Anam_Narrow)
                 {
-                    /* TEST 2: 25 fps reads the 1280 columns of 1x3 16:9 Medium (see reg_override_1X3) */
-                    cmos_new[5] = Framerate_25 ? 0x1A0 : 0x220;
+                    cmos_new[5] = 0x220;
                     cmos_new[7] = 0xB05;
                 }
             break;
@@ -2169,25 +2168,25 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
 {
     if (Anam_Narrow)
     {
-        /* FilmGate 1x3 Narrow (TEST 2).  Test 1 (a 356-362 clock line) gave no picture and pink
-         * recordings, so the line is back at 0x1FF (512 clocks), as every narrower 1x3 preset.
-         * Two variants, one per frame rate, to tell apart what the sensor refuses:
-         *   23.976: 1072 columns from sensor column ~992 (cmos_new[5] 0x220), RAW_H 0x12E
-         *   25:     1280 columns from ~744 (0x1A0), the columns of 1x3 16:9 Medium (UHD), which works
-         * Rows, Preview_V and YUV_HD_S_V as 1x3 2.35:1 Highest.  RAW_H = width / 4 + 34,
-         * Preview_H = width - 4, YUV_HD_S_H = width / 4 + 3, as the other 1x3 presets. */
+        /* FilmGate 1x3 Narrow (TEST 3): 1072 columns x the 2214 rows of 1x3 2.35:1 Highest.
+         *   test 1: a 356-362 clock line: no picture, pink recordings
+         *   test 2: 512 clocks (0x1FF, as the other 1x3 presets): works, 1072 and 1280 columns
+         * Now two line lengths in between, one per frame rate, to find the shortest the sensor takes:
+         *   23.976: 408 clocks x 3271 lines (+74 ppm)    25: 456 clocks x 2807 lines (+6 ppm)
+         * RAW_H = width / 4 + 34, Preview_H = width - 4, YUV_HD_S_H = width / 4 + 3, as the other
+         * 1x3 presets; rows, Preview_V and YUV_HD_S_V as 2.35:1 Highest. */
         if (is_EOSM)
         {
-            RAW_H         = (Framerate_25 ? 0x162 : 0x12E) + reg_width;
+            RAW_H         = 0x12E + reg_width;
             RAW_V         = 0x8C3 + reg_height;
-            TimerA        = 0x1FF;
-            TimerB        = Framerate_25 ? 0x9C3 : 0xA2E;   /* 512 x 2500 = 25.000; 512 x 2607 = 23.974 */
+            if (Framerate_25) { TimerA = 0x1C7; TimerB = 0xAF6; }
+            else              { TimerA = 0x197; TimerB = 0xCC6; }
         }
 
-        Preview_H     = Framerate_25 ? 1276 : 1068;
+        Preview_H     = 1068;
         Preview_V     = 2214;
         Preview_R     = 0x1D000D;
-        YUV_HD_S_H    = Framerate_25 ? 0x1050142 : 0x105010F;
+        YUV_HD_S_H    = 0x105010F;
         YUV_HD_S_V    = 0x1050341;
     }
     else if (Anam_FLV)
@@ -5131,7 +5130,8 @@ static int slim_line_clocks(void)
             if (fps == 2) return 0x2CF + 1;
             return 0x2CB + 1;
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest (Timer B only) */
-        case FILM_RO_1X3N: return 0x1FF + 1;                     /* 1x3 Narrow (test 2: as the other 1x3) */
+        case FILM_RO_1X3N:                                       /* 1x3 Narrow (test 3) */
+            return (fps == 1) ? 0x1C7 + 1 : 0x197 + 1;
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
         case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
             if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
@@ -5173,7 +5173,7 @@ static int slim_crop_fps_mask(void)
 
     if (CROP_PRESET_MENU == CROP_PRESET_1X3)
     {
-        /* FilmGate 1x3 Narrow: 23.976 / 25 (a 512-clock line is too long for 29.97 with 2214 rows) */
+        /* FilmGate 1x3 Narrow: 23.976 / 25 (29.97 needs a line under 482 clocks: not until it is known) */
         if (crop_preset_1x3_res_menu == 4)
             return 0x1 | 0x2;
         int p = COERCE(crop_preset_1x3_res_menu, 0, 2);
