@@ -555,14 +555,18 @@ static int quick_screen_value(
             snprintf(buf, size, "%s", lens_format_shutter_reciprocal(
                 get_current_shutter_reciprocal_x1000(), 5));
         }
+        else if (!shutter_angle_display())
+        {
+            /* VIDEO and CROP MOOD: the shutter speed, as the shooting screen shows it (1/50) */
+            snprintf(buf, size, "%s", lens_format_shutter_reciprocal(
+                get_current_shutter_reciprocal_x1000(), 2));
+        }
         else
         {
-            /* The normal Exposure row already calculates the angle from
-             * current FPS. Reuse those digits and draw the degree ring.
-             * (FILM standard: the angle is the row's value, the speed its rinfo.) */
-            const char * angle = shutter_angle_display() ? raw_value : info.rinfo;
-            snprintf(buf, size, "%s", angle[0] ? angle : "--");
-            *draw_degree = angle[0] != '\0';
+            /* FILM: the angle.  The normal Exposure row already calculates it from
+             * current FPS (its value); reuse those digits and draw the degree ring. */
+            snprintf(buf, size, "%s", raw_value[0] ? raw_value : "--");
+            *draw_degree = !streq(raw_value, "--");
         }
     }
     else if (index == QS_APERTURE)
@@ -657,6 +661,10 @@ static int quick_screen_adjust(int index, int delta)
     /* Film Format cell: Up goes towards A35, Down steps to the next smaller film
      * (A35 > A35-ANA > S16 > 16mm > S8 > 8mm).  Frame cell the same way: Up towards the bigger
      * frame (2.35:1 > 1.85:1 > 16:9 > Actual).  The other cells keep Up = increase. */
+    /* Shutter: Up raises the number shown, as in the tap-to-change tile: 1/50 -> 1/60, and in
+     * FILM (an angle) 172 -> 180 degrees, which is the slower shutter, so reversed there. */
+    if (index == QS_SHUTTER && shutter_angle_display())
+        delta = -delta;
     menu_adjust_value_by_name(
         item->adjust_menu, item->adjust_entry,
         (index == QS_FORMAT || index == QS_FRAME) ? -delta : delta);

@@ -1,5 +1,10 @@
 #ifndef _cropmarks_h_
 #define _cropmarks_h_
+
+/* Width of the white film frame line, in pixels of the 720x480 overlay (it sits just outside the
+ * frame).  Was 2; 1 since V10 (a 1 px GREY line once looked dotted on the EOS M LCD; white does not).
+ * Every place that draws the line uses this, so going back to 2 is a one-line change. */
+#define FILM_LINE_W 1
 /**
  * @brief Set custom movie cropmarks in LiveView
  *

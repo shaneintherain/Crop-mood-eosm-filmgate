@@ -476,6 +476,7 @@ void monitoring_graph_clear_region(int x, int y, int w, int h)
     )
 }
 
+#include "cropmarks.h"   /* FILM_LINE_W */
 #include "cropmarks.c"
 
 PROP_HANDLER(PROP_HOUTPUT_TYPE)

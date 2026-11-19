@@ -595,9 +595,10 @@ static void FAST default_movie_cropmarks()
             if(draw || (x < x1 || x > x2))
             {
                 /* default cropmarks are black */
-                /* border: a 2 px white line just outside the frame (a 1 px grey one
-                 * looked dotted on the EOS M screen) */
-                int border = (x > x1-3 && x < x2+3 && y > y1-3 && y < y2+3);
+                /* border: a FILM_LINE_W px white line just outside the frame (a 1 px grey one
+                 * looked dotted on the EOS M screen; white is solid) */
+                int border = (x >= x1 - FILM_LINE_W && x <= x2 + FILM_LINE_W &&
+                              y >= y1 - FILM_LINE_W && y <= y2 + FILM_LINE_W);
                 newcolor = border ? COLOR_WHITE : COLOR_BLACK;
             }
             
@@ -648,7 +649,8 @@ static void FAST default_movie_cropmarks()
         if (x2 > x1 && y2 > y1)
         {
             bmp_draw_rect(COLOR_WHITE, x1 - 1, y1 - 1, x2 - x1 + 3, y2 - y1 + 3);
-            bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 5, y2 - y1 + 5);
+            if (FILM_LINE_W >= 2)
+                bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 5, y2 - y1 + 5);
         }
         lens_display_set_dirty();   /* the info bars may sit in the margins: draw them again */
     }
@@ -682,10 +684,11 @@ int film_canvas_paint(int fill_outside)
     }
     /* the picture area: transparent, so Live View shows */
     bmp_fill(COLOR_EMPTY, x1, y1, x2 - x1 + 1, y2 - y1 + 1);
-    /* the frame line exactly as default_movie_cropmarks() draws it: 2 px just outside */
+    /* the frame line exactly as default_movie_cropmarks() draws it: FILM_LINE_W px just outside */
     /* (bmp_draw_rect covers x0 .. x0 + w - 1, like bmp_fill) */
     bmp_draw_rect(COLOR_WHITE, x1 - 1, y1 - 1, x2 - x1 + 3, y2 - y1 + 3);
-    bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 5, y2 - y1 + 5);
+    if (FILM_LINE_W >= 2)
+        bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 5, y2 - y1 + 5);
     return 1;
 }
 
@@ -715,7 +718,7 @@ int film_canvas_restore_area(int x, int y, int w, int h)
 
     int ax2 = x + w - 1, ay2 = y + h - 1;
     bmp_fill(COLOR_BLACK, x, y, w, h);
-    fill_clipped(COLOR_WHITE, x, y, ax2, ay2, x1 - 2, y1 - 2, x2 + 2, y2 + 2);
+    fill_clipped(COLOR_WHITE, x, y, ax2, ay2, x1 - FILM_LINE_W, y1 - FILM_LINE_W, x2 + FILM_LINE_W, y2 + FILM_LINE_W);
     fill_clipped(COLOR_EMPTY, x, y, ax2, ay2, x1, y1, x2, y2);
     return 1;
 }

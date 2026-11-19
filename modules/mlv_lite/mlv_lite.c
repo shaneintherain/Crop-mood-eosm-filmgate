@@ -952,9 +952,10 @@ static void status_area_restore(int x, int y, int w, int h)
         if (x < fx)   bmp_fill(COLOR_BLACK, x, my1, MIN(x2, fx) - x, my2 - my1);
         if (x2 > fx2) bmp_fill(COLOR_BLACK, MAX(x, fx2), my1, x2 - MAX(x, fx2), my2 - my1);
     }
-    /* the 2 px frame line, as draw_film_bars() draws it */
+    /* the frame line (FILM_LINE_W px), as draw_film_bars() draws it */
     bmp_draw_rect(COLOR_WHITE, fx - 1, fy - 1, fw + 2, fh + 2);
-    bmp_draw_rect(COLOR_WHITE, fx - 2, fy - 2, fw + 4, fh + 4);
+    if (FILM_LINE_W >= 2)
+        bmp_draw_rect(COLOR_WHITE, fx - 2, fy - 2, fw + 4, fh + 4);
 }
 
 static int film_bars_missing(int full)
@@ -2773,9 +2774,10 @@ static void draw_film_bars(void)
         bmp_fill(COLOR_BLACK, BMP_W_MINUS, y2, BMP_W_PLUS - BMP_W_MINUS, BMP_H_PLUS - y2);             /* bottom */
         bmp_fill(COLOR_BLACK, BMP_W_MINUS, y1, x1 - BMP_W_MINUS, y2 - y1);                             /* left   */
         bmp_fill(COLOR_BLACK, x2, y1, BMP_W_PLUS - x2, y2 - y1);                                       /* right  */
-        /* edge: 2 px white line just outside the frame, the same as the normal frame line */
+        /* edge: FILM_LINE_W px white line just outside the frame, the same as the normal frame line */
         bmp_draw_rect(COLOR_WHITE, x1 - 1, y1 - 1, x2 - x1 + 2, y2 - y1 + 2);
-        bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 4, y2 - y1 + 4);
+        if (FILM_LINE_W >= 2)
+            bmp_draw_rect(COLOR_WHITE, x1 - 2, y1 - 2, x2 - x1 + 4, y2 - y1 + 4);
     }
 }
 
