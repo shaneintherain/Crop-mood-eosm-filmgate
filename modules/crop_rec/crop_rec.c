@@ -3354,7 +3354,9 @@ int GetShiftValue()
     {
         if (CROP_PRESET_MENU == CROP_PRESET_1X1)
             return 2 * 60;                  /* Narrow: 600 px wide, 60 px each side */
-        return 1 * 1440 + 2 * 14;           /* 1x3 Narrow: 694 x 478, 13 px each side -> 14, 1 line down */
+        /* TEST (the preview was still blue at 14 px): 23.976 shifts 16 px (32 bytes, a multiple of 8
+         * as every working shift here), 25 no sideways shift at all (1 line down only) */
+        return 1 * 1440 + (crop_preset_fps == 1 ? 0 : 2 * 16);
     }
 
     if (CROP_PRESET_MENU == CROP_PRESET_1X1)
