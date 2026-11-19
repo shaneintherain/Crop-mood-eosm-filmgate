@@ -39,9 +39,6 @@ int main(void)
         { "1x3 2.35 Highest", 0x207, 0xA07, 0x8C3, 2397, 0, 1 },   /* tight: 2567 lines, as V8 */
         { "1x3 2.39 Highest", 0x207, 0xA05, 0x89F, 2397, 0, 1 },
         { "1x3 2.35 Medium",  0x1FF, 0xA2D, 0x773, 2398, 0, 1 },
-        { "Tiny 24",          0x130, 0x1117, 0x315, 2398, 305, 0 },  /* FilmGate Tiny (test lines) */
-        { "Tiny 25",          0x18F, 0xC7F, 0x315, 2500, 400, 0 },
-        { "Tiny 30",          0x1E5, 0x894, 0x315, 2997, 486, 0 },
         { "1x3 Narrow 24",    0x1FF, 0xA2E, 0x8C3, 2397, 512, 1 },   /* FilmGate 1x3 Narrow */
         { "1x3 Narrow 25",    0x1FF, 0x9C3, 0x8C3, 2500, 512, 1 },
         { "3x3 24",           0x20F, 0x9DE, 0x4A5, 2398, 0, 0 },

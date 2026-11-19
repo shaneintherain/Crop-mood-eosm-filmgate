@@ -1030,10 +1030,12 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                  * put a 864 wide readout's centre 4 px left of it (film_readouts dx 4 does the rest).
                  * Rows: 2 more 120-row steps down (0xAC9 -> 0xACB; up was -1 for 1440p / 1280p) start
                  * 240 rows lower; Narrow's window centre (row 620) is then row 380, the centre of 760 */
+                /* TEST 2: one change from Narrow per rate (see reg_override_1X1):
+                 *   23.976 the columns moved (0x48C), 25 the rows moved (0xACB), 29.97 neither */
                 if (CROP_Tiny)
                 {
-                    cmos_new[5] = 0x3CC + 3 * 0x40;
-                    cmos_new[7] = 0xACB;
+                    cmos_new[5] = Framerate_24 ? 0x3CC + 3 * 0x40 : 0x3CC;
+                    cmos_new[7] = Framerate_25 ? 0xACB : 0xAC9;
                 }
                 
                 if (CROP_Full_Res)
@@ -2048,30 +2050,32 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             YUV_HD_S_H = 0x450080;
     }
 
-    /* FilmGate Tiny 864x760 (TEST): 1/4" (832x624 and 832x468), the whole screen height.
-     * RAW_H = width / 4 + 34, RAW_V = rows + 29, as Narrow.  A narrower line is shorter: at least
-     * RAW_H + 52 = 302 clocks if 1:1 follows the Narrow rule (486 there = 0x1B2 + 52).  First test,
-     * one line length per rate (whole Timer B within 10 ppm of the rate):
-     *   23.976: 305 x 4376     25: 400 x 3200     29.97: 486 x 2197 (Narrow's own line)
-     * Preview: 760 rows fill the 480 lines (YUV_HD_S_V in 0x28: Narrow 0x44 for 1280, 1080p 0x39 for
-     * 1080: in = rows / 18.8); 864 columns at the same scale are 548 px wide: in = 57 (fills 720 for
-     * 860 px, as 0x6A for 1596) x 720 / 548 = 75.  Centred by GetShiftValue (LCD). */
+    /* FilmGate Tiny 864x760 (TEST 2): 1/4".  Test 1 (columns, rows, width and line changed at once)
+     * gave no picture at any rate, even at Narrow's own line (29.97).  Now each rate changes ONE thing
+     * from Narrow (which works), at Narrow's own line, to find which one the sensor refuses:
+     *   23.976: 864 columns (RAW_H 0xFA) from the moved first column (cmos_new[5] 0x48C), Narrow's rows
+     *   25:     760 rows (RAW_V 0x315) from the moved first row (cmos_new[7] 0xACB), Narrow's columns
+     *   29.97:  864 columns (RAW_H 0xFA) from Narrow's own first column, Narrow's rows
+     * The preview fills the screen (stretched; no centring) and the frame line is not right: only
+     * "picture or not" matters in this test. */
     if (CROP_Tiny)
     {
+        int narrow_cols = Framerate_25;
+        int narrow_rows = !Framerate_25;
         if (is_EOSM)
         {
-            RAW_H    = 0xFA + reg_width;
-            RAW_V    = 0x315 + reg_height;
-            if (Framerate_25)      { TimerA = 0x18F; TimerB = 0xC7F; }
-            else if (Framerate_30) { TimerA = 0x1E5; TimerB = 0x894; }
-            else                   { TimerA = 0x130; TimerB = 0x1117; }
+            RAW_H    = (narrow_cols ? 0x1B2 : 0xFA) + reg_width;
+            RAW_V    = (narrow_rows ? 0x51D : 0x315) + reg_height;
+            if (Framerate_25)      { TimerA = 0x1ED; TimerB = 0xA1E; }  /* Narrow 25 */
+            else if (Framerate_30) { TimerA = 0x1E9; TimerB = 0x882; }  /* Narrow 29.97 */
+            else                   { TimerA = 0x1F1; TimerB = 0xA77; }  /* Narrow 23.976 */
         }
 
-        Preview_H     = 860;
-        Preview_V     = 760;
+        Preview_H     = narrow_cols ? 1596 : 860;
+        Preview_V     = narrow_rows ? 1280 : 760;
         Preview_R     = 0x19000D;
-        YUV_HD_S_H    = 0x45004B;
-        YUV_HD_S_V    = 0x250028;
+        YUV_HD_S_H    = narrow_cols ? 0x45006A : 0x450039;
+        YUV_HD_S_V    = narrow_rows ? 0x250044 : 0x250028;
 
         Black_Bar     = 0;
         Preview_Control = 1;
@@ -3395,7 +3399,7 @@ int GetShiftValue()
      * multiple of 8 bytes (4 px): 26 and 28 bytes turned the preview blue (the recording was fine);
      * 0 and 32 were right.  Every other shift here is a multiple of 8 too (Narrow 120, 1620p 0x43F0). */
     if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)
-        return is_LCD_Output() ? 2 * 84 : 0;   /* Tiny: 548 px wide, 86 px each side (84: a multiple of 4) */
+        return 0;                           /* Tiny test 2: no centring (548 px, 86 each side -> 84 later) */
 
     if (crop_rec_narrow_fit())
     {
@@ -3777,10 +3781,10 @@ static void FAST PATH_SelectPathDriveMode_hook(uint32_t* regs, uint32_t* stack, 
         EDMAC_9_Vertical_Change = 0;
     }
 
-    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)    // Tiny: centred, sides cleared (LCD)
+    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)    // Tiny test 2: fills the screen
     {
-        Shift_Preview = is_LCD_Output();
-        Clear_Artifacts = is_LCD_Output();
+        Shift_Preview = 0;
+        Clear_Artifacts = 0;
         EDMAC_9_Vertical_Change = 0;
     }
 
@@ -5243,10 +5247,10 @@ static int slim_line_clocks(void)
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest (Timer B only) */
         case FILM_RO_1X3N: return 0x1FF + 1;                     /* 1x3 Narrow: as the other narrower 1x3 */
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
-        case FILM_RO_TINY:                                       /* 1:1 Tiny 864x760 (test lines) */
-            if (fps == 1) return 0x18F + 1;
-            if (fps == 2) return 0x1E5 + 1;
-            return 0x130 + 1;
+        case FILM_RO_TINY:                                       /* 1:1 Tiny (test 2: Narrow's lines) */
+            if (fps == 1) return 0x1ED + 1;
+            if (fps == 2) return 0x1E9 + 1;
+            return 0x1F1 + 1;
         case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
             if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
             if (fps == 2 || fps == 3) return 0x1E9 + 1;          /* 29.97 / 18 fps */
