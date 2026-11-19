@@ -65,12 +65,13 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
                                                  * columns move only in ~124 px steps (cmos_new[5]); 1536 wide sat
                                                  * ~40 px left (LCD), so 1600 wide (centre 32 px right) and dx 8.
                                                  * Preview stretched to the full width for now (1.2x sideways) */
-    { 1072, 2214,  9,  65, 3, 720,   0,   0 },  /* 1x3 Narrow (FilmGate, TEST): the 1x3 2.35:1 rows, only the middle
-                                                 * 3216 sensor columns (first column 8 steps of 124 in, cmos_new[5]
-                                                 * 0x220).  For the 1x3 frames that are not full width (S16, 16mm,
-                                                 * 1").  Shorter lines: ~32 % less rolling shutter, if the sensor
-                                                 * accepts a line under 0x1FF in 1x3.  Preview stretched sideways
-                                                 * to the full width for now (as Narrow); the frame line follows */
+    { 1072, 2214,  9,  65, 3, 720,   0,   0 },  /* 1x3 Narrow (FilmGate): the 1x3 2.35:1 rows, only the middle 3216
+                                                 * sensor columns (first column 8 steps of 124 in, cmos_new[5] 0x220).
+                                                 * For the 1x3 frames that are not full width (S16, 16mm, 1").  The
+                                                 * line stays at 512 clocks (shorter ones gave pink / black frames on
+                                                 * the camera), so the rolling shutter is as before (-1.5 %); it is
+                                                 * here for the preview, which can show just these columns.  Preview
+                                                 * stretched sideways to the full width for now; the frame line follows */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */

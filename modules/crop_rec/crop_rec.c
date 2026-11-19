@@ -2168,19 +2168,19 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
 {
     if (Anam_Narrow)
     {
-        /* FilmGate 1x3 Narrow (TEST 3): 1072 columns x the 2214 rows of 1x3 2.35:1 Highest.
-         *   test 1: a 356-362 clock line: no picture, pink recordings
-         *   test 2: 512 clocks (0x1FF, as the other 1x3 presets): works, 1072 and 1280 columns
-         * Now two line lengths in between, one per frame rate, to find the shortest the sensor takes:
-         *   23.976: 408 clocks x 3271 lines (+74 ppm)    25: 456 clocks x 2807 lines (+6 ppm)
+        /* FilmGate 1x3 Narrow: 1072 columns x the 2214 rows of 1x3 2.35:1 Highest.
+         * The line stays at 0x1FF (512 clocks), as every other narrower 1x3 preset.  Measured on the
+         * camera: 356-362 clocks gave pink recordings, 408 and 456 a black picture and black
+         * recordings; 512 works (1072 and 1280 columns).  So in 1x3 the sensor needs about 0x1FF
+         * however narrow the readout is ("EOS M has 0x1FF limit", noted at 1x3 16:9 Highest).
          * RAW_H = width / 4 + 34, Preview_H = width - 4, YUV_HD_S_H = width / 4 + 3, as the other
          * 1x3 presets; rows, Preview_V and YUV_HD_S_V as 2.35:1 Highest. */
         if (is_EOSM)
         {
             RAW_H         = 0x12E + reg_width;
             RAW_V         = 0x8C3 + reg_height;
-            if (Framerate_25) { TimerA = 0x1C7; TimerB = 0xAF6; }
-            else              { TimerA = 0x197; TimerB = 0xCC6; }
+            TimerA        = 0x1FF;
+            TimerB        = Framerate_25 ? 0x9C3 : 0xA2E;   /* 512 x 2500 = 25.000; 512 x 2607 = 23.974 */
         }
 
         Preview_H     = 1068;
@@ -5130,8 +5130,7 @@ static int slim_line_clocks(void)
             if (fps == 2) return 0x2CF + 1;
             return 0x2CB + 1;
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest (Timer B only) */
-        case FILM_RO_1X3N:                                       /* 1x3 Narrow (test 3) */
-            return (fps == 1) ? 0x1C7 + 1 : 0x197 + 1;
+        case FILM_RO_1X3N: return 0x1FF + 1;                     /* 1x3 Narrow: as the other narrower 1x3 */
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
         case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
             if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
@@ -5173,7 +5172,7 @@ static int slim_crop_fps_mask(void)
 
     if (CROP_PRESET_MENU == CROP_PRESET_1X3)
     {
-        /* FilmGate 1x3 Narrow: 23.976 / 25 (29.97 needs a line under 482 clocks: not until it is known) */
+        /* FilmGate 1x3 Narrow: 23.976 / 25 (29.97 would need a line under 482 clocks; the sensor needs 512) */
         if (crop_preset_1x3_res_menu == 4)
             return 0x1 | 0x2;
         int p = COERCE(crop_preset_1x3_res_menu, 0, 2);
