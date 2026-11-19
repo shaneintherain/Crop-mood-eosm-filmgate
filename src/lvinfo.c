@@ -36,7 +36,9 @@ extern uint32_t font_jost_info;   /* rbf_font.c */
  * on the item's background, sitting on the same baseline as the value. */
 static int lvinfo_unit_font(int fnt)
 {
-    return FONT(FONT_MED, COLOR_GRAY(60), FONT_BG(fnt));
+    /* an orange value (the field open in the touch editor, or a warning) gets orange units too */
+    int fg = FONT_FG(fnt) == COLOR_ORANGE ? COLOR_ORANGE : COLOR_GRAY(60);
+    return FONT(FONT_MED, fg, FONT_BG(fnt));
 }
 
 static int lvinfo_left_font(int fnt)
@@ -636,11 +638,6 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
 {
     int default_bg = FONT_BG(default_font);
     int default_bg_out = (default_bg == COLOR_BG_DARK ? 0 : default_bg);
-    int touch_hx0 = -1;
-    int touch_hy0 = -1;
-    int touch_hw = 0;
-    int touch_hh = 0;
-    
     int prev_right = bar_x;
     for (int i = 0; i < count; i++)
     {
@@ -668,6 +665,11 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
         
         /* override colors */
         fnt = FONT(fnt, lvinfo_film_color(items[i]->color_fg), items[i]->color_bg);
+
+        /* the field open in the touch editor is shown in orange (no box around it) */
+        if (lvinfo_touch_field_name(lvinfo_touch_field) &&
+            !strcmp(items[i]->name, lvinfo_touch_field_name(lvinfo_touch_field)))
+            fnt = FONT(fnt, COLOR_ORANGE, items[i]->color_bg);
         
         int bg = FONT_BG(fnt);
 
@@ -704,18 +706,6 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
             lvinfo_text_print(fnt, x, y, up);
         }
 
-        if (lvinfo_touch_field_name(lvinfo_touch_field) &&
-            !strcmp(items[i]->name, lvinfo_touch_field_name(lvinfo_touch_field)))
-        {
-            int hx0 = MAX(bar_x, x0 - 4);
-            int hx1 = MIN(bar_x + bar_width - 1, x0 + w + 4);
-            int hy0 = MAX(bar_y, y0 + 1);
-            int hy1 = MIN(bar_y + bar_height - 1, y0 + bar_height - 2);
-            touch_hx0 = hx0;
-            touch_hy0 = hy0;
-            touch_hw = hx1 - hx0 + 1;
-            touch_hh = hy1 - hy0 + 1;
-        }
         prev_right = x + w/2 + pad;
     }
 
@@ -726,11 +716,6 @@ void lvinfo_display_bar(struct lvinfo_item * items[], int count, int bar_x, int 
         int gap = now_left - prev_right;
         bmp_fill(default_bg_out, prev_right, bar_y, gap, bar_height);
     }
-
-    /* Draw selection last.  Gap and neighboring-item background fills used
-     * to overwrite its right edge, leaving a three-sided orange outline. */
-    if (touch_hx0 >= 0)
-        bmp_draw_rect(COLOR_ORANGE, touch_hx0, touch_hy0, touch_hw, touch_hh);
 }
 
 static REQUIRES(lvinfo_sem)

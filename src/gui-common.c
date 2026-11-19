@@ -191,8 +191,10 @@ static void slim_touch_lv_change_field(enum lvinfo_touch_field field,
                 aperture_toggle((void *)-1, sign);
             break;
         case LVINFO_TOUCH_SHUTTER:
+            /* Up makes the number shown bigger: 1/50 -> 1/60, and in the FILM standard (shown as
+             * an angle) 172 -> 180 degrees, which is the slower shutter, so the step is reversed there */
             if (lens_info.raw_shutter)
-                shutter_toggle((void *)-1, sign);
+                shutter_toggle((void *)-1, shutter_angle_display() ? -sign : sign);
             break;
         case LVINFO_TOUCH_ISO:
             /* With Dual ISO, base ISO remains fixed and this editor steps
