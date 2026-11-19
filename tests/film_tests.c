@@ -148,7 +148,9 @@ int main(void)
         CHECK(film_pick(FILM_RO_NARROW, 5, 1, &fr) == 5 && fr == 1, "8mm is kept on Narrow");
         CHECK(film_pick(FILM_RO_NARROW, 8, 1, &fr) == 8 && fr == 1, "1/2\" 4:3 is kept on Narrow");
         CHECK(film_pick(FILM_RO_NARROW, 9, 1, &fr) == 9 && fr == 1, "1/3\" 4:3 is kept on Narrow");
-        CHECK(film_pick(FILM_RO_NARROW, 10, 1, &fr) == 10 && fr == 1, "1/4\" 4:3 is kept on Narrow");
+        CHECK(film_pick(FILM_RO_TINY, 10, 1, &fr) == 10 && fr == 1, "1/4\" 4:3 is kept on Tiny");
+        CHECK(film_pick(FILM_RO_NARROW, 10, 1, &fr) == 4 && fr == 0, "1/4\" is not on Narrow any more: S8");
+        CHECK(film_pick(FILM_RO_TINY, 0, 0, &fr) == 10 && fr == 0, "Tiny from A35 -> 1/4\" 16:9 (the only format on it)");
         /* a stored frame from another readout is repaired */
         CHECK(film_pick(FILM_RO_NARROW, 7, 0, &fr) == 4 && fr == 0, "2/3\" cannot use Narrow: first format that can (S8)");
         CHECK(film_pick(FILM_RO_NARROW, 8, 0, &fr) == 8 && fr == 0, "1/2\" 16:9 is kept on Narrow");

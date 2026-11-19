@@ -92,7 +92,8 @@ static int crop_preset_1x1_res = 0;
 #define CROP_Full_Res  (crop_preset_1x1_res == 5)
 #define CROP_1620p     (crop_preset_1x1_res == 6)
 #define CROP_1080p     (crop_preset_1x1_res == 7)
-#define CROP_Narrow    (crop_preset_1x1_res == 8)   /* FilmGate 1600x1280: S8, 8mm, 1/2", 1/3", 1/4" */
+#define CROP_Narrow    (crop_preset_1x1_res == 8)   /* FilmGate 1600x1280: S8, 8mm, 1/2", 1/3" */
+#define CROP_Tiny      (crop_preset_1x1_res == 9)   /* FilmGate 864x760 (TEST): 1/4" */
 
 CONFIG_INT("crop.preset_1x3", crop_preset_1x3_res_menu, 1);
 static int crop_preset_1x3_res = 0;
@@ -1022,6 +1023,17 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                 {
                     cmos_new[5] = 0x3CC;
                     cmos_new[7] = 0xAC9;
+                }
+
+                /* Tiny 864x760 (1/4"), worked out from Narrow (not measured yet).  Columns: Narrow's
+                 * window centre is ~808 px right of its first column; 3 more 124 px steps (0x40 each)
+                 * put a 864 wide readout's centre 4 px left of it (film_readouts dx 4 does the rest).
+                 * Rows: 2 more 120-row steps down (0xAC9 -> 0xACB; up was -1 for 1440p / 1280p) start
+                 * 240 rows lower; Narrow's window centre (row 620) is then row 380, the centre of 760 */
+                if (CROP_Tiny)
+                {
+                    cmos_new[5] = 0x3CC + 3 * 0x40;
+                    cmos_new[7] = 0xACB;
                 }
                 
                 if (CROP_Full_Res)
@@ -2034,6 +2046,38 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
          * are not stretched: 600 px wide (83 %), centred by GetShiftValue */
         if (crop_rec_narrow_fit())
             YUV_HD_S_H = 0x450080;
+    }
+
+    /* FilmGate Tiny 864x760 (TEST): 1/4" (832x624 and 832x468), the whole screen height.
+     * RAW_H = width / 4 + 34, RAW_V = rows + 29, as Narrow.  A narrower line is shorter: at least
+     * RAW_H + 52 = 302 clocks if 1:1 follows the Narrow rule (486 there = 0x1B2 + 52).  First test,
+     * one line length per rate (whole Timer B within 10 ppm of the rate):
+     *   23.976: 305 x 4376     25: 400 x 3200     29.97: 486 x 2197 (Narrow's own line)
+     * Preview: 760 rows fill the 480 lines (YUV_HD_S_V in 0x28: Narrow 0x44 for 1280, 1080p 0x39 for
+     * 1080: in = rows / 18.8); 864 columns at the same scale are 548 px wide: in = 57 (fills 720 for
+     * 860 px, as 0x6A for 1596) x 720 / 548 = 75.  Centred by GetShiftValue (LCD). */
+    if (CROP_Tiny)
+    {
+        if (is_EOSM)
+        {
+            RAW_H    = 0xFA + reg_width;
+            RAW_V    = 0x315 + reg_height;
+            if (Framerate_25)      { TimerA = 0x18F; TimerB = 0xC7F; }
+            else if (Framerate_30) { TimerA = 0x1E5; TimerB = 0x894; }
+            else                   { TimerA = 0x130; TimerB = 0x1117; }
+        }
+
+        Preview_H     = 860;
+        Preview_V     = 760;
+        Preview_R     = 0x19000D;
+        YUV_HD_S_H    = 0x45004B;
+        YUV_HD_S_V    = 0x250028;
+
+        Black_Bar     = 0;
+        Preview_Control = 1;
+        EDMAC_24_Redirect = 0;
+        EDMAC_9_Vertical_Change = 0;
+        Preview_Control_Basic = 0;
 
         Black_Bar     = 0;
         Preview_Control = 1;
@@ -3350,6 +3394,9 @@ int GetShiftValue()
     /* Narrow fits (LCD): lines * 1440 + 2 * pixels from the left (the 1620p rule).  The shift must be a
      * multiple of 8 bytes (4 px): 26 and 28 bytes turned the preview blue (the recording was fine);
      * 0 and 32 were right.  Every other shift here is a multiple of 8 too (Narrow 120, 1620p 0x43F0). */
+    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)
+        return is_LCD_Output() ? 2 * 84 : 0;   /* Tiny: 548 px wide, 86 px each side (84: a multiple of 4) */
+
     if (crop_rec_narrow_fit())
     {
         if (CROP_PRESET_MENU == CROP_PRESET_1X1)
@@ -3727,6 +3774,13 @@ static void FAST PATH_SelectPathDriveMode_hook(uint32_t* regs, uint32_t* stack, 
         /* LCD fit: centred (GetShiftValue) with the sides cleared, as 1620p */
         Shift_Preview = crop_rec_narrow_fit();
         Clear_Artifacts = crop_rec_narrow_fit();
+        EDMAC_9_Vertical_Change = 0;
+    }
+
+    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)    // Tiny: centred, sides cleared (LCD)
+    {
+        Shift_Preview = is_LCD_Output();
+        Clear_Artifacts = is_LCD_Output();
         EDMAC_9_Vertical_Change = 0;
     }
 
@@ -4705,6 +4759,7 @@ static int slim_film_menu_readout(void)
                 case 3: return FILM_RO_1280;
                 case 4: return FILM_RO_1620; /* 1620p 4:3: 2/3" 4:3 */
                 case 5: return FILM_RO_NARROW;
+                case 6: return FILM_RO_TINY;
             }
     }
     return -1;
@@ -4749,6 +4804,7 @@ static int slim_film_active_readout(void)
             case 4: return FILM_RO_1280;
             case 6: return FILM_RO_1620;
             case 8: return FILM_RO_NARROW;
+            case 9: return FILM_RO_TINY;
         }
     }
     return -1;
@@ -4873,7 +4929,17 @@ static void slim_crop_apply_3x3_from_ar(void)
 /* Map 1x1 AR (+ Preset for 2.35:1) → res index, WxH, FPS mask. */
 static void slim_1x1_resolve(int *res_idx, int *w, int *h, int *fps_mask)
 {
-    slim_1x1_ar = COERCE(slim_1x1_ar, 0, 5);
+    slim_1x1_ar = COERCE(slim_1x1_ar, 0, 6);
+
+    if (slim_1x1_ar == 6)
+    {
+        /* Tiny → 864x760 (FilmGate 1/4", TEST).  VIDEO only: 23.976 / 25 / 29.97 */
+        *res_idx = 9;
+        *w = 864; *h = 760;
+        *fps_mask = 0x7;
+        slim_unified_preset = 0;
+        return;
+    }
 
     if (slim_1x1_ar == 0)
     {
@@ -4977,6 +5043,10 @@ static void slim_crop_sync_from_backend(void)
                 break;
             case 8: /* Narrow */
                 slim_1x1_ar = 5;
+                slim_unified_preset = 0;
+                break;
+            case 9: /* Tiny */
+                slim_1x1_ar = 6;
                 slim_unified_preset = 0;
                 break;
             default:
@@ -5173,6 +5243,10 @@ static int slim_line_clocks(void)
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest (Timer B only) */
         case FILM_RO_1X3N: return 0x1FF + 1;                     /* 1x3 Narrow: as the other narrower 1x3 */
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
+        case FILM_RO_TINY:                                       /* 1:1 Tiny 864x760 (test lines) */
+            if (fps == 1) return 0x18F + 1;
+            if (fps == 2) return 0x1E5 + 1;
+            return 0x130 + 1;
         case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
             if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
             if (fps == 2 || fps == 3) return 0x1E9 + 1;          /* 29.97 / 18 fps */
@@ -5290,6 +5364,7 @@ static void slim_film_apply(int fmt)
         case FILM_RO_1620: slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
         case FILM_RO_28K:  slim_mode_ui = 0; slim_1x1_ar = 1; slim_unified_preset = 1; break; /* 2.8K Higher */
         case FILM_RO_NARROW: slim_mode_ui = 0; slim_1x1_ar = 5; break;       /* Narrow 1600x1280 */
+        case FILM_RO_TINY: slim_mode_ui = 0; slim_1x1_ar = 6; break;         /* Tiny 864x760 */
         default:           slim_mode_ui = 0; slim_1x1_ar = 4; break;         /* 1620p 4:3 */
     }
     slim_crop_apply_mode();
@@ -5857,7 +5932,7 @@ __attribute__((unused)) static int slim_crop_current_ratio_x1000(void)
     static const int ratios_3x3[] = { 1778, 2000, 2200, 2350, 1500 };
 
     if (slim_mode_ui == 0)
-        return ratios_1x1[COERCE(slim_1x1_ar, 0, 5)];
+        return ratios_1x1[COERCE(slim_1x1_ar, 0, 5)];   /* (6, Tiny: film formats only) */
     if (slim_mode_ui == 2)
         return ratios_3x3[COERCE(crop_preset_ar_menu, 0, 4)];
     return ratios_1x3[COERCE(crop_preset_ar_menu, 0, 4)];
@@ -6026,8 +6101,8 @@ static struct menu_entry crop_rec_menu[] =
                 .name       = "Preset:",   // CROP_PRESET_1X1
                 .priv       = &crop_preset_1x1_res_menu,
                 .update     = crop_preset_1x1_res_update,
-                .max        = 8,
-                .choices    = CHOICES("2.5K", "2.8K", "3K", "1440p", "1280p", "Full-Res LV", "1620p 4:3", "1920x1080p", "Narrow"),
+                .max        = 9,
+                .choices    = CHOICES("2.5K", "2.8K", "3K", "1440p", "1280p", "Full-Res LV", "1620p 4:3", "1920x1080p", "Narrow", "Tiny"),
                 .help       = "Choose 1:1 preset.",
                 .shidden    = 1,
             },
@@ -8254,6 +8329,7 @@ static LVINFO_UPDATE_FUNC(crop_info)
                     if (CROP_1080p)    snprintf(buffer, sizeof(buffer), "1080p");
                     if (CROP_1620p)    snprintf(buffer, sizeof(buffer), "1620p");
                     if (CROP_Narrow)   snprintf(buffer, sizeof(buffer), "Narrow");
+                    if (CROP_Tiny)     snprintf(buffer, sizeof(buffer), "Tiny");
                     if (CROP_Full_Res) snprintf(buffer, sizeof(buffer), "FLV");
                     break;
                 case CROP_PRESET_1X3:
@@ -8496,7 +8572,7 @@ static unsigned int raw_info_update_cbr(unsigned int unused)
 static const struct setting_range crop_settings[] = {
     SETTING(crop_preset_index,          1,       3,      1),  /* slim: 1..3 (3x3 / 1x1 / 1x3) */
     SETTING(crop_preset_ar_menu,        0,       4,      4),
-    SETTING(crop_preset_1x1_res_menu,   0,       8,      3),
+    SETTING(crop_preset_1x1_res_menu,   0,       9,      3),  /* 8 Narrow, 9 Tiny (FilmGate) */
     SETTING(crop_preset_1x3_res_menu,   0,       4,      1),  /* 4: FilmGate 1x3 Narrow */
     SETTING(crop_preset_3x3_res_menu,   0,       2,      2),
     SETTING(crop_preset_fps_menu,       0,       5,      0),
@@ -8570,6 +8646,11 @@ static void crop_settings_load(void)
         slim_film_fmt >= 0 && slim_film_fmt < FILM_FORMAT_COUNT && !film_is_cm(slim_film_fmt) &&
         film_format_has_readout(slim_film_fmt, FILM_RO_1X3N))
         crop_preset_1x3_res_menu = 4;
+    /* The same for 1/4", moved from Narrow (8) to Tiny (9) */
+    if (crop_preset_index == 1 && crop_preset_1x1_res_menu == 8 &&
+        slim_film_fmt >= 0 && slim_film_fmt < FILM_FORMAT_COUNT &&
+        film_format_has_readout(slim_film_fmt, FILM_RO_TINY))
+        crop_preset_1x1_res_menu = 9;
 
     /* never lower the number (a config file touched by a newer build keeps its version) */
     if (crop_settings_ver < CROP_SETTINGS_VERSION)

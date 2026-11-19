@@ -29,7 +29,7 @@
 
 /* Sensor readouts the formats are cut from (the crop_rec 1:1 / 3x3 modes).  kn/kd is the
  * scale of one readout pixel on the camera's 720x480 LCD layer (used for the black-bar frame). */
-enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_1620, FILM_RO_28K, FILM_RO_NARROW, FILM_RO_1X3N, FILM_RO_COUNT };
+enum { FILM_RO_3X3, FILM_RO_3K, FILM_RO_1440, FILM_RO_1280, FILM_RO_25K, FILM_RO_1X3, FILM_RO_1620, FILM_RO_28K, FILM_RO_NARROW, FILM_RO_1X3N, FILM_RO_TINY, FILM_RO_COUNT };
 
 struct film_readout
 {
@@ -76,6 +76,10 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
                                                  * here for the preview, which can show just these columns.  Preview
                                                  * (LCD): 694 x 478 (2214 rows -> 478 lines), centred (crop_rec_narrow_fit);
                                                  * over HDMI still the 1x3 2.35:1 one stretched to 720 (other_*) */
+    {  864,  760, 12,  19, 1, 548,   4,   0, 0, 0, 0 },  /* 1:1 Tiny (FilmGate, TEST): 1/4".  Worked out from Narrow (3 more
+                                                 * column steps, 2 more row steps): not measured yet.  Fills the
+                                                 * screen height: 760 rows -> 480 lines, 864 columns -> 548 px.
+                                                 * A shorter line than Narrow, if the sensor takes it */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */
@@ -138,8 +142,8 @@ static const struct film_frame film_frames[FILM_FRAME_COUNT] __attribute__((unus
     { "1/3\" 16:9 Crop",    1104,  620, "1/3\" sensor width (4.8 mm), cropped to 16:9",   "1:1 Narrow 1600x1280", "16:9 Crop", FILM_RO_NARROW },
     { "1/3\" 4:3",          1104,  828, "1/3\" sensor (4.8 x 3.6 mm), 4:3",              "1:1 Narrow 1600x1280", "4:3", FILM_RO_NARROW },
     /* 1/4" (3.6 x 2.7 mm) */
-    { "1/4\" 16:9 Crop",     832,  468, "1/4\" sensor width (3.6 mm), cropped to 16:9",   "1:1 Narrow 1600x1280", "16:9 Crop", FILM_RO_NARROW },
-    { "1/4\" 4:3",           832,  624, "1/4\" sensor (3.6 x 2.7 mm), 4:3",              "1:1 Narrow 1600x1280", "4:3", FILM_RO_NARROW },
+    { "1/4\" 16:9 Crop",     832,  468, "1/4\" sensor width (3.6 mm), cropped to 16:9",   "1:1 Tiny 864x760", "16:9 Crop", FILM_RO_TINY },
+    { "1/4\" 4:3",           832,  624, "1/4\" sensor (3.6 x 2.7 mm), 4:3",              "1:1 Tiny 864x760", "4:3", FILM_RO_TINY },
     /* ---- CROP MOOD standard: the legacy Crop Mood modes that span the full sensor width ---- */
     /* 3x3: whole sensor, binned 3x3; frames cut from the 3:2 readout (48 fps: the 738-row one).
      * 1736 wide (the full readout; a multiple of 8, not 16, like the original Crop Mood presets) */

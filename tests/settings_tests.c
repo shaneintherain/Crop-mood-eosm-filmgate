@@ -193,6 +193,14 @@ int main(void)
         crop_settings_load();
         CHECK(crop_preset_1x3_res_menu == expect, "format %d: second load must change nothing", f);
     }
+    for (int f = 0; f < FILM_FORMAT_COUNT; f++)
+    {
+        reset_defaults();
+        crop_preset_index = 1; crop_preset_1x1_res_menu = 8; slim_film_fmt = f;
+        crop_settings_load();
+        int expect = film_format_has_readout(f, FILM_RO_TINY) ? 9 : 8;
+        CHECK(crop_preset_1x1_res_menu == expect, "format %d saved on Narrow: preset %d, expected %d", f, crop_preset_1x1_res_menu, expect);
+    }
     reset_defaults();
     crop_preset_index = 2; crop_preset_1x3_res_menu = 1; crop_preset_ar_menu = 3; slim_film_fmt = 2;
     crop_settings_load();
