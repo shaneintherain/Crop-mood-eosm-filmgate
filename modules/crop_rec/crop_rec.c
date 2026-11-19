@@ -1751,6 +1751,7 @@ static unsigned YUV_LV_Buf = 0;       // YUV (LV) buffer size             0xC0F0
 int is_LCD_Output();                  // defined with the HDMI output helpers below
 int is_1080i_Full_Output();           // same
 int crop_rec_preview_fit();           // 2/3" 4:3 preview drawn at the 16:9 scale (see below)
+int crop_rec_narrow_fit();            // Narrow / 1x3 Narrow previews in true proportions (see below)
 
 /* used to exceed preview limits */
 //static unsigned EDMAC_24_s = 0;       // EDMAC#24 size                    0xC0F26810
@@ -2029,6 +2030,10 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
          * so the preview is stretched sideways (1.2x) for now; an unstretched preview comes later. */
         YUV_HD_S_H    = 0x45006A;
         YUV_HD_S_V    = 0x250044;
+        /* Fit (LCD): the horizontal scale of 1280p (0x80 in for 1916 px) instead of 0x6A, so the 1596 px
+         * are not stretched: 600 px wide (83 %), centred by GetShiftValue */
+        if (crop_rec_narrow_fit())
+            YUV_HD_S_H = 0x450080;
 
         Black_Bar     = 0;
         Preview_Control = 1;
@@ -2188,6 +2193,11 @@ static inline uint32_t reg_override_1X3(uint32_t reg, uint32_t old_val)
         Preview_R     = 0x1D000D;
         YUV_HD_S_H    = 0x105010F;
         YUV_HD_S_V    = 0x1050341;
+        /* Fit (LCD): 3216 sensor columns x 2214 rows (1.45:1) as tall as the screen allows (478 lines,
+         * SetAspectRatioCorrectionValues) is 694 px wide: 271 * 720 / 694 = 281 in.  Centred by
+         * GetShiftValue.  (Out / in: 0x105 / 0x10F fills the 720 px line.) */
+        if (crop_rec_narrow_fit())
+            YUV_HD_S_H = 0x1050119;
     }
     else if (Anam_FLV)
     {
@@ -3316,6 +3326,18 @@ int crop_rec_preview_fit()
            (is_LCD_Output() || is_1080i_Full_Output());
 }
 
+/* The two narrow readouts (Narrow 1600x1280: S8, 8mm, 1/2", 1/3", 1/4"; 1x3 Narrow 1072x2214: S16,
+ * 16mm Actual, 1") were stretched sideways to the full screen width.  "Fit" shows them in their true
+ * proportions instead, centred, with black at the sides: Narrow 600 px wide (1280p's scale), 1x3
+ * Narrow 694 x 478.  Camera LCD only for now (HDMI keeps the stretched picture; mlv_lite draws the
+ * frame line for each: film_readouts other_fit_w). */
+int crop_rec_narrow_fit()
+{
+    return is_EOSM && is_LCD_Output() &&
+           ((CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 8) ||
+            (CROP_PRESET_MENU == CROP_PRESET_1X3 && crop_preset_1x3_res == 4));
+}
+
 static uint32_t ShiftAddress  = 0;
 static uint32_t ClearAddress  = 0;
 static uint32_t DefaultShift  = 0; // expected value which we want to patch
@@ -3325,6 +3347,14 @@ static uint32_t NewClearVal   = 0; // new clear value, should be same as width f
 
 int GetShiftValue()
 {
+    /* Narrow fits (LCD): lines * 1440 + 2 * pixels from the left (the 1620p rule) */
+    if (crop_rec_narrow_fit())
+    {
+        if (CROP_PRESET_MENU == CROP_PRESET_1X1)
+            return 2 * 60;                  /* Narrow: 600 px wide, 60 px each side */
+        return 1 * 1440 + 2 * 13;           /* 1x3 Narrow: 694 x 478, 13 px each side, 1 line down */
+    }
+
     if (CROP_PRESET_MENU == CROP_PRESET_1X1)
     {
         switch (crop_preset_1x1_res)
@@ -3496,6 +3526,13 @@ void SetAspectRatioCorrectionValues()
                 case 4: // AR_2_39_1
                 {
                     YUV_LV_Buf = 0x13205A0; YUV_LV_S_V = 0x1050249;
+                    /* 1x3 Narrow fit: 478 lines (the 2.35:1 one is 306).  Lines x S_V is the same for
+                     * every picture of a readout (306 x 0x249 = 405 x 0x1BA = 179010; 1620p: 437 x 0x1B2 =
+                     * 456 x 0x1A0), so 179010 / 478 = 374 */
+                    if (crop_rec_narrow_fit())
+                    {
+                        YUV_LV_Buf = 0x1DE05A0; YUV_LV_S_V = 0x1050176;
+                    }
                 }
                 break;
             }  
@@ -3684,8 +3721,9 @@ static void FAST PATH_SelectPathDriveMode_hook(uint32_t* regs, uint32_t* stack, 
     
     if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 8)    // Narrow: fills the screen, as 1280p
     {
-        Shift_Preview = 0;
-        Clear_Artifacts = 0;
+        /* LCD fit: centred (GetShiftValue) with the sides cleared, as 1620p */
+        Shift_Preview = crop_rec_narrow_fit();
+        Clear_Artifacts = crop_rec_narrow_fit();
         EDMAC_9_Vertical_Change = 0;
     }
 

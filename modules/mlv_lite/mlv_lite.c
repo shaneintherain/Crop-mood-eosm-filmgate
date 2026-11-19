@@ -727,6 +727,15 @@ static int film_frame_rect(int * x, int * y, int * w, int * h)
     /* frame size in the 720x480 layer: the readout's preview is fit_w wide (720, or 608 for the
      * 1620p one); 1x3 previews are desqueezed by the camera, so the same rule holds for them */
     int fit_w = ro->fit_w;
+
+    /* the narrow readouts are shown in true proportions on the LCD only (crop_rec_narrow_fit);
+     * the other outputs keep their stretched picture, which other_* describes */
+    if (!is_LCD_Output() && ro->other_fit_w)
+    {
+        fit_w = ro->other_fit_w;
+        kn = ro->other_kn;
+        kd = ro->other_kd;
+    }
     int nw = res_x * fit_w / rw;
     int nh = res_y * kn / kd;
 

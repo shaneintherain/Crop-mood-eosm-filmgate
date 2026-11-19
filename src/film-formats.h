@@ -41,6 +41,8 @@ struct film_readout
     int fit_w;              /* width of the readout's preview on the 720 px LCD layer */
     int dx, dy;             /* recorded window moved from the readout centre (raw pixels, + = right / down),
                              * so the frame sits on the sensor centre; the frame line moves with it */
+    int other_fit_w;        /* on the other outputs (HDMI), when the preview there is not the one above:  */
+    int other_kn, other_kd; /* width and scale of that preview; 0 = the same as above (crop_rec_narrow_fit) */
 };
 
 static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unused)) =
@@ -48,30 +50,32 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
     /* dx / dy: measured with the V9 framing charts (camera locked off, calibrated on CROP MOOD 3x3 3:2);
      * the readouts' own start rows were also moved (crop_rec cmos_new[7], 120-row steps), dx / dy is
      * the rest.  3x3, 1x3 and 2.8K were centred within the measuring error. */
-    { 1736, 1160, 90, 217, 1, 720,   0,   0 },  /* 3x3 3:2   (measured on the camera) */
-    { 3072, 1308, 15,  64, 1, 720,   0,   0 },  /* 1:1 3K    (measured) */
-    { 2560, 1440,  9,  32, 1, 720,   0,  22 },  /* 1:1 1440p (measured); was 98 rows low, start moved up 120 */
-    { 1920, 1280,  3,   8, 1, 720, -38, -20 },  /* 1:1 1280p (measured); was 140 rows low, 38 px right; start up 120 */
-    { 2520, 1080,  2,   7, 1, 720,  14, -38 },  /* 1:1 2.5K  (720 / 2520); was 38 rows low, 14 px left */
-    { 1736, 2214,  9,  65, 3, 720,   0,   0 },  /* 1x3 2.35:1: squeezed 3x, the camera desqueezes the preview:
+    { 1736, 1160, 90, 217, 1, 720,   0,   0, 0, 0, 0 },  /* 3x3 3:2   (measured on the camera) */
+    { 3072, 1308, 15,  64, 1, 720,   0,   0, 0, 0, 0 },  /* 1:1 3K    (measured) */
+    { 2560, 1440,  9,  32, 1, 720,   0,  22, 0, 0, 0 },  /* 1:1 1440p (measured); was 98 rows low, start moved up 120 */
+    { 1920, 1280,  3,   8, 1, 720, -38, -20, 0, 0, 0 },  /* 1:1 1280p (measured); was 140 rows low, 38 px right; start up 120 */
+    { 2520, 1080,  2,   7, 1, 720,  14, -38, 0, 0, 0 },  /* 1:1 2.5K  (720 / 2520); was 38 rows low, 14 px left */
+    { 1736, 2214,  9,  65, 3, 720,   0,   0, 0, 0, 0 },  /* 1x3 2.35:1: squeezed 3x, the camera desqueezes the preview:
                                                  * 5208 columns -> 720 px, 2214 rows -> ~306 lines (centred) */
-    { 2160, 1620,  9,  32, 1, 608, -40,  42 },  /* 1:1 4:3 1620p: preview at the 1440p scale, 84 % of the width
+    { 2160, 1620,  9,  32, 1, 608, -40,  42, 0, 0, 0 },  /* 1:1 4:3 1620p: preview at the 1440p scale, 84 % of the width
                                                  * (crop_rec_preview_fit, LCD and 1080i); was 70 rows low, 40 px
                                                  * right; start up 120 (50 too far), 42 rows is all the room */
-    { 2880, 1206,  1,   4, 1, 720, -24,   0 },  /* 1:1 2.8K (Crop Mood "Higher"): 720 / 2880.  It records 1206 rows
+    { 2880, 1206,  1,   4, 1, 720, -24,   0, 0, 0, 0 },  /* 1:1 2.8K (Crop Mood "Higher"): 720 / 2880.  It records 1206 rows
                                                  * (not 1226).  Measured 37 px right, 19 rows high; the 2832 wide
                                                  * frame leaves room to move 24 px left (all the room) */
-    { 1600, 1280,  3,   8, 1, 720,   8, -20 },  /* 1:1 Narrow (FilmGate): the 1280p rows (same start, same dy).  The
+    { 1600, 1280,  3,   8, 1, 600,   8, -20, 720, 3, 8 },  /* 1:1 Narrow (FilmGate): the 1280p rows (same start, same dy).  The
                                                  * columns move only in ~124 px steps (cmos_new[5]); 1536 wide sat
                                                  * ~40 px left (LCD), so 1600 wide (centre 32 px right) and dx 8.
-                                                 * Preview stretched to the full width for now (1.2x sideways) */
-    { 1072, 2214,  9,  65, 3, 720,   0,   0 },  /* 1x3 Narrow (FilmGate): the 1x3 2.35:1 rows, only the middle 3216
+                                                 * Preview (LCD): 600 px wide at 1280p's scale, centred (crop_rec_narrow_fit);
+                                                 * over HDMI still stretched to the full width (other_fit_w 720) */
+    { 1072, 2214, 239, 1107, 3, 694, 0,  0, 720, 9, 65 },  /* 1x3 Narrow (FilmGate): the 1x3 2.35:1 rows, only the middle 3216
                                                  * sensor columns (first column 8 steps of 124 in, cmos_new[5] 0x220).
                                                  * For the 1x3 frames that are not full width (S16, 16mm, 1").  The
                                                  * line stays at 512 clocks (shorter ones gave pink / black frames on
                                                  * the camera), so the rolling shutter is as before (-1.5 %); it is
                                                  * here for the preview, which can show just these columns.  Preview
-                                                 * stretched sideways to the full width for now; the frame line follows */
+                                                 * (LCD): 694 x 478 (2214 rows -> 478 lines), centred (crop_rec_narrow_fit);
+                                                 * over HDMI still the 1x3 2.35:1 one stretched to 720 (other_*) */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */
