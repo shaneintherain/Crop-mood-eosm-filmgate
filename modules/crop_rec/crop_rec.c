@@ -3347,16 +3347,15 @@ static uint32_t NewClearVal   = 0; // new clear value, should be same as width f
 
 int GetShiftValue()
 {
-    /* Narrow fits (LCD): lines * 1440 + 2 * pixels from the left (the 1620p rule).  The pixel count
-     * must be EVEN: the picture is YUV 4:2:2, two pixels share one U and one V, and an odd shift swaps
-     * them (13 px made the 1x3 Narrow preview blue; the recording was fine). */
+    /* Narrow fits (LCD): lines * 1440 + 2 * pixels from the left (the 1620p rule).  The shift must be a
+     * multiple of 8 bytes (4 px): 26 and 28 bytes turned the preview blue (the recording was fine);
+     * 0 and 32 were right.  Every other shift here is a multiple of 8 too (Narrow 120, 1620p 0x43F0). */
     if (crop_rec_narrow_fit())
     {
         if (CROP_PRESET_MENU == CROP_PRESET_1X1)
             return 2 * 60;                  /* Narrow: 600 px wide, 60 px each side */
-        /* TEST (the preview was still blue at 14 px): 23.976 shifts 16 px (32 bytes, a multiple of 8
-         * as every working shift here), 25 no sideways shift at all (1 line down only) */
-        return 1 * 1440 + (crop_preset_fps == 1 ? 0 : 2 * 16);
+        return 1 * 1440 + 2 * 12;           /* 1x3 Narrow: 694 x 478, 13 px each side (12: the nearest
+                                             * multiple of 4 px), 1 line down */
     }
 
     if (CROP_PRESET_MENU == CROP_PRESET_1X1)
