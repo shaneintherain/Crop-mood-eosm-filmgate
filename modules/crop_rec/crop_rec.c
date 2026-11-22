@@ -1030,11 +1030,10 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                  * put a 864 wide readout's centre 4 px left of it (film_readouts dx 4 does the rest).
                  * Rows: 2 more 120-row steps down (0xAC9 -> 0xACB; up was -1 for 1440p / 1280p) start
                  * 240 rows lower; Narrow's window centre (row 620) is then row 380, the centre of 760 */
-                /* TEST 5 (see reg_override_1X1): 25 keeps Narrow's first row, 29.97 Narrow's first column */
                 if (CROP_Tiny)
                 {
-                    cmos_new[5] = Framerate_30 ? 0x3CC : 0x3CC + 3 * 0x40;
-                    cmos_new[7] = Framerate_25 ? 0xAC9 : 0xACB;
+                    cmos_new[5] = 0x3CC + 3 * 0x40;
+                    cmos_new[7] = 0xACB;
                 }
                 
                 if (CROP_Full_Res)
@@ -2049,24 +2048,19 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             YUV_HD_S_H = 0x450080;
     }
 
-    /* FilmGate Tiny 864x760 (TEST 5): 1/4".
-     * Test 4: centred + cleared or not, no preview before recording, but it shows while recording
-     * and the clips are fine.  While recording mlv_lite suspends Canon's AeWb task, and the comment
-     * at reg_override_3X3 says the YUV preview freezes when the raw frame is too small for that task.
-     * One raw dimension small works (test 2); both small does not.  This test, one rate each:
-     *   23.976: as test 4, without our AeWb window values (0xC0F09050 / 54, in the ADTG hook)
-     *   25:     864 columns moved, 760 rows from Narrow's first row (framing off)
-     *   29.97:  864 columns from Narrow's first column, 760 rows moved (framing off)
+    /* FilmGate Tiny 864x760 (TEST 6): 1/4".
+     * Tests 4-5: no live picture before recording whatever we moved or changed (also without our
+     * AeWb window values), fine while recording (when mlv_lite suspends Canon's AeWb task) and the
+     * clips are good.  One small raw dimension works (test 2), both small do not: the frame is too
+     * small for the AeWb task (see the comment at reg_override_3X3).  Test 6 suspends that task in
+     * Tiny (tiny_aewb_poll).
      * Found before (tests 1-3):
      *   - 864 columns moved + 760 rows moved records fine at Narrow's line (494 / 498 clocks)
      *   - a 408 clock line with 864 columns: broken picture and recording; 305 / 400 / 486 failed in
      *     test 1 too.  So the line stays at Narrow's (as in 1x3, narrowing does not shorten it)
      *   - 1024 rows with YUV_HD_S_V 0x36 previewed stretched: 760 rows it is
-     *   - with the sides cleared but the picture NOT centred, no preview until recording started.
-     *     Clearing is only ever used together with centring (1620p, 1x3, Narrow fit); so:
-     *   23.976 / 29.97: centred (84 px) + cleared: the finished setup
-     *   25:             neither (as test 2, which showed a picture), to compare
-     * Lines: Narrow's own (23.976 498, 25 494, 29.97 490). */
+     * Preview centred (84 px) with the sides cleared.  Lines: Narrow's own (23.976 498, 25 494,
+     * 29.97 490). */
     if (CROP_Tiny)
     {
         if (is_EOSM)
@@ -3069,9 +3063,8 @@ static void FAST EngDrvOut_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
      * the values taken when setting focus box to center then pressing down button one time in x5 mode.
      * it seems these also make preview more reliable in these modes, in some focus box positions preview
      * become black without these values */
-    if (((CROP_PRESET_MENU == CROP_PRESET_3X3 || CROP_PRESET_MENU == CROP_PRESET_1X3) ||
-       ((CROP_PRESET_MENU == CROP_PRESET_1X1))) && // also for 1280p preset
-        !(CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9 && Framerate_24))   /* Tiny test 5 */
+    if ((CROP_PRESET_MENU == CROP_PRESET_3X3 || CROP_PRESET_MENU == CROP_PRESET_1X3) ||
+       ((CROP_PRESET_MENU == CROP_PRESET_1X1))) // also for 1280p preset
     {
         if (data == 0xC0F09050) {regs[1] =   0x3002D0;}
         if (data == 0xC0F09054) {regs[1] =  0x2E006D8;}
@@ -7333,6 +7326,59 @@ static void slim_zoom_x5(int * fresh)
 }
 
 /* when closing ML menu, check whether we need to refresh the LiveView */
+#ifdef CONFIG_EOSM
+/* Tiny 864x760 (1/4", TEST 6).  Its raw frame is too small for Canon's AeWb task: no live picture
+ * until recording starts, when mlv_lite suspends that task (tests 3-5; the comment at
+ * reg_override_3X3 describes the same on other small presets).  So in Tiny, once Live View has
+ * settled, suspend it here as mlv_lite does (EOS M 2.0.2: 0xFF2606F4).  Canon starts it again with
+ * every Live View restart (after a recording, Canon's menu, playback), so it is suspended again
+ * then.  There is no call to restart it: leaving Tiny restarts Live View once instead. */
+static void tiny_aewb_poll(void)
+{
+    static int suspended = 0;
+    static int settled_since = 0;
+    void (*aewb_suspend)(void) = (void *) 0xFF2606F4;
+    int tiny = patch_active && CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9;
+
+    if (!is_EOSM)
+        return;
+
+    if (!lv || LV_PAUSED)
+    {
+        suspended = 0;      /* Canon restarts the task with Live View */
+        settled_since = 0;
+        return;
+    }
+
+    if (tiny && !suspended && !RECORDING && !eosm_lv_guard_busy && is_movie_mode() &&
+        lv_dispsize == 5 && !gui_menu_shown())
+    {
+        /* wait a moment after Live View came up (the mode switch may still bounce the zoom) */
+        if (!settled_since)
+            settled_since = get_ms_clock();
+        else if (get_ms_clock() - settled_since > 700)
+        {
+            aewb_suspend();
+            suspended = 1;
+        }
+        return;
+    }
+    if (!tiny)
+        settled_since = 0;
+
+    if (suspended && !tiny && !RECORDING)
+    {
+        /* left Tiny with the task still stopped: restart Live View, which starts it again */
+        gui_uilock(UILOCK_EVERYTHING);
+        PauseLiveView();
+        msleep(100);
+        ResumeLiveView();
+        gui_uilock(UILOCK_NONE);
+        suspended = 0;
+    }
+}
+#endif
+
 static unsigned int crop_rec_polling_cbr(unsigned int unused)
 {
     /* touch/Movie-tab shortcuts inject Q+SET into an open menu — not used on slim. */
@@ -7909,6 +7955,10 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
             }
         }
     }
+
+#ifdef CONFIG_EOSM
+    tiny_aewb_poll();
+#endif
 
     return CBR_RET_CONTINUE;
 }
