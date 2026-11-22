@@ -312,6 +312,9 @@ void bmp_draw_antialiased_triangle(int tip_x, int tip_y, int direction,
 #define COLOR_FILM_MUTED        COLOR_GRAY(45)
 #define COLOR_FILM_FAINT        COLOR_GRAY(20)
 void film_palette_apply(void);
+/* Menu background: the 720x480 screen, and over HDMI also the margins around it (the live picture
+ * showed through there, e.g. a pink / white frame round the menu in the narrow formats) */
+void slim_menu_bg_fill(int color);
 
 /* Light "instrument panel" look for the menus: only fixed Canon palette entries. */
 /* Entry numbers checked on a real EOS M with the on-camera colour chart. */

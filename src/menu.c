@@ -45,6 +45,7 @@
 #include "gui-common.h"
 #include "module.h"
 #include "slim-font.h"
+#include "propvalues.h"
 
 #define CONFIG_MENU_ICONS
 //~ #define CONFIG_MENU_DIM_HACKS
@@ -5770,8 +5771,8 @@ menu_redraw_do()
             else
             {
 #ifdef CONFIG_SLIM_MENUS
-                /* Full screen — no grey header/footer reclaim strip. */
-                bmp_fill(UI_BG, 0, 0, 720, 480);
+                /* Full screen — no grey header/footer reclaim strip (and the HDMI margins). */
+                slim_menu_bg_fill(UI_BG);
 #else
                 bmp_fill(COLOR_BLACK, 0, 40, 720, 400 );
 #endif
@@ -8839,4 +8840,12 @@ static void check_duplicate_entries()
     }
 
     info_led_off();
+}
+
+void slim_menu_bg_fill(int color)
+{
+    if (ext_monitor_hdmi)
+        bmp_fill(color, BMP_W_MINUS, BMP_H_MINUS, BMP_W_PLUS - BMP_W_MINUS, BMP_H_PLUS - BMP_H_MINUS);
+    else
+        bmp_fill(color, 0, 0, 720, 480);
 }

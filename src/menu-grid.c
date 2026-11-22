@@ -777,7 +777,7 @@ void menu_quick_screen_draw(void)
 {
     int index;
     film_palette_apply();
-    bmp_fill(UI_BG, 0, 0, 720, 480);
+    slim_menu_bg_fill(UI_BG);
     {
         /* the Standard (FILM / VIDEO / CROP MOOD) the cells belong to */
         struct menu_display_info std_info;
@@ -1054,7 +1054,7 @@ int menu_quick_screen_handle_key(int button_code)
 void menu_grid_draw(void)
 {
     film_palette_apply();
-    bmp_fill(UI_BG, 0, 0, 720, 480);
+    slim_menu_bg_fill(UI_BG);
 
     int label_h = slim_ui_font_height();
 

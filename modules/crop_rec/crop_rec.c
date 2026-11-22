@@ -3356,9 +3356,11 @@ int GetShiftValue()
          * 150 px in and is ~1620 px wide (the 1x3 / 3x3 defaults: 0x5BF2C = 98 lines + 150 px); the
          * narrower picture is centred in that, scaled by how far the 1620p fit (measured: 258 px,
          * not the 280 this model gives) moved: Narrow (83 %) 264 px, 1x3 Narrow (96 %) 176 px + 2 lines */
+        /* first HDMI photos (chart): S8 / 1/3" showed a few px of the chart's pink inside the right
+         * frame line, S16 / 1" inside the left one: about 8 px each way */
         if (CROP_PRESET_MENU == CROP_PRESET_1X1)
-            return 2 * 264;
-        return 2 * 3840 + 2 * 176;
+            return 2 * 272;
+        return 2 * 3840 + 2 * 168;
     }
     if (crop_rec_narrow_fit())
     {
