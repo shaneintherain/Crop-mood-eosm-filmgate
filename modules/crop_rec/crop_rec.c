@@ -1030,10 +1030,11 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                  * put a 864 wide readout's centre 4 px left of it (film_readouts dx 4 does the rest).
                  * Rows: 2 more 120-row steps down (0xAC9 -> 0xACB; up was -1 for 1440p / 1280p) start
                  * 240 rows lower; Narrow's window centre (row 620) is then row 380, the centre of 760 */
+                /* TEST 5 (see reg_override_1X1): 25 keeps Narrow's first row, 29.97 Narrow's first column */
                 if (CROP_Tiny)
                 {
-                    cmos_new[5] = 0x3CC + 3 * 0x40;
-                    cmos_new[7] = 0xACB;
+                    cmos_new[5] = Framerate_30 ? 0x3CC : 0x3CC + 3 * 0x40;
+                    cmos_new[7] = Framerate_25 ? 0xAC9 : 0xACB;
                 }
                 
                 if (CROP_Full_Res)
@@ -2048,7 +2049,15 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             YUV_HD_S_H = 0x450080;
     }
 
-    /* FilmGate Tiny 864x760 (TEST 4): 1/4".  Found so far (tests 1-3):
+    /* FilmGate Tiny 864x760 (TEST 5): 1/4".
+     * Test 4: centred + cleared or not, no preview before recording, but it shows while recording
+     * and the clips are fine.  While recording mlv_lite suspends Canon's AeWb task, and the comment
+     * at reg_override_3X3 says the YUV preview freezes when the raw frame is too small for that task.
+     * One raw dimension small works (test 2); both small does not.  This test, one rate each:
+     *   23.976: as test 4, without our AeWb window values (0xC0F09050 / 54, in the ADTG hook)
+     *   25:     864 columns moved, 760 rows from Narrow's first row (framing off)
+     *   29.97:  864 columns from Narrow's first column, 760 rows moved (framing off)
+     * Found before (tests 1-3):
      *   - 864 columns moved + 760 rows moved records fine at Narrow's line (494 / 498 clocks)
      *   - a 408 clock line with 864 columns: broken picture and recording; 305 / 400 / 486 failed in
      *     test 1 too.  So the line stays at Narrow's (as in 1x3, narrowing does not shorten it)
@@ -3060,8 +3069,9 @@ static void FAST EngDrvOut_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
      * the values taken when setting focus box to center then pressing down button one time in x5 mode.
      * it seems these also make preview more reliable in these modes, in some focus box positions preview
      * become black without these values */
-    if ((CROP_PRESET_MENU == CROP_PRESET_3X3 || CROP_PRESET_MENU == CROP_PRESET_1X3) ||
-       ((CROP_PRESET_MENU == CROP_PRESET_1X1))) // also for 1280p preset
+    if (((CROP_PRESET_MENU == CROP_PRESET_3X3 || CROP_PRESET_MENU == CROP_PRESET_1X3) ||
+       ((CROP_PRESET_MENU == CROP_PRESET_1X1))) && // also for 1280p preset
+        !(CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9 && Framerate_24))   /* Tiny test 5 */
     {
         if (data == 0xC0F09050) {regs[1] =   0x3002D0;}
         if (data == 0xC0F09054) {regs[1] =  0x2E006D8;}
@@ -3397,8 +3407,7 @@ int GetShiftValue()
      * multiple of 8 bytes (4 px): 26 and 28 bytes turned the preview blue (the recording was fine);
      * 0 and 32 were right.  Every other shift here is a multiple of 8 too (Narrow 120, 1620p 0x43F0). */
     if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)
-        return is_LCD_Output() && !Framerate_25 ? 2 * 84 : 0;   /* Tiny: ~548 px wide, 84 px each side
-                                                                 * (a multiple of 4 px); 25: test 4 */
+        return is_LCD_Output() ? 2 * 84 : 0;   /* Tiny: ~548 px wide, 84 px each side (a multiple of 4 px) */
 
     if (crop_rec_narrow_fit())
     {
@@ -3782,8 +3791,8 @@ static void FAST PATH_SelectPathDriveMode_hook(uint32_t* regs, uint32_t* stack, 
 
     if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)    // Tiny: centred, sides cleared (LCD)
     {
-        Shift_Preview = is_LCD_Output() && !Framerate_25;   /* 25: neither (test 4) */
-        Clear_Artifacts = is_LCD_Output() && !Framerate_25;
+        Shift_Preview = is_LCD_Output();
+        Clear_Artifacts = is_LCD_Output();
         EDMAC_9_Vertical_Change = 0;
     }
 
