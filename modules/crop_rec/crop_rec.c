@@ -3329,11 +3329,11 @@ int crop_rec_preview_fit()
 /* The two narrow readouts (Narrow 1600x1280: S8, 8mm, 1/2", 1/3", 1/4"; 1x3 Narrow 1072x2214: S16,
  * 16mm Actual, 1") were stretched sideways to the full screen width.  "Fit" shows them in their true
  * proportions instead, centred, with black at the sides: Narrow 600 px wide (1280p's scale), 1x3
- * Narrow 694 x 478.  Camera LCD only for now (HDMI keeps the stretched picture; mlv_lite draws the
- * frame line for each: film_readouts other_fit_w). */
+ * Narrow 694 x 478.  Camera LCD and HDMI 1080i full screen (TEST); the other HDMI layouts keep the
+ * stretched picture, and mlv_lite draws the frame line for each (film_readouts other_fit_w). */
 int crop_rec_narrow_fit()
 {
-    return is_EOSM && is_LCD_Output() &&
+    return is_EOSM && (is_LCD_Output() || is_1080i_Full_Output()) &&
            ((CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 8) ||
             (CROP_PRESET_MENU == CROP_PRESET_1X3 && crop_preset_1x3_res == 4));
 }
@@ -3350,6 +3350,16 @@ int GetShiftValue()
     /* Narrow fits (LCD): lines * 1440 + 2 * pixels from the left (the 1620p rule).  The shift must be a
      * multiple of 8 bytes (4 px): 26 and 28 bytes turned the preview blue (the recording was fine);
      * 0 and 32 were right.  Every other shift here is a multiple of 8 too (Narrow 120, 1620p 0x43F0). */
+    if (crop_rec_narrow_fit() && is_1080i_Full_Output())
+    {
+        /* HDMI 1080i (TEST, worked out): lines * 3840 + 2 * pixels.  A full-width picture there sits
+         * 150 px in and is ~1620 px wide (the 1x3 / 3x3 defaults: 0x5BF2C = 98 lines + 150 px); the
+         * narrower picture is centred in that, scaled by how far the 1620p fit (measured: 258 px,
+         * not the 280 this model gives) moved: Narrow (83 %) 264 px, 1x3 Narrow (96 %) 176 px + 2 lines */
+        if (CROP_PRESET_MENU == CROP_PRESET_1X1)
+            return 2 * 264;
+        return 2 * 3840 + 2 * 176;
+    }
     if (crop_rec_narrow_fit())
     {
         if (CROP_PRESET_MENU == CROP_PRESET_1X1)
@@ -3566,6 +3576,11 @@ void SetAspectRatioCorrectionValues()
                 case 4: // AR_2_39_1
                 {
                     YUV_LV_Buf = 0x1580CA8; YUV_LV_S_V = 0x1050209;
+                }
+                /* 1x3 Narrow fit (TEST): 536 of the 540 lines (344 x 0x209 = 179224, / 536 = 334) */
+                if (crop_rec_narrow_fit())
+                {
+                    YUV_LV_Buf = 0x2180CA8; YUV_LV_S_V = 0x105014E;
                 }
                 break;
             }  

@@ -67,7 +67,7 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
                                                  * columns move only in ~124 px steps (cmos_new[5]); 1536 wide sat
                                                  * ~40 px left (LCD), so 1600 wide (centre 32 px right) and dx 8.
                                                  * Preview (LCD): 600 px wide at 1280p's scale, centred (crop_rec_narrow_fit);
-                                                 * over HDMI still stretched to the full width (other_fit_w 720) */
+                                                 * over HDMI 1080i full the same (TEST); other HDMI layouts stretched (other_fit_w 720) */
     { 1072, 2214, 239, 1107, 3, 694, 0,  0, 720, 9, 65 },  /* 1x3 Narrow (FilmGate): the 1x3 2.35:1 rows, only the middle 3216
                                                  * sensor columns (first column 8 steps of 124 in, cmos_new[5] 0x220).
                                                  * For the 1x3 frames that are not full width (S16, 16mm, 1").  The
@@ -75,7 +75,7 @@ static const struct film_readout film_readouts[FILM_RO_COUNT] __attribute__((unu
                                                  * the camera), so the rolling shutter is as before (-1.5 %); it is
                                                  * here for the preview, which can show just these columns.  Preview
                                                  * (LCD): 694 x 478 (2214 rows -> 478 lines), centred (crop_rec_narrow_fit);
-                                                 * over HDMI still the 1x3 2.35:1 one stretched to 720 (other_*) */
+                                                 * HDMI 1080i full the same (TEST); other HDMI layouts the stretched 2.35:1 one (other_*) */
 };
 
 /* One recording window.  Index 0 is OFF (no film window). */
