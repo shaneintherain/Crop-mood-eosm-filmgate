@@ -1030,12 +1030,12 @@ static void FAST cmos_hook(uint32_t* regs, uint32_t* stack, uint32_t pc)
                  * put a 864 wide readout's centre 4 px left of it (film_readouts dx 4 does the rest).
                  * Rows: 2 more 120-row steps down (0xAC9 -> 0xACB; up was -1 for 1440p / 1280p) start
                  * 240 rows lower; Narrow's window centre (row 620) is then row 380, the centre of 760 */
-                /* TEST 2: one change from Narrow per rate (see reg_override_1X1):
-                 *   23.976 the columns moved (0x48C), 25 the rows moved (0xACB), 29.97 neither */
+                /* TEST 3 (see reg_override_1X1): columns moved at every rate; rows moved at 23.976
+                 * and 25, Narrow's rows at 29.97 */
                 if (CROP_Tiny)
                 {
-                    cmos_new[5] = Framerate_24 ? 0x3CC + 3 * 0x40 : 0x3CC;
-                    cmos_new[7] = Framerate_25 ? 0xACB : 0xAC9;
+                    cmos_new[5] = 0x3CC + 3 * 0x40;
+                    cmos_new[7] = Framerate_30 ? 0xAC9 : 0xACB;
                 }
                 
                 if (CROP_Full_Res)
@@ -2050,32 +2050,35 @@ static inline uint32_t reg_override_1X1(uint32_t reg, uint32_t old_val)
             YUV_HD_S_H = 0x450080;
     }
 
-    /* FilmGate Tiny 864x760 (TEST 2): 1/4".  Test 1 (columns, rows, width and line changed at once)
-     * gave no picture at any rate, even at Narrow's own line (29.97).  Now each rate changes ONE thing
-     * from Narrow (which works), at Narrow's own line, to find which one the sensor refuses:
-     *   23.976: 864 columns (RAW_H 0xFA) from the moved first column (cmos_new[5] 0x48C), Narrow's rows
-     *   25:     760 rows (RAW_V 0x315) from the moved first row (cmos_new[7] 0xACB), Narrow's columns
-     *   29.97:  864 columns (RAW_H 0xFA) from Narrow's own first column, Narrow's rows
-     * The preview fills the screen (stretched; no centring) and the frame line is not right: only
-     * "picture or not" matters in this test. */
+    /* FilmGate Tiny 864x760 (TEST 3): 1/4".
+     *   test 1: everything at once (864 cols moved, 760 rows moved, 305 / 400 / 486 clock lines):
+     *           no picture at any rate
+     *   test 2: one change from Narrow per rate, at Narrow's line: all three gave a picture and
+     *           recorded fine (864 columns moved / 760 rows moved / 864 columns not moved)
+     * Now (all 864 columns, moved):
+     *   23.976: 760 rows moved, Narrow's line (498)       -> do the two changes work together?
+     *   25:     1024 rows moved, Narrow's line (494)      -> the same, a taller readout
+     *   29.97:  Narrow's 1280 rows, a 408 clock line      -> does a narrow readout take a shorter line?
+     * Preview: true proportions as far as the scaler goes (in 0x4B; 0x39 only made it 540 px wide,
+     * so it cannot enlarge beyond about that), left-aligned, the rest of the line cleared (the pink
+     * strip at the right in test 2 was uncleared buffer).  Frame line not right yet. */
     if (CROP_Tiny)
     {
-        int narrow_cols = Framerate_25;
-        int narrow_rows = !Framerate_25;
+        int rows = Framerate_30 ? 1280 : Framerate_25 ? 1024 : 760;
         if (is_EOSM)
         {
-            RAW_H    = (narrow_cols ? 0x1B2 : 0xFA) + reg_width;
-            RAW_V    = (narrow_rows ? 0x51D : 0x315) + reg_height;
+            RAW_H    = 0xFA + reg_width;
+            RAW_V    = rows + 29 + reg_height;
             if (Framerate_25)      { TimerA = 0x1ED; TimerB = 0xA1E; }  /* Narrow 25 */
-            else if (Framerate_30) { TimerA = 0x1E9; TimerB = 0x882; }  /* Narrow 29.97 */
+            else if (Framerate_30) { TimerA = 0x197; TimerB = 0xA38; }  /* 408 x 2617 = 29.970 */
             else                   { TimerA = 0x1F1; TimerB = 0xA77; }  /* Narrow 23.976 */
         }
 
-        Preview_H     = narrow_cols ? 1596 : 860;
-        Preview_V     = narrow_rows ? 1280 : 760;
+        Preview_H     = 860;
+        Preview_V     = rows;
         Preview_R     = 0x19000D;
-        YUV_HD_S_H    = narrow_cols ? 0x45006A : 0x450039;
-        YUV_HD_S_V    = narrow_rows ? 0x250044 : 0x250028;
+        YUV_HD_S_H    = 0x45004B;
+        YUV_HD_S_V    = rows == 1280 ? 0x250044 : rows == 1024 ? 0x250036 : 0x250028;
 
         Black_Bar     = 0;
         Preview_Control = 1;
@@ -3399,7 +3402,7 @@ int GetShiftValue()
      * multiple of 8 bytes (4 px): 26 and 28 bytes turned the preview blue (the recording was fine);
      * 0 and 32 were right.  Every other shift here is a multiple of 8 too (Narrow 120, 1620p 0x43F0). */
     if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)
-        return 0;                           /* Tiny test 2: no centring (548 px, 86 each side -> 84 later) */
+        return 0;                           /* Tiny test 3: no centring (548 px, 86 each side -> 84 later) */
 
     if (crop_rec_narrow_fit())
     {
@@ -3781,10 +3784,10 @@ static void FAST PATH_SelectPathDriveMode_hook(uint32_t* regs, uint32_t* stack, 
         EDMAC_9_Vertical_Change = 0;
     }
 
-    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)    // Tiny test 2: fills the screen
+    if (CROP_PRESET_MENU == CROP_PRESET_1X1 && crop_preset_1x1_res == 9)    // Tiny test 3: sides cleared, not centred
     {
         Shift_Preview = 0;
-        Clear_Artifacts = 0;
+        Clear_Artifacts = 1;
         EDMAC_9_Vertical_Change = 0;
     }
 
@@ -5247,9 +5250,9 @@ static int slim_line_clocks(void)
         case FILM_RO_1X3:  return 0x207 + 1;                     /* 1x3 2.35:1 Highest (Timer B only) */
         case FILM_RO_1X3N: return 0x1FF + 1;                     /* 1x3 Narrow: as the other narrower 1x3 */
         case FILM_RO_1620: return 0x279 + 1;                     /* 1:1 4:3 1620p */
-        case FILM_RO_TINY:                                       /* 1:1 Tiny (test 2: Narrow's lines) */
+        case FILM_RO_TINY:                                       /* 1:1 Tiny (test 3) */
             if (fps == 1) return 0x1ED + 1;
-            if (fps == 2) return 0x1E9 + 1;
+            if (fps == 2) return 0x197 + 1;
             return 0x1F1 + 1;
         case FILM_RO_NARROW:                                     /* 1:1 Narrow 1600x1280 */
             if (fps == 1) return 0x1ED + 1;                      /* 25 fps */
