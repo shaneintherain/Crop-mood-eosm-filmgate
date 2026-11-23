@@ -5787,6 +5787,23 @@ menu_redraw_do()
             else
 #endif
             menus_display( menus, 0, 0 ); 
+#ifdef CONFIG_SLIM_MENUS
+            /* TEST (colour map): on the Settings page, all 256 palette entries in a 16 x 16 grid with
+             * their number (hex), to find which ones show as grey over HDMI.  Test builds only. */
+            {
+                struct menu * sel = get_selected_toplevel_menu();
+                if (sel && sel->name && streq(sel->name, "Settings") && menu_grid_is_launched() &&
+                    !menu_quick_screen_is_active() && !menu_grid_is_active())
+                {
+                    for (int c = 0; c < 256; c++)
+                    {
+                        int cx = (c % 16) * 45, cy = 170 + (c / 16) * 16;
+                        bmp_fill(c, cx, cy, 45, 16);
+                        bmp_printf(FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), cx + 1, cy + 2, "%02X", c);
+                    }
+                }
+            }
+#endif
 
             if (!menu_lv_transparent_mode && !SUBMENU_OR_EDIT && !junkie_mode)
             {
