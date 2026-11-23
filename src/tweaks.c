@@ -3225,9 +3225,34 @@ static void brightness_saturation_reset()
 }
 #endif
 
-/* Film Edge is plain black and white using fixed palette entries: nothing to set up. */
+/* Film Edge uses fixed palette entries: black, white, orange and the grey ramp (COLOR_GRAY(0..100),
+ * entries 38..79).  On the camera LCD Canon's palette has them all.  Over HDMI the grey ramp came
+ * out white (grey unit labels, the audio meter track): the second palette register set (the one
+ * ML's palette code writes at +0x300) does not carry Canon's grey values there.  Over HDMI, write
+ * the LCD values of the grey ramp to both register sets whenever they differ (checked at most twice
+ * a second; one register read when nothing is to do). */
 void film_palette_apply(void)
 {
+#ifndef CONFIG_VXWORKS
+    static int last_check = 0;
+    if (!ext_monitor_hdmi || !DISPLAY_IS_ON)
+        return;
+    int now = get_ms_clock();
+    if (now - last_check < 500)
+        return;
+    last_check = now;
+
+    int probe = COLOR_GRAY(60);
+    if (shamem_read(LCD_Palette[3 * probe + 0x300]) == LCD_Palette[3 * probe + 2] &&
+        shamem_read(LCD_Palette[3 * probe]) == LCD_Palette[3 * probe + 2])
+        return;
+
+    for (int i = COLOR_GRAY(0); i <= COLOR_GRAY(100); i++)
+    {
+        EngDrvOut(LCD_Palette[3 * i], LCD_Palette[3 * i + 2]);
+        EngDrvOut(LCD_Palette[3 * i + 0x300], LCD_Palette[3 * i + 2]);
+    }
+#endif
 }
 
 #ifdef FEATURE_COLOR_SCHEME
