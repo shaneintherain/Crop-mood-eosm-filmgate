@@ -2366,7 +2366,7 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
                     
                 if(rtci_block.timestamp)
                 {
-                    snprintf(buffer->messages.topLeft, SCREEN_MSG_LEN, "%02d.%02d.%04d %02d:%02d:%02d", rtci_block.tm_mday, rtci_block.tm_mon + 1, 1900 + rtci_block.tm_year, rtci_block.tm_hour, rtci_block.tm_min, rtci_block.tm_sec);
+                    snprintf(buffer->messages.topLeft, SCREEN_MSG_LEN, "%02d.%02d.%04d %02d:%02d:%02d", rtci_block.tm_mon + 1, rtci_block.tm_mday, 1900 + rtci_block.tm_year, rtci_block.tm_hour, rtci_block.tm_min, rtci_block.tm_sec);
                 }
                 
                 snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s  %dx%d   %d BIT%s", mlv_play_short_name(filename), rawi_block.xRes, rawi_block.yRes, mlv_play_bit_depth(rawi_block.raw_info.bits_per_pixel, rawi_block.raw_info.white_level), (main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92)?"   LJ92":"");
