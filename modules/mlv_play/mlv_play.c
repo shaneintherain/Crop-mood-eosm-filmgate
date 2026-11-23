@@ -25,6 +25,7 @@
 #include <module.h>
 #include <dryos.h>
 #include <property.h>
+#include <propvalues.h>
 #include <bmp.h>
 #include <beep.h>
 #include <menu.h>
@@ -1871,8 +1872,9 @@ static void mlv_play_render_task(uint32_t priv)
 
 static uint32_t mlv_play_should_stop()
 {
-    /* powering off the camera is for sure a good reason to stop any playback */
-    if(ml_shutdown_requested)
+    /* powering off the camera is for sure a good reason to stop any playback (the sensor cleaning
+     * runs first, before ML's own shutdown flag is set: stop then too, closing the clip) */
+    if(ml_shutdown_requested || sensor_cleaning)
     {
         return 1;
     }
@@ -3121,10 +3123,12 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
                 return 0;
             }
 
-            /* ignore zero keycodes. pass through or not? */
+            /* Zero = a Canon event with no module key code (internal GUI commands, e.g. the power
+             * switch while in playback).  Pass them on: swallowing them kept Canon from finishing
+             * its power-off, and the camera hung on the sensor cleaning screen. */
             case 0:
             {
-                return 0;
+                return 1;
             }
             
             /* any other key aborts playback */
