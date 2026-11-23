@@ -153,6 +153,21 @@ static const char *mlv_play_short_name(const char *path)
     return name;
 }
 
+/* The bit depth the clip was shot at.  With lossless (LJ92) recording the file always holds
+ * 14-bit samples, so bits_per_pixel says 14 whatever was picked; the 10 / 11 / 12-bit modes
+ * (analog gain) are told apart by their white level instead: 2870 / 3692 / 5336 (crop_rec,
+ * raw_lv_settings_still_valid); 14-bit is ~15000-16383. */
+static int mlv_play_bit_depth(int bits_per_pixel, int white_level)
+{
+    if (bits_per_pixel == 14 && white_level > 0)
+    {
+        if (white_level <= 3300) return 10;
+        if (white_level <= 4500) return 11;
+        if (white_level <= 8000) return 12;
+    }
+    return bits_per_pixel;
+}
+
 /* Clip the bottom-left text so it never runs into the frame counter on the right.
  * Whatever does not fit is cut off at the end (the file name comes first, so it stays). */
 static void mlv_play_fit_left(char *left, const char *right)
@@ -2352,7 +2367,7 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
                     snprintf(buffer->messages.topLeft, SCREEN_MSG_LEN, "%02d.%02d.%04d %02d:%02d:%02d", rtci_block.tm_mday, rtci_block.tm_mon + 1, 1900 + rtci_block.tm_year, rtci_block.tm_hour, rtci_block.tm_min, rtci_block.tm_sec);
                 }
                 
-                snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s  %dx%d   %d BIT%s", mlv_play_short_name(filename), rawi_block.xRes, rawi_block.yRes, rawi_block.raw_info.bits_per_pixel, (main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92)?"   LJ92":"");
+                snprintf(buffer->messages.botLeft, SCREEN_MSG_LEN, "%s  %dx%d   %d BIT%s", mlv_play_short_name(filename), rawi_block.xRes, rawi_block.yRes, mlv_play_bit_depth(rawi_block.raw_info.bits_per_pixel, rawi_block.raw_info.white_level), (main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92)?"   LJ92":"");
                 snprintf(buffer->messages.botRight, SCREEN_MSG_LEN, "%d/%d", vidf_block.frameNumber + 1, frame_count);
                 mlv_play_fit_left(buffer->messages.botLeft, buffer->messages.botRight);
                 

@@ -7175,7 +7175,7 @@ static void slim_cover_task(void *unused)
     int t0 = get_ms_clock();
     /* the cover stays up across a Live View restart (1x3 switch), where lv is 0 for a moment */
     while (slim_cover_on && (lv || slim_cover_lv_restart) && !gui_menu_shown() && !RECORDING &&
-           !ml_shutdown_requested && get_ms_clock() - t0 < SLIM_COVER_MAX_MS)
+           !ml_shutdown_requested && !sensor_cleaning && get_ms_clock() - t0 < SLIM_COVER_MAX_MS)
     {
         slim_cover_black();
         msleep(20);
@@ -7265,6 +7265,12 @@ static void slim_zoom_x5(int * fresh)
 /* when closing ML menu, check whether we need to refresh the LiveView */
 static unsigned int crop_rec_polling_cbr(unsigned int unused)
 {
+    /* Powering down: Canon stops Live View and runs the sensor cleaning.  Do none of the Live View
+     * handling below then (it could see Live View "come back" and start a zoom / restart, racing
+     * Canon's shutdown: the camera sometimes hung on the sensor cleaning screen). */
+    if (ml_shutdown_requested || sensor_cleaning)
+        return CBR_RET_CONTINUE;
+
     /* touch/Movie-tab shortcuts inject Q+SET into an open menu — not used on slim. */
 #ifndef CONFIG_SLIM_MENUS
     if (gui_menu_shown() && submenu && !RECORDING)

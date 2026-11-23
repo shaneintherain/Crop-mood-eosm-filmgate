@@ -1601,6 +1601,9 @@ static void boot_logo_draw(void)
     boot_logo_band(0);
     boot_logo_band(480 - BOOT_LOGO_BAND_H);
     boot_logo_draw_spans(0);
+    /* over HDMI the margins around the 720x480 canvas show too: black behind the splash */
+    if (ext_monitor_hdmi)
+        slim_menu_margins_fill(UI_BG);
 }
 
 static volatile int boot_logo_active = 0;
@@ -1635,6 +1638,9 @@ static void boot_logo_present(void)
     boot_logo_draw();
     bmp_idle_copy(1, 0);
     bmp_draw_to_idle(0);
+    /* the copy is the 720x480 canvas only: the HDMI margins go straight into the shown buffer */
+    if (ext_monitor_hdmi)
+        slim_menu_margins_fill(UI_BG);
 }
 
 static void boot_logo_clear(void)
@@ -1645,6 +1651,8 @@ static void boot_logo_clear(void)
     bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
     bmp_idle_copy(1, 0);
     bmp_draw_to_idle(0);
+    if (ext_monitor_hdmi)
+        slim_menu_margins_fill(COLOR_BLACK);
 }
 
 static void boot_logo_release_canvas(void)
@@ -1695,7 +1703,9 @@ static void boot_logo_task(void *unused)
              * blue bars turning black.  If a few sample points no longer match, draw it all again. */
             if ((bmp_getpixel(4, 4) != BOOT_LOGO_BAND_COLOR ||
                  bmp_getpixel(4, 480 - 4) != BOOT_LOGO_BAND_COLOR ||
-                 bmp_getpixel(4, 100) != UI_BG) &&
+                 bmp_getpixel(4, 100) != UI_BG ||
+                 (ext_monitor_hdmi && (bmp_getpixel(-60, 240) != UI_BG ||
+                                       bmp_getpixel(780, 240) != UI_BG))) &&
                 get_ms_clock() >= last_full_redraw + 200)   /* at most 5 times a second */
             {
                 last_full_redraw = get_ms_clock();
