@@ -5841,6 +5841,12 @@ menu_redraw_do()
                         if (menu_upside_down) bmp_flip(bmp_vram(), bmp_vram_idle(), 0);
                         else bmp_idle_copy(1,0);
                     }
+#ifdef CONFIG_SLIM_MENUS
+                    /* the copy above is the 720x480 screen only: over HDMI paint the margins around
+                     * it straight into the shown buffer, or old drawing / the live picture shows there */
+                    if (ext_monitor_hdmi && hdmi_code != 2)
+                        slim_menu_margins_fill(UI_BG);
+#endif
                 }
                 //~ bmp_idle_clear();
             }
@@ -8840,6 +8846,15 @@ static void check_duplicate_entries()
     }
 
     info_led_off();
+}
+
+/* the HDMI margins only (around the 720x480 screen), in whichever buffer is being drawn to */
+void slim_menu_margins_fill(int color)
+{
+    bmp_fill(color, BMP_W_MINUS, BMP_H_MINUS, BMP_W_PLUS - BMP_W_MINUS, -BMP_H_MINUS);   /* above */
+    bmp_fill(color, BMP_W_MINUS, 480, BMP_W_PLUS - BMP_W_MINUS, BMP_H_PLUS - 480);       /* below */
+    bmp_fill(color, BMP_W_MINUS, 0, -BMP_W_MINUS, 480);                                  /* left  */
+    bmp_fill(color, 720, 0, BMP_W_PLUS - 720, 480);                                      /* right */
 }
 
 void slim_menu_bg_fill(int color)
