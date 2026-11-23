@@ -1468,6 +1468,10 @@ void enter_menu_mode()
 /* exit from PLAY/QR/MENU modes (to LiveView or plain photo mode) */
 void exit_play_qr_menu_mode()
 {
+    /* Powering off: going back to Live View now starts a Live View session in the
+     * middle of Canon's shutdown, and the camera hangs on the sensor cleaning screen. */
+    if (sensor_cleaning || ml_shutdown_requested) return;
+
     /* request new mode */
     SetGUIRequestMode(0);
 
