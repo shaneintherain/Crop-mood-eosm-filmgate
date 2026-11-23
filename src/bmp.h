@@ -334,11 +334,16 @@ void slim_menu_margins_fill(int color);
 #define UI_BG        COLOR_BLACK      /* page background            */
 #define UI_TILE      COLOR_GRAY(10)   /* tiles, submenu title bar   */
 #define UI_LINE      COLOR_GRAY(20)   /* dividers                   */
-#define UI_ARROW     COLOR_GRAY(40)   /* arrows on rows not selected */
+/* Over HDMI the light greys looked white (measured: the monitor gets the same palette, but a
+ * bright monitor shows ~80 % grey next to white as white), so the light greys are darker there. */
+int ui_hdmi_greys(void);   /* propvalues.c: 1 when overlays go to HDMI */
+#define UI_GREY_LCD_HDMI(lcd, hdmi) (ui_hdmi_greys() ? COLOR_GRAY(hdmi) : COLOR_GRAY(lcd))
+#define UI_ARROW     UI_GREY_LCD_HDMI(40, 25)   /* arrows on rows not selected */
 #define UI_TEXT      COLOR_WHITE      /* labels and values          */
-#define UI_LABEL     COLOR_GRAY(70)   /* menu row titles            */
-#define UI_DIM       COLOR_GRAY(65)   /* secondary text             */
-#define UI_MUTED     COLOR_GRAY(45)   /* locked / read-only rows    */
+#define UI_LABEL     UI_GREY_LCD_HDMI(70, 40)   /* menu row titles            */
+#define UI_DIM       UI_GREY_LCD_HDMI(65, 35)   /* secondary text             */
+#define UI_MUTED     UI_GREY_LCD_HDMI(45, 22)   /* locked / read-only rows    */
+#define UI_UNIT      UI_GREY_LCD_HDMI(60, 35)   /* unit labels (FPS, GB...), meter letters, playback */
 #define UI_SEL       COLOR_ORANGE     /* selection fill: solid orange bar / panel */
 #define UI_SEL_TEXT  COLOR_BLACK      /* text on the selection      */
 #define UI_SEL_MUTED COLOR_GRAY(25)   /* locked text on the selection */

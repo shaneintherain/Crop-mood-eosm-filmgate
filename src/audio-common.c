@@ -388,7 +388,7 @@ draw_meter(
     (void) db_peak;
     /* no "%c" here: the camera's printf does not handle it (it filled the whole bar with the letter) */
     char letter[4] = { label[0], ' ', ' ', 0 };
-    bmp_printf( FONT(FONT_SMALL, COLOR_GRAY(60), COLOR_BLACK), x_origin, y_origin, "%s", letter );
+    bmp_printf( FONT(FONT_SMALL, UI_UNIT, COLOR_BLACK), x_origin, y_origin, "%s", letter );
 }
 
 

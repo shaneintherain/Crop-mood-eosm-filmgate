@@ -37,7 +37,7 @@ extern uint32_t font_jost_info;   /* rbf_font.c */
 static int lvinfo_unit_font(int fnt)
 {
     /* an orange value (the field open in the touch editor, or a warning) gets orange units too */
-    int fg = FONT_FG(fnt) == COLOR_ORANGE ? COLOR_ORANGE : COLOR_GRAY(60);
+    int fg = FONT_FG(fnt) == COLOR_ORANGE ? COLOR_ORANGE : UI_UNIT;
     return FONT(FONT_MED, fg, FONT_BG(fnt));
 }
 
@@ -899,18 +899,6 @@ void lvinfo_display(int top, int bottom)
     }
 
     lvinfo_touch_draw_editor();
-
-    /* TEST (colour map, shooting screen): the 256 palette entries as on the Settings page, to see
-     * whether Live View over HDMI uses other colours than the menus.  Test builds only. */
-    if (lv && !gui_menu_shown())
-    {
-        for (int c = 0; c < 256; c++)
-        {
-            int cx = (c % 16) * 45, cy = 110 + (c / 16) * 16;
-            bmp_fill(c, cx, cy, 45, 16);
-            bmp_printf(FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), cx + 1, cy + 2, "%02X", c);
-        }
-    }
 
     give_semaphore(lvinfo_sem);
 }

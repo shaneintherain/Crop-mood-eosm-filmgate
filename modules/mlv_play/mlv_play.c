@@ -200,7 +200,7 @@ static void mlv_play_fit_left(char *left, const char *right)
  * secondary text in grey.  Not yet confirmed that Canon's PLAY palette keeps these colours. */
 #define PB_SEL      COLOR_ORANGE
 #define PB_SEL_TEXT COLOR_BLACK
-#define PB_GREY     COLOR_GRAY(60)
+#define PB_GREY     UI_UNIT
 
 static int pb_isqrt(int v)
 {

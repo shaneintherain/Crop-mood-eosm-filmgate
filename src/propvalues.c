@@ -199,6 +199,9 @@ volatile int hdmi_code;
 
 volatile PROP_INT(PROP_USBRCA_MONITOR, _ext_monitor_rca);
 
+/* darker UI greys over HDMI (bright monitors show ~80% grey as white) */
+int ui_hdmi_greys(void) { return ext_monitor_hdmi; }
+
 static void hdmi_vars_update()
 {
     if (!hdmi_mirroring)
