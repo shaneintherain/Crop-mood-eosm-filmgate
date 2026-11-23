@@ -7320,6 +7320,13 @@ void show_welcome_screen()
     }
 }*/
 
+/* Canon menu open on an HDMI monitor that shows the 960x540 margins */
+static int canon_menu_hdmi_margins(void)
+{
+    return MENU_MODE && !menu_shown && ext_monitor_hdmi && hdmi_code != 2
+        && DISPLAY_IS_ON && !sensor_cleaning && !ml_shutdown_requested;
+}
+
 static void
 menu_task( void* unused )
 {
@@ -7349,7 +7356,7 @@ menu_task( void* unused )
                 ?   /* repeat delay when holding a key */
                     COERCE(100 + keyrep_countdown*5, 20, 100)
                 :   /* otherwise (no keys held) */
-                    (transparent_menu_magic_zoom ? 2000 : 500 );
+                    (transparent_menu_magic_zoom ? 2000 : canon_menu_hdmi_margins() ? 100 : 500 );
 
         int rc = take_semaphore( gui_sem, dt );
 
@@ -7417,6 +7424,11 @@ menu_task( void* unused )
             else
             {
                 /* menu no longer displayed */
+
+                /* Canon's own menu over HDMI covers only 720x480; keep the margins black
+                 * (otherwise stale image data shows around it) */
+                if (canon_menu_hdmi_margins())
+                    slim_menu_margins_fill(COLOR_BLACK);
                 /* if we changed anything in the menu, save config */
                 extern int config_autosave;
                 if (config_autosave && (config_dirty || menu_flags_save_dirty) && NOT_RECORDING && !ml_shutdown_requested)
