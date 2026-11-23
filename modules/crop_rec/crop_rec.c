@@ -7269,7 +7269,12 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
      * handling below then (it could see Live View "come back" and start a zoom / restart, racing
      * Canon's shutdown: the camera sometimes hung on the sensor cleaning screen). */
     if (ml_shutdown_requested || sensor_cleaning)
+    {
+#ifdef CONFIG_EOSM
+        eosm_lv_guard_busy = 0;     /* nothing will finish the guard now: do not hold any input */
+#endif
         return CBR_RET_CONTINUE;
+    }
 
     /* touch/Movie-tab shortcuts inject Q+SET into an open menu — not used on slim. */
 #ifndef CONFIG_SLIM_MENUS

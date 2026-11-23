@@ -402,6 +402,17 @@ static int handle_slim_rec_touch_block(struct event * event)
         }
     }
 
+    /* Only the user's own input is held back below (touch, buttons, dials).  Canon's internal GUI
+     * commands (no module key code) must always pass: swallowing them while the crop module's Live
+     * View guard was busy (it starts whenever Live View stops, e.g. at power-off) kept Canon from
+     * finishing its shutdown, and the camera hung on the sensor cleaning screen. */
+    if (slim_crop_rec_transition_busy() &&
+        (ml_shutdown_requested || sensor_cleaning ||
+         (event->param != BGMT_TOUCH_1_FINGER && event->param != BGMT_UNTOUCH_1_FINGER &&
+          event->param != BGMT_TOUCH_2_FINGER && event->param != BGMT_UNTOUCH_2_FINGER &&
+          module_translate_key(event->param, MODULE_KEY_PORTABLE) == 0)))
+        return 1;
+
     if (slim_crop_rec_transition_busy())
     {
         /* The crop module is validating Canon's newly-created LV buffers.
