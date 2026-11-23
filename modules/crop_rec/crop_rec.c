@@ -7273,6 +7273,18 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
 #ifdef CONFIG_EOSM
         eosm_lv_guard_busy = 0;     /* nothing will finish the guard now: do not hold any input */
 #endif
+        /* give Canon back its own preview centring / clearing values before it tears the display
+         * down (over HDMI they are display buffer offsets; the power-off hang was seen with them on) */
+        if (Center_Preview_ON)
+        {
+            unpatch_memory(ShiftAddress);
+            Center_Preview_ON = 0;
+        }
+        if (Clear_Artifacts_ON)
+        {
+            unpatch_memory(ClearAddress);
+            Clear_Artifacts_ON = 0;
+        }
         return CBR_RET_CONTINUE;
     }
 
