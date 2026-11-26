@@ -618,6 +618,7 @@ static void sdtrace_task(void * unused)
     {
         msleep(250);
         if (!sdt_t0) continue;
+        if (RECORDING) continue;    /* never touch the card while recording */
         int dt = get_ms_clock() - sdt_t0;
         if ((pass == 0 && dt > 4000) || (pass == 1 && dt > 10000) || (pass == 2 && dt > 20000))
         {

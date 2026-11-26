@@ -128,11 +128,7 @@ void ml_gui_main_task()
 
         index = event->type;
 
-        /* power-off trace (diagnostic): Canon's power-off GUI commands start it */
-        if (event->type == 0 && (event->param == GMT_GUICMD_START_AS_CHECK ||
-                                 event->param == GMT_GUICMD_OPEN_SLOT_COVER ||
-                                 event->param == GMT_GUICMD_LOCK_OFF))
-            sdtrace_start("power-off command");
+        /* power-off trace (diagnostic; started by the shutdown request, see tasks.c) */
         int traced = sdtrace_active();
         if (traced)
             sdtrace("event type=%d param=0x%x arg=0x%x", event->type, event->param, event->arg);
