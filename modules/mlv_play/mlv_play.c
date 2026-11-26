@@ -2829,8 +2829,11 @@ static playlist_entry_t mlv_playlist_prev(playlist_entry_t current)
     return ret;
 }
 
+extern void sdtrace(const char * fmt, ...);
+
 static void mlv_play_leave_playback()
 {
+    sdtrace("mlv_play leave: begin (rendering=%d clean=%d shut=%d)", mlv_play_rendering, sensor_cleaning, ml_shutdown_requested);
     mlv_play_render_abort = 1;
     
     while(mlv_play_rendering)
@@ -2861,11 +2864,14 @@ static void mlv_play_leave_playback()
      * cleaning).  Asking it to go back to Live View now (SetGUIRequestMode(0)) starts a
      * Live View session in the middle of the shutdown, and the camera hangs in sensor
      * cleaning until the battery door is opened.  Leave the mode alone in that case. */
+    sdtrace("mlv_play leave: buffers freed");
     if (ml_shutdown_requested || sensor_cleaning)
     {
+        sdtrace("mlv_play leave: powering off, no mode change");
         return;
     }
 
+    sdtrace("mlv_play leave: back to Live View");
     vram_clear_lv();
     exit_play_qr_mode();
 }
