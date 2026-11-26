@@ -412,7 +412,8 @@ PROP_HANDLER(PROP_TERMINATE_SHUT_REQ)
 {
     /* 0=request, 3=execute, 4=cancel */
     /* 3 appears too late for saving config files */
-    sdtrace_start("TERMINATE_SHUT_REQ");
+    if (buf[0] == 0 || buf[0] == 3)
+        sdtrace_start("TERMINATE_SHUT_REQ");
     sdtrace("prop TERMINATE_SHUT_REQ=%d", buf[0]);
     if (buf[0] == 0)
     {
@@ -551,6 +552,10 @@ void sdtrace(const char * fmt, ...)
 
 void sdtrace_start(const char * why)
 {
+    /* not at power-on: the camera can run a sensor cleaning while starting up too */
+    extern int ml_started;
+    if (!ml_started || get_ms_clock() < 15000) return;
+
     if (!sdt_t0)
     {
         sdt_t0 = get_ms_clock();
@@ -593,7 +598,8 @@ static void sdt_write(int pass)
     FIO_WriteFile(f, line, n);
 
     /* every task: name, state, what it waits on, priority */
-    for (int id = 1; id < 256; id++)
+    extern unsigned int task_max;
+    for (int id = 1; id <= (int)task_max && id < 256; id++)
     {
         struct task_attr_str a;
         if (is_taskid_valid(1, id, &a) != 0) continue;
