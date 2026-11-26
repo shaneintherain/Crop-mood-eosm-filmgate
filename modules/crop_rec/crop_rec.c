@@ -7271,15 +7271,6 @@ static unsigned int crop_rec_polling_cbr(unsigned int unused)
     if (ml_shutdown_requested || sensor_cleaning)
     {
 #ifdef CONFIG_EOSM
-        static int traced = 0;
-        if (!traced)
-        {
-            extern void sdtrace(const char * fmt, ...);
-            sdtrace("crop_rec polling: powering off (guard=%d center=%d clear=%d)", eosm_lv_guard_busy, Center_Preview_ON, Clear_Artifacts_ON);
-            traced = 1;
-        }
-#endif
-#ifdef CONFIG_EOSM
         eosm_lv_guard_busy = 0;     /* nothing will finish the guard now: do not hold any input */
 #endif
         /* give Canon back its own preview centring / clearing values before it tears the display

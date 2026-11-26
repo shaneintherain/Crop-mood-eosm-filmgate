@@ -379,12 +379,8 @@ static void leds_on()
 /* to refactor with CBR */
 extern int module_shutdown();
 
-void sdtrace(const char * fmt, ...);
-void sdtrace_start(const char * why);
-
 static void ml_shutdown()
 {
-    sdtrace("ml_shutdown begin");
     check_pre_shutdown_flag();
 #ifdef FEATURE_CROP_MODE_HACK
     movie_crop_hack_disable();
@@ -397,13 +393,10 @@ static void ml_shutdown()
 #ifdef FEATURE_GPS_TWEAKS
     gps_tweaks_shutdown_hook();
 #endif    
-    sdtrace("config save");
     config_save_at_shutdown();
-    sdtrace("module shutdown");
 #if defined(CONFIG_MODULES)
     module_shutdown();
 #endif
-    sdtrace("ml_shutdown end");
     info_led_on();
     _card_led_on();
 }
@@ -412,9 +405,6 @@ PROP_HANDLER(PROP_TERMINATE_SHUT_REQ)
 {
     /* 0=request, 3=execute, 4=cancel */
     /* 3 appears too late for saving config files */
-    if (buf[0] == 0 || buf[0] == 3)
-        sdtrace_start("TERMINATE_SHUT_REQ");
-    sdtrace("prop TERMINATE_SHUT_REQ=%d", buf[0]);
     if (buf[0] == 0)
     {
         /* keep the LEDs on until shutdown completes */
@@ -506,126 +496,3 @@ int CheckBmpReleaseRecursiveLock(void* lock)
     return r;
 }
 #endif
-
-/* ------------------------------------------------------------------------------------------------
- * Power-off trace (diagnostic).  From the moment Canon starts powering off, record GUI events,
- * property changes and ML's shutdown steps in RAM.  A normal power-off ends within a second or
- * two and nothing is written.  If ML is still running 4 s later (the camera hung on the sensor
- * cleaning screen), write the trace plus a list of every task and what it is waiting on to
- * ML/LOGS/PWROFF.LOG (again at 10 s and 20 s, so a later state is captured too).
- * ------------------------------------------------------------------------------------------------ */
-#include "propvalues.h"
-
-static char sdt_buf[6144];
-static volatile int sdt_len = 0;
-static volatile int sdt_t0 = 0;          /* ms clock when the trace started (0 = not started) */
-
-static void sdt_vappend(const char * fmt, va_list ap)
-{
-    int len = sdt_len;
-    if (len > (int)sizeof(sdt_buf) - 96) return;
-    int n = snprintf(sdt_buf + len, sizeof(sdt_buf) - len, "%5d %-10s ",
-                     get_ms_clock() - sdt_t0, get_current_task_name());
-    if (n < 0) return;
-    len += n;
-    n = vsnprintf(sdt_buf + len, sizeof(sdt_buf) - len - 1, fmt, ap);
-    if (n < 0) return;
-    { int room = (int)sizeof(sdt_buf) - len - 2; len += (n < room) ? n : room; }
-    sdt_buf[len++] = '\n';
-    sdt_buf[len] = 0;
-    sdt_len = len;
-}
-
-int sdtrace_active(void)
-{
-    return sdt_t0 != 0;
-}
-
-void sdtrace(const char * fmt, ...)
-{
-    if (!sdt_t0) return;
-    va_list ap;
-    va_start(ap, fmt);
-    sdt_vappend(fmt, ap);
-    va_end(ap);
-}
-
-void sdtrace_start(const char * why)
-{
-    /* not at power-on: the camera can run a sensor cleaning while starting up too */
-    extern int ml_started;
-    if (!ml_started || get_ms_clock() < 15000) return;
-
-    if (!sdt_t0)
-    {
-        sdt_t0 = get_ms_clock();
-        if (!sdt_t0) sdt_t0 = 1;
-        sdtrace("START %s: gui_state=%d guimode=%d lv=%d paused=%d disp=%d hdmi=%d code=%d clean=%d",
-                why, gui_state, CURRENT_GUI_MODE, lv, LV_PAUSED, DISPLAY_IS_ON,
-                ext_monitor_hdmi, hdmi_code, sensor_cleaning);
-    }
-    else
-    {
-        sdtrace("(%s)", why);
-    }
-}
-
-PROP_HANDLER(PROP_ACTIVE_SWEEP_STATUS)
-{
-    if (buf[0]) sdtrace_start("sensor cleaning");
-    sdtrace("prop sensor_cleaning=%d", buf[0]);
-}
-
-PROP_HANDLER(PROP_LV_ACTION)
-{
-    sdtrace("prop LV_ACTION=%d", buf[0]);
-}
-
-PROP_HANDLER(PROP_HDMI_CHANGE_CODE)
-{
-    sdtrace("prop HDMI_CODE=%d", buf[0]);
-}
-
-static void sdt_write(int pass)
-{
-    char line[96];
-    int n = snprintf(line, sizeof(line), "--- snapshot %d: gui_state=%d guimode=%d lv=%d paused=%d disp=%d clean=%d shut=%d\n",
-                     pass, gui_state, CURRENT_GUI_MODE, lv, LV_PAUSED, DISPLAY_IS_ON, sensor_cleaning, ml_shutdown_requested);
-
-    FILE * f = FIO_CreateFile("ML/LOGS/PWROFF.LOG");
-    if (!f) return;
-    FIO_WriteFile(f, sdt_buf, sdt_len);
-    FIO_WriteFile(f, line, n);
-
-    /* every task: name, state, what it waits on, priority */
-    extern unsigned int task_max;
-    for (int id = 1; id <= (int)task_max && id < 256; id++)
-    {
-        struct task_attr_str a;
-        if (is_taskid_valid(1, id, &a) != 0) continue;
-        n = snprintf(line, sizeof(line), "task %3d %-20s state=%d wait=%d pri=0x%x\n",
-                     id, a.name ? (char *) a.name : "?", a.state, a.wait_id, a.pri);
-        FIO_WriteFile(f, line, n);
-    }
-    FIO_CloseFile(f);
-}
-
-static void sdtrace_task(void * unused)
-{
-    int pass = 0;
-    /* not TASK_LOOP: that one stops at ML's shutdown, which is exactly when this is needed */
-    while (1)
-    {
-        msleep(250);
-        if (!sdt_t0) continue;
-        if (RECORDING) continue;    /* never touch the card while recording */
-        int dt = get_ms_clock() - sdt_t0;
-        if ((pass == 0 && dt > 4000) || (pass == 1 && dt > 10000) || (pass == 2 && dt > 20000))
-        {
-            sdt_write(++pass);
-            if (pass == 3) return;
-        }
-    }
-}
-
-TASK_CREATE("sdtrace_task", sdtrace_task, 0, 0x17, 0x1000);

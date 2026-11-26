@@ -63,11 +63,6 @@
 
 struct semaphore * gui_sem;
 
-/* power-off trace (tasks.c) */
-int sdtrace_active(void);
-void sdtrace(const char * fmt, ...);
-void sdtrace_start(const char * why);
-
 // return 0 if you want to block this event
 static int handle_buttons(struct event * event)
 {
@@ -128,25 +123,18 @@ void ml_gui_main_task()
 
         index = event->type;
 
-        /* power-off trace (diagnostic; started by the shutdown request, see tasks.c) */
-        int traced = sdtrace_active();
-        if (traced)
-            sdtrace("event type=%d param=0x%x arg=0x%x", event->type, event->param, event->arg);
-
         if (!magic_is_off())
         {
 
             if (event->type == 0)
             {
                 if (handle_buttons(event) == 0) { // ML button/event handler
-                    if (traced) sdtrace("  blocked by ML");
                     continue;
                 }
             }
             else
             {
                 if (handle_other_events(event) == 0) {
-                    if (traced) sdtrace("  blocked by ML");
                     continue;
                 }
             }
@@ -166,7 +154,6 @@ void ml_gui_main_task()
 
         void(*f)(struct event *) = funcs[index];
         f(event);
-        if (traced) sdtrace("  Canon done");
     }
 } 
 
