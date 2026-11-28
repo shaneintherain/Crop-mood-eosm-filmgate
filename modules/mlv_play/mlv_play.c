@@ -3061,9 +3061,10 @@ static void mlv_play_task(void *priv)
     mlv_play_enter_playback();
 
     /* create playlist */
-    mlv_play_show_dlg(0, "Building playlist...");
-    mlv_playlist_build(0);
-    mlv_play_show_dlg(0, 0);
+    /* TEST (power-off hang): no dialog, no playlist */
+    //mlv_play_show_dlg(0, "Building playlist...");
+    //mlv_playlist_build(0);
+    //mlv_play_show_dlg(0, 0);
 
     /* TEST (power-off hang): open the player, but load and show no clip */
     {
@@ -3296,9 +3297,8 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
         {
             case MODULE_KEY_PLAY:
             {
-                /* TEST (power-off hang): no player at all, Canon's own viewer opens */
-                mlv_play_pwr_watch_start();
-                return 1;
+                task_create("mlv_play_task", 0x1e, 0x4000, mlv_play_task, NULL);
+                return 0;
             }
         }
         
