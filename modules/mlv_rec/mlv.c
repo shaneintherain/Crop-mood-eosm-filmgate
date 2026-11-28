@@ -47,7 +47,9 @@ void mlv_fill_lens(mlv_lens_hdr_t *hdr, uint64_t start_timestamp)
     mlv_set_timestamp((mlv_hdr_t *)hdr, start_timestamp);
     hdr->blockSize = sizeof(mlv_lens_hdr_t);
 
-    hdr->focalLength = lens_info.focal_len;
+    /* a manual lens without contacts: Canon still reports 50 mm, record 0 (unknown) instead */
+    int no_lens = !lens_info.lens_exists && !lens_info.lens_id && !lens_info.name[0];
+    hdr->focalLength = no_lens ? 0 : lens_info.focal_len;
     hdr->focalDist = lens_info.focus_dist;
     hdr->aperture = lens_info.aperture * 10;
     hdr->stabilizerMode = lens_info.IS;

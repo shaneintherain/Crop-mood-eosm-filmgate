@@ -173,7 +173,7 @@ static int mlv_play_bit_depth(int bits_per_pixel, int white_level)
  * Whatever does not fit is cut off at the end (the file name comes first, so it stays). */
 static void mlv_play_fit_left(char *left, const char *right)
 {
-    int avail = os.x_max - bmp_string_width(FONT_MED, (char *)right) - 24;
+    int avail = 720 - bmp_string_width(FONT_MED, (char *)right) - 24;
     int len = strlen(left);
 
     while (len > 4 && bmp_string_width(FONT_MED, left) > avail)
@@ -331,7 +331,7 @@ static void mlv_play_draw_info(screen_msg_t *m, int clear)
 {
     int fh = font_med.height;
     int x0 = 14;
-    int x1 = os.x_max - 14;
+    int x1 = 720 - 14;      /* the 720x480 canvas (over HDMI os.x_max is wider and cut the card's right end) */
     int y0 = 10;
     int ty1 = y0 + 9;
     int ty2 = ty1 + fh + 3;
@@ -2347,7 +2347,8 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
                 snprintf(buffer->messages.topLeft, SCREEN_MSG_LEN, "");
                 snprintf(buffer->messages.topRight, SCREEN_MSG_LEN, "");
 
-                if(lens_block.timestamp)
+                /* no lens info for a manual lens without contacts (Canon still reports 50 mm then) */
+                if(lens_block.timestamp && (lens_block.lensID || lens_block.lensName[0]))
                 {
                     char *focusMode;
                     
@@ -2360,7 +2361,10 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
                         focusMode = "MF";
                     }
                     
-                    snprintf(buffer->messages.topRight, SCREEN_MSG_LEN, "%s   %d MM", lens_block.lensName, lens_block.focalLength);
+                    if (lens_block.focalLength)
+                        snprintf(buffer->messages.topRight, SCREEN_MSG_LEN, "%s   %d MM", lens_block.lensName, lens_block.focalLength);
+                    else
+                        snprintf(buffer->messages.topRight, SCREEN_MSG_LEN, "%s", lens_block.lensName);
                     (void) focusMode;
                 }
                     
