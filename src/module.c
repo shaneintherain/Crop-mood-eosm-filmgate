@@ -1811,12 +1811,24 @@ static void module_load_task(void* unused)
         module_menu_update();
     }
 
-    /* main loop, also wait until clean shutdown */
-    TASK_LOOP
+    /* The module task ends here, freeing its task slot (the camera has room for only 104 tasks;
+     * with the playback player open the table was full and power-off hung).  The few messages
+     * below (help strings for modules that are not loaded) are now served by module_step(),
+     * called from focus_misc_task. */
+}
+
+void module_step()
+{
+    if (!module_mq) return;
+    while (1)
     {
+        uint32_t pending = 0;
+        msg_queue_count(module_mq, &pending);
+        if (!pending) break;
+
         int msg;
-        int err = msg_queue_receive(module_mq, (struct event**)&msg, 200);
-        if (err) continue;
+        int err = msg_queue_receive(module_mq, (struct event**)&msg, 10);
+        if (err) break;
         
         switch(msg & 0xFFFF)
         {

@@ -1003,7 +1003,7 @@ void plot_focus_mag(){};
 static void
 focus_misc_task(void* unused)
 {
-    /* also hosts the console and the debug steps (each formerly a task of its own) */
+    /* also hosts the console, debug and module-message steps (each formerly a task of its own) */
     extern void console_step();
     extern void debug_step();
     int t_misc = 0;
@@ -1017,6 +1017,10 @@ focus_misc_task(void* unused)
             t_misc = get_ms_clock();
             console_step();
             debug_step();
+            #ifdef CONFIG_MODULES
+            extern void module_step();
+            module_step();
+            #endif
         }
         
         if (hsp_countdown) hsp_countdown--;
