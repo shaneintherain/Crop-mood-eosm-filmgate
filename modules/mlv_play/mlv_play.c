@@ -3081,23 +3081,17 @@ static void mlv_play_task(void *priv)
         }
     }
 
-    /* TEST (power-off hang): Canon enters playback by itself (PLAY key passed on); the player
-     * only waits for that, writes one line of text and does nothing else */
-    {
-        for (int i = 0; i < 30 && gui_state != GUISTATE_PLAYMENU; i++)
-            msleep(100);
-        mlv_play_canon_play_pending = 0;
-        msleep(500);
-        bmp_printf(FONT_LARGE, 60, 200, "TEST: Canon viewer + text");
-        while (gui_state == GUISTATE_PLAYMENU && !sensor_cleaning && !ml_shutdown_requested)
-            msleep(100);
-        mlv_play_pwr_watch_start();
-        give_semaphore(mlv_play_sem);
-        return;
-    }
-
     /* get into Canon's PLAY mode */
     mlv_play_enter_playback();
+
+    /* TEST (power-off hang): player started (helper tasks, buffers, screen cleared), but no
+     * playlist scan and no clip */
+    {
+        bmp_printf(FONT_LARGE, 60, 200, "TEST: player started, no clip");
+        while (!mlv_play_should_stop())
+            msleep(100);
+        goto cleanup;
+    }
 
     /* create playlist */
     mlv_play_show_dlg(0, "Building playlist...");
