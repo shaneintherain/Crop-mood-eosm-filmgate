@@ -3067,7 +3067,7 @@ static void mlv_play_task(void *priv)
     /* TEST (power-off hang): open the player, but load and show no clip */
     {
         bmp_printf(FONT_LARGE, 60, 200, "TEST: player open, no clip");
-        bmp_printf(FONT_MED, 60, 250, "Power off now (or press PLAY to leave)");
+        bmp_printf(FONT_MED, 60, 250, "Now switch the camera off");
         while (!mlv_play_should_stop())
             msleep(100);
         goto cleanup;
