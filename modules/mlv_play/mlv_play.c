@@ -1870,12 +1870,74 @@ static void mlv_play_render_task(uint32_t priv)
     mlv_play_rendering = 0;
 }
 
+
+/* ---------------------------------------------------------------------------------------------
+ * Power-off check (diagnostic, playback only).  When playback stops because the camera is
+ * powering off, a small watcher waits 6 s.  A normal power-off is over by then.  If the camera
+ * is still running (hung on the sensor cleaning screen), the watcher prints on screen what
+ * every task is doing, so it can be photographed.  Nothing is written to the card.
+ * --------------------------------------------------------------------------------------------- */
+static volatile int mlv_play_pwr_stage = 0;    /* how far playback got in closing down */
+static volatile int mlv_play_pwr_watch = 0;
+
+struct pwr_task_attr {
+    unsigned int entry, args, stack, size, used;
+    void * name;
+    unsigned int off_18, flags;
+    unsigned char wait_id, pri, state, fpu;
+    unsigned int id;
+};
+
+static void mlv_play_pwr_watch_task(void * unused)
+{
+    extern int is_taskid_valid(int, int, void *);
+    extern unsigned int task_max;
+    int t0 = get_ms_clock();
+
+    while (get_ms_clock() - t0 < 6000)
+        msleep(200);
+
+    for (int pass = 0; pass < 30; pass++)
+    {
+        bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
+        int fnt = FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK);
+        bmp_printf(fnt, 4, 2, "PWR %ds stage=%d shut=%d clean=%d gui=%d mode=%d lv=%d disp=%d",
+                   (get_ms_clock() - t0) / 1000, mlv_play_pwr_stage, ml_shutdown_requested,
+                   sensor_cleaning, gui_state, CURRENT_GUI_MODE, lv, DISPLAY_IS_ON);
+
+        /* one entry per task: name, state (0 ready, 1 wait, 2 susp), wait type
+         * (0 sleep, 1 sem, 2 flag, 3 send mq, 4 recv mq, 5 mutex) */
+        int x = 4, y = 18, n = 0;
+        for (int id = 1; id <= (int) task_max && id < 256; id++)
+        {
+            struct pwr_task_attr a;
+            if (is_taskid_valid(1, id, &a) != 0) continue;
+            char nm[13];
+            snprintf(nm, sizeof(nm), "%s", a.name ? (char *) a.name : "?");
+            bmp_printf(fnt, x, y, "%-12s%d%d", nm, a.state, a.wait_id);
+            y += 12;
+            if (y > 470) { y = 18; x += 120; }
+            if (++n > 230) break;
+        }
+        msleep(2000);
+    }
+}
+
+static void mlv_play_pwr_watch_start(void)
+{
+    if (mlv_play_pwr_watch) return;
+    mlv_play_pwr_watch = 1;
+    task_create("mlv_play_pwr", 0x1a, 0x1000, mlv_play_pwr_watch_task, 0);
+}
+
 static uint32_t mlv_play_should_stop()
 {
     /* powering off the camera is for sure a good reason to stop any playback (the sensor cleaning
      * runs first, before ML's own shutdown flag is set: stop then too, closing the clip) */
     if(ml_shutdown_requested || sensor_cleaning)
     {
+        if (!mlv_play_pwr_stage) mlv_play_pwr_stage = 1;
+        mlv_play_pwr_watch_start();
         return 1;
     }
     
@@ -2835,6 +2897,7 @@ static playlist_entry_t mlv_playlist_prev(playlist_entry_t current)
 
 static void mlv_play_leave_playback()
 {
+    if (mlv_play_pwr_stage) mlv_play_pwr_stage = 4;
     mlv_play_render_abort = 1;
     
     while(mlv_play_rendering)
@@ -2842,6 +2905,8 @@ static void mlv_play_leave_playback()
         info_led_blink(1, 100, 100);
     }
     
+    if (mlv_play_pwr_stage) mlv_play_pwr_stage = 5;
+
     /* clean up buffers - free memories and all buffers */
     while(1)
     {
@@ -2867,6 +2932,7 @@ static void mlv_play_leave_playback()
      * cleaning until the battery door is opened.  Leave the mode alone in that case. */
     if (ml_shutdown_requested || sensor_cleaning)
     {
+        mlv_play_pwr_stage = 6;
         return;
     }
 
@@ -3006,7 +3072,9 @@ static void mlv_play_task(void *priv)
         
         /* ok now start real playback routines */
         mlv_play(mlv_play_current_filename, chunk_files, chunk_count);
+        if (mlv_play_pwr_stage) mlv_play_pwr_stage = 2;
         mlv_play_close_chunks(chunk_files, chunk_count);
+        if (mlv_play_pwr_stage) mlv_play_pwr_stage = 3;
         
         /* all files closed, anything to delete? */
         mlv_play_delete_if_requested();
@@ -3033,6 +3101,7 @@ cleanup:
     mlv_play_delete_requested = 0;
     mlv_play_osd_delete_selected = 0;
     give_semaphore(mlv_play_sem);
+    if (mlv_play_pwr_stage) mlv_play_pwr_stage = 7;
     
     /* undo black and white level change */
     raw_info.black_level = old_black_level;
