@@ -1877,8 +1877,16 @@ static void mlv_play_render_task(uint32_t priv)
  * is still running (hung on the sensor cleaning screen), the watcher prints on screen what
  * every task is doing, so it can be photographed.  Nothing is written to the card.
  * --------------------------------------------------------------------------------------------- */
-static volatile int mlv_play_canon_play_pending = 0;   /* PLAY key passed on to Canon */
-static volatile int mlv_play_pwr_stage = 0;    /* how far playback got in closing down */
+static volatile int mlv_play_pwr_stage = 0;
+
+/* Powering off: the player stops at once but gives no memory back.  Freeing its large buffers
+ * (Canon's shoot memory) while Canon runs its power-off sensor cleaning left the camera stuck
+ * on that screen: it hung only when switched off during playback or pause, never after a clip
+ * had ended (by then the buffers were already freed).  The camera is turning off anyway. */
+static int mlv_play_powering_off(void)
+{
+    return ml_shutdown_requested || sensor_cleaning;
+}    /* how far playback got in closing down */
 static volatile int mlv_play_pwr_watch = 0;
 
 struct pwr_task_attr {
@@ -2526,19 +2534,25 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
     {
         mlv_play_stop_fps_timer();
     }
+    if (mlv_play_powering_off())
+    {
+        /* keep everything allocated (see mlv_play_powering_off) */
+        return;
+    }
+
     free(block_xref);
     
-    /* free decompression stuff if needed */
-    if(mlv_play_decomp_buf)
-    {
-        free(mlv_play_decomp_buf);
-        mlv_play_decomp_buf = NULL;
-    }
-    
+    /* free decompression stuff if needed (the suite first: it describes the buffer) */
     if(mlv_play_decomp_suite)
     {
         DeleteMemorySuite(mlv_play_decomp_suite);
         mlv_play_decomp_suite = NULL;
+    }
+
+    if(mlv_play_decomp_buf)
+    {
+        free(mlv_play_decomp_buf);
+        mlv_play_decomp_buf = NULL;
     }
 }
 
@@ -2942,8 +2956,8 @@ static void mlv_play_leave_playback()
     
     if (mlv_play_pwr_stage) mlv_play_pwr_stage = 5;
 
-    /* clean up buffers - free memories and all buffers */
-    while(1)
+    /* clean up buffers - free memories and all buffers (not while powering off) */
+    while(!mlv_play_powering_off())
     {
         frame_buf_t *buffer = NULL;
         
@@ -2979,16 +2993,6 @@ static void mlv_play_enter_playback()
 {
     /* prepare display */
     NotifyBoxHide();
-
-    /* opened with the PLAY key: Canon is entering playback by itself, wait for it (up to 3 s)
-     * so we do not request the same mode change a second time */
-    if (mlv_play_canon_play_pending)
-    {
-        for (int i = 0; i < 30 && gui_state != GUISTATE_PLAYMENU; i++)
-            msleep(100);
-        mlv_play_canon_play_pending = 0;
-        msleep(300);    /* let Canon's viewer finish drawing before we clear it */
-    }
     enter_play_mode();
 
     /* render task is slave and controlled via these variables */
@@ -3142,7 +3146,8 @@ static void mlv_play_task(void *priv)
     
 cleanup:
     mlv_play_pwr_watch_start();     /* diagnostic: only shows anything if power-off gets stuck */
-    mlv_playlist_free();
+    if (!mlv_play_powering_off())
+        mlv_playlist_free();
     mlv_play_leave_playback();
     mlv_play_delete_requested = 0;
     mlv_play_osd_delete_selected = 0;
@@ -3281,14 +3286,8 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
         {
             case MODULE_KEY_PLAY:
             {
-                /* Let Canon handle the PLAY key itself, so the camera enters playback the normal
-                 * way (stopping Live View as it always does); the player then takes over the
-                 * screen.  Entering playback by request from Live View instead (SetGUIRequestMode)
-                 * left the camera unable to finish its power-off sensor cleaning when it was
-                 * switched off during playback, until the battery was taken out. */
-                mlv_play_canon_play_pending = 1;
                 task_create("mlv_play_task", 0x1e, 0x4000, mlv_play_task, NULL);
-                return 1;
+                return 0;
             }
         }
         
