@@ -3057,6 +3057,19 @@ static void mlv_play_task(void *priv)
         }
     }
 
+    /* TEST (power-off hang): only switch into playback; no helper tasks, buffers or clearing */
+    {
+        NotifyBoxHide();
+        enter_play_mode();
+        bmp_printf(FONT_LARGE, 60, 200, "TEST: playback mode only");
+        bmp_printf(FONT_MED, 60, 250, "Now switch the camera off");
+        while (gui_state == GUISTATE_PLAYMENU && !sensor_cleaning && !ml_shutdown_requested)
+            msleep(100);
+        mlv_play_pwr_watch_start();
+        give_semaphore(mlv_play_sem);
+        return;
+    }
+
     /* get into Canon's PLAY mode */
     mlv_play_enter_playback();
 
