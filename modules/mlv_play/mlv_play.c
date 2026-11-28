@@ -1922,6 +1922,22 @@ static void mlv_play_pwr_watch_task(void * unused)
                    (get_ms_clock() - t_clean) / 1000, mlv_play_pwr_stage, ml_shutdown_requested,
                    sensor_cleaning, gui_state, lv, display_is_on());
 
+        /* GUI events since the power-off began, most recent first: type, param (hex), and
+         * 0 = passed through ML, 1 = blocked by ML, 2 = sent straight to Canon */
+        {
+            extern int gui_pwr_event(int i);
+            char evs[160];
+            int len = snprintf(evs, sizeof(evs), "EV");
+            for (int i = 0; i < 10; i++)
+            {
+                int e = gui_pwr_event(i);
+                if (e == -1) break;
+                len += snprintf(evs + len, sizeof(evs) - len, " %d:%x:%d", (e >> 24) & 0xFF, (e >> 4) & 0xFFFFF, e & 0xF);
+                if (len > (int) sizeof(evs) - 16) break;
+            }
+            bmp_printf(fnt, 4, 466, "%s", evs);
+        }
+
         /* one entry per task: name, then state (0 ready, 1 wait, 2 susp) and wait type
          * (0 sleep, 1 sem, 2 flag, 3 send mq, 4 recv mq, 5 mutex) */
         int x = 4, y = 18, n = 0;
@@ -1934,7 +1950,7 @@ static void mlv_play_pwr_watch_task(void * unused)
             bmp_printf(fnt, x, y, "%s", nm);
             bmp_printf(fnt, x + 92, y, "%d%d", a.state, a.wait_id);
             y += 12;
-            if (y > 470) { y = 18; x += 120; }
+            if (y > 452) { y = 18; x += 120; }
             if (++n > 230) break;
         }
         msleep(2000);
