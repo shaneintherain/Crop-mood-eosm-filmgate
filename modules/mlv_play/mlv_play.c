@@ -3023,9 +3023,10 @@ static void mlv_play_enter_playback()
 
     /* render task is slave and controlled via these variables */
     mlv_play_render_abort = 0;
-    mlv_play_rendering = 1;
-    task_create("mlv_play_render", 0x1d, 0x4000, mlv_play_render_task, NULL);
-    task_create("mlv_play_osd_task", 0x15, 0x4000, mlv_play_osd_task, 0);
+    /* TEST (power-off hang): no helper tasks */
+    mlv_play_rendering = 0;
+    //task_create("mlv_play_render", 0x1d, 0x4000, mlv_play_render_task, NULL);
+    //task_create("mlv_play_osd_task", 0x15, 0x4000, mlv_play_osd_task, 0);
     
     mlv_play_zoom = 0;
     mlv_play_zoom_x_pct = 0;
@@ -3088,8 +3089,8 @@ static void mlv_play_task(void *priv)
     /* TEST (power-off hang): player started (helper tasks, buffers, screen cleared), but no
      * playlist scan and no clip */
     {
-        bmp_printf(FONT_LARGE, 60, 200, "TEST: player tasks only");
-        while (!mlv_play_should_stop())
+        bmp_printf(FONT_LARGE, 60, 200, "TEST: no player tasks");
+        while (gui_state == GUISTATE_PLAYMENU && !sensor_cleaning && !ml_shutdown_requested)
             msleep(100);
         goto cleanup;
     }
