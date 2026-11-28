@@ -1892,30 +1892,47 @@ static void mlv_play_pwr_watch_task(void * unused)
 {
     extern int is_taskid_valid(int, int, void *);
     extern unsigned int task_max;
-    int t0 = get_ms_clock();
+    extern int display_is_on();
 
-    while (get_ms_clock() - t0 < 6000)
+    /* for up to 60 s after playback stops: if the camera stays in its power-off sensor
+     * cleaning for more than 6 s, it is stuck; show the task list.  Otherwise do nothing. */
+    int t0 = get_ms_clock();
+    int t_clean = 0;
+    while (1)
+    {
         msleep(200);
+        int now = get_ms_clock();
+        if (sensor_cleaning || ml_shutdown_requested)
+        {
+            if (!t_clean) t_clean = now;
+            if (now - t_clean > 6000) break;
+        }
+        else
+        {
+            t_clean = 0;
+            if (now - t0 > 60000) { mlv_play_pwr_watch = 0; return; }
+        }
+    }
 
     for (int pass = 0; pass < 30; pass++)
     {
         bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
         int fnt = FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK);
-        extern int display_is_on();
         bmp_printf(fnt, 4, 2, "PWR %ds stage=%d shut=%d clean=%d gui=%d lv=%d disp=%d",
-                   (get_ms_clock() - t0) / 1000, mlv_play_pwr_stage, ml_shutdown_requested,
+                   (get_ms_clock() - t_clean) / 1000, mlv_play_pwr_stage, ml_shutdown_requested,
                    sensor_cleaning, gui_state, lv, display_is_on());
 
-        /* one entry per task: name, state (0 ready, 1 wait, 2 susp), wait type
+        /* one entry per task: name, then state (0 ready, 1 wait, 2 susp) and wait type
          * (0 sleep, 1 sem, 2 flag, 3 send mq, 4 recv mq, 5 mutex) */
         int x = 4, y = 18, n = 0;
         for (int id = 1; id <= (int) task_max && id < 256; id++)
         {
             struct pwr_task_attr a;
             if (is_taskid_valid(1, id, &a) != 0) continue;
-            char nm[13];
+            char nm[12];
             snprintf(nm, sizeof(nm), "%s", a.name ? (char *) a.name : "?");
-            bmp_printf(fnt, x, y, "%-12s%d%d", nm, a.state, a.wait_id);
+            bmp_printf(fnt, x, y, "%s", nm);
+            bmp_printf(fnt, x + 92, y, "%d%d", a.state, a.wait_id);
             y += 12;
             if (y > 470) { y = 18; x += 120; }
             if (++n > 230) break;
@@ -3097,6 +3114,7 @@ static void mlv_play_task(void *priv)
     } while(!mlv_play_should_stop());
     
 cleanup:
+    mlv_play_pwr_watch_start();     /* diagnostic: only shows anything if power-off gets stuck */
     mlv_playlist_free();
     mlv_play_leave_playback();
     mlv_play_delete_requested = 0;
