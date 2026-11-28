@@ -425,7 +425,6 @@ static void mlv_playlist_delete(playlist_entry_t current);
 static void mlv_playlist_build(uint32_t priv);
 static uint32_t mlv_play_should_stop();
 static volatile int mlv_play_canon_play_pending = 0;   /* PLAY key passed on to Canon */
-static volatile int mlv_play_osd_running = 0;
 
 /* microsecond durations for one frame */
 static uint32_t mlv_play_frame_div_pos = 0;
@@ -1034,161 +1033,180 @@ static void mlv_play_osd_act(void *handler)
     }
 }
 
-static void mlv_play_osd_task(void *priv)
+/* The OSD (playback controls) used to run in a task of its own.  It now runs inside the render
+ * task, so the player needs one task fewer: the camera has room for 104 tasks and with the player
+ * open that table was full, so when the camera was switched off in playback it could not start
+ * the task its power-off needs, and hung on the sensor cleaning screen (found on the camera:
+ * two idle extra tasks were enough to hang it, task count 104 of 104). */
+static uint32_t mlv_play_osd_next_time = 0;
+static uint32_t mlv_play_osd_last_key_time = 0;
+
+static void mlv_play_osd_init()
 {
-    mlv_play_osd_running = 1;
-    uint32_t next_render_time = get_ms_clock() + mlv_play_render_timestep;
- 
+    mlv_play_osd_next_time = get_ms_clock() + mlv_play_render_timestep;
     mlv_play_osd_state = MLV_PLAY_MENU_IDLE;
     mlv_play_osd_item = 1;
-    mlv_play_paused = 0;   
+    mlv_play_paused = 0;
+    mlv_play_osd_last_key_time = get_ms_clock();
+}
+
+/* the OSD is moving (fading in or out): the render task should come back soon */
+static int mlv_play_osd_busy()
+{
+    return mlv_play_osd_state == MLV_PLAY_MENU_FADEIN || mlv_play_osd_state == MLV_PLAY_MENU_FADEOUT;
+}
+
+static void mlv_play_osd_key(uint32_t key)
+{
     
-    uint32_t last_keypress_time = get_ms_clock();
-    TASK_LOOP
+    /* no matter which state - these are handled */
+    switch(key)
     {
-        uint32_t key;
-        uint32_t timeout = next_render_time - get_ms_clock();
-        
-        timeout = MIN(timeout, mlv_play_idle_timestep);
-        
-        if(!msg_queue_receive(mlv_play_queue_osd, &key, timeout))
+        case MODULE_KEY_WHEEL_LEFT:
+            mlv_play_prev();
+            if(mlv_play_osd_state != MLV_PLAY_MENU_SHOWN)
+            {
+                mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
+            }
+            break;
+            
+        case MODULE_KEY_WHEEL_RIGHT:
+            mlv_play_next();
+            if(mlv_play_osd_state != MLV_PLAY_MENU_SHOWN)
+            {
+                mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
+            }
+            break;
+            
+        case MODULE_KEY_TRASH:
+            mlv_play_osd_act(&mlv_play_osd_delete);
+            mlv_play_osd_delete(NULL, 0, 2);
+            break;
+
+        case MODULE_KEY_PLAY:
+            mlv_play_osd_act(&mlv_play_osd_pause);
+            mlv_play_osd_pause(NULL, 0, 1);
+            break;
+
+        case MODULE_KEY_PRESS_ZOOMIN:
+            mlv_play_osd_state = MLV_PLAY_MENU_HIDDEN;
+            mlv_play_zoom = (mlv_play_zoom + 1) % 4;
+            raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
+            break;
+            
+        case MODULE_KEY_PRESS_UP:
+            mlv_play_zoom_y_pct = MAX(0, mlv_play_zoom_y_pct - 10);
+            raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
+            break;
+
+        case MODULE_KEY_PRESS_DOWN:
+            mlv_play_zoom_y_pct = MIN(100, mlv_play_zoom_y_pct + 10);
+            raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
+            break;
+
+        case MODULE_KEY_PRESS_LEFT:
+            mlv_play_zoom_x_pct = MAX(0, mlv_play_zoom_x_pct - 10);
+            raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
+            break;
+
+        case MODULE_KEY_PRESS_RIGHT:
+            mlv_play_zoom_x_pct = MIN(100, mlv_play_zoom_x_pct + 10);
+            raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
+            break;
+    }
+    
+    switch(mlv_play_osd_state)
+    {
+        case MLV_PLAY_MENU_SHOWN:
+        case MLV_PLAY_MENU_FADEIN:
         {
-            /* there was a keypress */
-            last_keypress_time = get_ms_clock();
-            
-            /* no matter which state - these are handled */
-            switch(key)
+            if(key == MODULE_KEY_Q || key == MODULE_KEY_PICSTYLE)
             {
-                case MODULE_KEY_WHEEL_LEFT:
-                    mlv_play_prev();
-                    if(mlv_play_osd_state != MLV_PLAY_MENU_SHOWN)
-                    {
-                        mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
-                    }
-                    break;
-                    
-                case MODULE_KEY_WHEEL_RIGHT:
-                    mlv_play_next();
-                    if(mlv_play_osd_state != MLV_PLAY_MENU_SHOWN)
-                    {
-                        mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
-                    }
-                    break;
-                    
-                case MODULE_KEY_TRASH:
-                    mlv_play_osd_act(&mlv_play_osd_delete);
-                    mlv_play_osd_delete(NULL, 0, 2);
-                    break;
-
-                case MODULE_KEY_PLAY:
-                    mlv_play_osd_act(&mlv_play_osd_pause);
-                    mlv_play_osd_pause(NULL, 0, 1);
-                    break;
-
-                case MODULE_KEY_PRESS_ZOOMIN:
-                    mlv_play_osd_state = MLV_PLAY_MENU_HIDDEN;
-                    mlv_play_zoom = (mlv_play_zoom + 1) % 4;
-                    raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
-                    break;
-                    
-                case MODULE_KEY_PRESS_UP:
-                    mlv_play_zoom_y_pct = MAX(0, mlv_play_zoom_y_pct - 10);
-                    raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
-                    break;
-
-                case MODULE_KEY_PRESS_DOWN:
-                    mlv_play_zoom_y_pct = MIN(100, mlv_play_zoom_y_pct + 10);
-                    raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
-                    break;
-
-                case MODULE_KEY_PRESS_LEFT:
-                    mlv_play_zoom_x_pct = MAX(0, mlv_play_zoom_x_pct - 10);
-                    raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
-                    break;
-
-                case MODULE_KEY_PRESS_RIGHT:
-                    mlv_play_zoom_x_pct = MIN(100, mlv_play_zoom_x_pct + 10);
-                    raw_twk_set_zoom(mlv_play_zoom, mlv_play_zoom_x_pct, mlv_play_zoom_y_pct);
-                    break;
-            }
-            
-            switch(mlv_play_osd_state)
-            {
-                case MLV_PLAY_MENU_SHOWN:
-                case MLV_PLAY_MENU_FADEIN:
+                if (!mlv_play_osd_force_redraw)
                 {
-                    if(key == MODULE_KEY_Q || key == MODULE_KEY_PICSTYLE)
-                    {
-                        if (!mlv_play_osd_force_redraw)
-                        {
-                            mlv_play_osd_state = MLV_PLAY_MENU_FADEOUT;
-                        }
-                    }
-                    else
-                    {
-                        mlv_play_osd_handle(key);
-                    }
-                    break;
-                }
-
-                /* when fading out, still handle and fade back in */
-                case MLV_PLAY_MENU_FADEOUT:
-                {
-                    if(!mlv_play_zoom)
-                    {
-                        mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
-                        mlv_play_osd_handle(key);
-                    }
-                    break;
-                }
-                
-                case MLV_PLAY_MENU_IDLE:
-                case MLV_PLAY_MENU_HIDDEN:
-                {
-                    if(!mlv_play_zoom)
-                    {
-                        if (key == MODULE_KEY_PRESS_SET || key == MODULE_KEY_Q || key == MODULE_KEY_PICSTYLE)
-                        {
-                            mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
-                        }
-                        if (key == MODULE_KEY_INFO)
-                        {
-                            clrscr();
-                            mlv_play_info = MOD(mlv_play_info + 1, 2) ? 2 : 0;
-                        }
-                    }
-                    break;
+                    mlv_play_osd_state = MLV_PLAY_MENU_FADEOUT;
                 }
             }
+            else
+            {
+                mlv_play_osd_handle(key);
+            }
+            break;
         }
-        uint32_t idle_time = get_ms_clock() - last_keypress_time;
-        
-        if(mlv_play_render_abort)
+
+        /* when fading out, still handle and fade back in */
+        case MLV_PLAY_MENU_FADEOUT:
         {
+            if(!mlv_play_zoom)
+            {
+                mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
+                mlv_play_osd_handle(key);
+            }
             break;
         }
         
-        if(mlv_play_osd_draw())
+        case MLV_PLAY_MENU_IDLE:
+        case MLV_PLAY_MENU_HIDDEN:
         {
-            next_render_time = get_ms_clock() + mlv_play_render_timestep;
-        }
-        else
-        {
-            next_render_time = get_ms_clock() + mlv_play_idle_timestep;
-            
-            /* when redrawing is forced, keep OSD shown */
-            if(mlv_play_osd_force_redraw)
+            if(!mlv_play_zoom)
             {
-                mlv_play_osd_state = MLV_PLAY_MENU_SHOWN;
+                if (key == MODULE_KEY_PRESS_SET || key == MODULE_KEY_Q || key == MODULE_KEY_PICSTYLE)
+                {
+                    mlv_play_osd_state = MLV_PLAY_MENU_FADEIN;
+                }
+                if (key == MODULE_KEY_INFO)
+                {
+                    clrscr();
+                    mlv_play_info = MOD(mlv_play_info + 1, 2) ? 2 : 0;
+                }
             }
-            else if(idle_time > mlv_play_osd_idle && mlv_play_osd_state == MLV_PLAY_MENU_SHOWN)
-            {
-                mlv_play_osd_state = MLV_PLAY_MENU_FADEOUT;
-            }
+            break;
         }
-        continue;
     }
-    mlv_play_osd_running = 0;
+}
+
+/* one OSD step: handle the keys that arrived, redraw when it is due */
+static void mlv_play_osd_poll()
+{
+    int got_key = 0;
+    while (1)
+    {
+        uint32_t pending = 0;
+        msg_queue_count(mlv_play_queue_osd, &pending);
+        if (!pending) break;
+
+        uint32_t key;
+        if (msg_queue_receive(mlv_play_queue_osd, &key, 10)) break;
+        got_key = 1;
+        mlv_play_osd_last_key_time = get_ms_clock();
+        mlv_play_osd_key(key);
+    }
+
+    if (!got_key && (int32_t)(get_ms_clock() - mlv_play_osd_next_time) < 0)
+    {
+        return;
+    }
+
+    uint32_t idle_time = get_ms_clock() - mlv_play_osd_last_key_time;
+
+    if(mlv_play_osd_draw())
+    {
+        mlv_play_osd_next_time = get_ms_clock() + mlv_play_render_timestep;
+    }
+    else
+    {
+        mlv_play_osd_next_time = get_ms_clock() + mlv_play_idle_timestep;
+
+        /* when redrawing is forced, keep OSD shown */
+        if(mlv_play_osd_force_redraw)
+        {
+            mlv_play_osd_state = MLV_PLAY_MENU_SHOWN;
+        }
+        else if(idle_time > mlv_play_osd_idle && mlv_play_osd_state == MLV_PLAY_MENU_SHOWN)
+        {
+            mlv_play_osd_state = MLV_PLAY_MENU_FADEOUT;
+        }
+    }
 }
 
 
@@ -1775,6 +1793,8 @@ static void mlv_play_render_task(uint32_t priv)
     uint32_t redraw_loop = 0;
     
     frame_buf_t *buffer_paused = NULL;
+
+    mlv_play_osd_init();
     
     TASK_LOOP
     {
@@ -1791,16 +1811,19 @@ static void mlv_play_render_task(uint32_t priv)
         {
             break;
         }
+
+        /* playback controls (formerly their own task) */
+        mlv_play_osd_poll();
         
         if(mlv_play_paused && !mlv_play_should_stop() && buffer_paused)
         {
             mlv_play_render_frame(buffer_paused);
-            msleep(100);
+            msleep(mlv_play_osd_busy() ? 10 : 100);
             continue;
         }
         
         /* is there something to render? */
-        if(msg_queue_receive(mlv_play_queue_render, &buffer, 50))
+        if(msg_queue_receive(mlv_play_queue_render, &buffer, mlv_play_osd_busy() ? 10 : 50))
         {
             continue;
         }
@@ -1874,117 +1897,12 @@ static void mlv_play_render_task(uint32_t priv)
     mlv_play_rendering = 0;
 }
 
-
-/* ---------------------------------------------------------------------------------------------
- * Power-off check (diagnostic, playback only).  When playback stops because the camera is
- * powering off, a small watcher waits 6 s.  A normal power-off is over by then.  If the camera
- * is still running (hung on the sensor cleaning screen), the watcher prints on screen what
- * every task is doing, so it can be photographed.  Nothing is written to the card.
- * --------------------------------------------------------------------------------------------- */
-static volatile int mlv_play_pwr_stage = 0;
-
-/* Powering off: the player stops at once but gives no memory back.  Freeing its large buffers
- * (Canon's shoot memory) while Canon runs its power-off sensor cleaning left the camera stuck
- * on that screen: it hung only when switched off during playback or pause, never after a clip
- * had ended (by then the buffers were already freed).  The camera is turning off anyway. */
-static int mlv_play_powering_off(void)
-{
-    return ml_shutdown_requested || sensor_cleaning;
-}    /* how far playback got in closing down */
-static volatile int mlv_play_pwr_watch = 0;
-
-struct pwr_task_attr {
-    unsigned int entry, args, stack, size, used;
-    void * name;
-    unsigned int off_18, flags;
-    unsigned char wait_id, pri, state, fpu;
-    unsigned int id;
-};
-
-static void mlv_play_pwr_watch_task(void * unused)
-{
-    extern int is_taskid_valid(int, int, void *);
-    extern unsigned int task_max;
-    extern int display_is_on();
-
-    /* for up to 60 s after playback stops: if the camera stays in its power-off sensor
-     * cleaning for more than 6 s, it is stuck; show the task list.  Otherwise do nothing. */
-    int t0 = get_ms_clock();
-    int t_clean = 0;
-    while (1)
-    {
-        msleep(200);
-        int now = get_ms_clock();
-        if (sensor_cleaning || ml_shutdown_requested)
-        {
-            if (!t_clean) t_clean = now;
-            if (now - t_clean > 6000) break;
-        }
-        else
-        {
-            t_clean = 0;
-            if (now - t0 > 60000) { mlv_play_pwr_watch = 0; return; }
-        }
-    }
-
-    for (int pass = 0; pass < 30; pass++)
-    {
-        bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
-        int fnt = FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK);
-        bmp_printf(fnt, 4, 2, "PWR %ds stage=%d shut=%d clean=%d gui=%d lv=%d disp=%d",
-                   (get_ms_clock() - t_clean) / 1000, mlv_play_pwr_stage, ml_shutdown_requested,
-                   sensor_cleaning, gui_state, lv, display_is_on());
-
-        /* GUI events since the power-off began, most recent first: type, param (hex), and
-         * 0 = passed through ML, 1 = blocked by ML, 2 = sent straight to Canon */
-        {
-            extern int gui_pwr_event(int i);
-            char evs[160];
-            int len = snprintf(evs, sizeof(evs), "EV");
-            for (int i = 0; i < 10; i++)
-            {
-                int e = gui_pwr_event(i);
-                if (e == -1) break;
-                len += snprintf(evs + len, sizeof(evs) - len, " %d:%x:%d", (e >> 24) & 0xFF, (e >> 4) & 0xFFFFF, e & 0xF);
-                if (len > (int) sizeof(evs) - 16) break;
-            }
-            bmp_printf(fnt, 4, 466, "%s", evs);
-        }
-
-        /* one entry per task: name, then state (0 ready, 1 wait, 2 susp) and wait type
-         * (0 sleep, 1 sem, 2 flag, 3 send mq, 4 recv mq, 5 mutex) */
-        int x = 4, y = 18, n = 0;
-        for (int id = 1; id <= (int) task_max && id < 256; id++)
-        {
-            struct pwr_task_attr a;
-            if (is_taskid_valid(1, id, &a) != 0) continue;
-            char nm[12];
-            snprintf(nm, sizeof(nm), "%s", a.name ? (char *) a.name : "?");
-            bmp_printf(fnt, x, y, "%s", nm);
-            bmp_printf(fnt, x + 92, y, "%d%d", a.state, a.wait_id);
-            y += 12;
-            if (y > 452) { y = 18; x += 120; }
-            if (++n > 230) break;
-        }
-        msleep(2000);
-    }
-}
-
-static void mlv_play_pwr_watch_start(void)
-{
-    if (mlv_play_pwr_watch) return;
-    mlv_play_pwr_watch = 1;
-    task_create("mlv_play_pwr", 0x1a, 0x1000, mlv_play_pwr_watch_task, 0);
-}
-
 static uint32_t mlv_play_should_stop()
 {
     /* powering off the camera is for sure a good reason to stop any playback (the sensor cleaning
      * runs first, before ML's own shutdown flag is set: stop then too, closing the clip) */
     if(ml_shutdown_requested || sensor_cleaning)
     {
-        if (!mlv_play_pwr_stage) mlv_play_pwr_stage = 1;
-        mlv_play_pwr_watch_start();
         return 1;
     }
     
@@ -2018,9 +1936,8 @@ static uint32_t mlv_play_should_stop()
 static void mlv_play_clear_screen()
 {
     /* clear anything */
-    /* TEST (power-off hang): no clearing of the picture buffer */
-    //vram_clear_lv();
-    //clrscr();
+    vram_clear_lv();
+    clrscr();
     
     /* update OSD */
     msg_queue_post(mlv_play_queue_osd, (uint32_t) 0);
@@ -2539,25 +2456,19 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
     {
         mlv_play_stop_fps_timer();
     }
-    if (mlv_play_powering_off())
-    {
-        /* keep everything allocated (see mlv_play_powering_off) */
-        return;
-    }
-
     free(block_xref);
     
-    /* free decompression stuff if needed (the suite first: it describes the buffer) */
-    if(mlv_play_decomp_suite)
-    {
-        DeleteMemorySuite(mlv_play_decomp_suite);
-        mlv_play_decomp_suite = NULL;
-    }
-
+    /* free decompression stuff if needed */
     if(mlv_play_decomp_buf)
     {
         free(mlv_play_decomp_buf);
         mlv_play_decomp_buf = NULL;
+    }
+    
+    if(mlv_play_decomp_suite)
+    {
+        DeleteMemorySuite(mlv_play_decomp_suite);
+        mlv_play_decomp_suite = NULL;
     }
 }
 
@@ -2951,23 +2862,15 @@ static playlist_entry_t mlv_playlist_prev(playlist_entry_t current)
 
 static void mlv_play_leave_playback()
 {
-    if (mlv_play_pwr_stage) mlv_play_pwr_stage = 4;
     mlv_play_render_abort = 1;
     
     while(mlv_play_rendering)
     {
         info_led_blink(1, 100, 100);
     }
-
-    /* also let the OSD task finish (up to 2 s), so a quickly reopened player does not end up
-     * with two of them sharing the key queue (SET would then sometimes show no controls) */
-    for (int i = 0; i < 40 && mlv_play_osd_running; i++)
-        msleep(50);
     
-    if (mlv_play_pwr_stage) mlv_play_pwr_stage = 5;
-
-    /* clean up buffers - free memories and all buffers (not while powering off) */
-    while(!mlv_play_powering_off())
+    /* clean up buffers - free memories and all buffers */
+    while(1)
     {
         frame_buf_t *buffer = NULL;
         
@@ -2991,20 +2894,11 @@ static void mlv_play_leave_playback()
      * cleaning until the battery door is opened.  Leave the mode alone in that case. */
     if (ml_shutdown_requested || sensor_cleaning)
     {
-        mlv_play_pwr_stage = 6;
         return;
     }
 
     vram_clear_lv();
     exit_play_qr_mode();
-}
-
-static int mlv_play_mem_before_am = 0, mlv_play_mem_before_ml = 0;
-
-static void mlv_play_dummy_task(void * unused)
-{
-    while (!mlv_play_render_abort)
-        msleep(50);
 }
 
 static void mlv_play_enter_playback()
@@ -3031,17 +2925,8 @@ static void mlv_play_enter_playback()
 
     /* render task is slave and controlled via these variables */
     mlv_play_render_abort = 0;
-    /* TEST (power-off hang): two dummy tasks with the same stack sizes and priorities as the
-     * player's helper tasks, which only sleep until the player closes */
-    mlv_play_rendering = 0;
-    {
-        extern int GetFreeMemForAllocateMemory();
-        extern int GetFreeMemForMalloc();
-        mlv_play_mem_before_am = GetFreeMemForAllocateMemory();
-        mlv_play_mem_before_ml = GetFreeMemForMalloc();
-    }
-    task_create("mlv_play_dummy1", 0x1d, 0x800, mlv_play_dummy_task, NULL);
-    task_create("mlv_play_dummy2", 0x1d, 0x800, mlv_play_dummy_task, 0);
+    mlv_play_rendering = 1;
+    task_create("mlv_play_render", 0x1d, 0x4000, mlv_play_render_task, NULL);
     
     mlv_play_zoom = 0;
     mlv_play_zoom_x_pct = 0;
@@ -3100,28 +2985,6 @@ static void mlv_play_task(void *priv)
 
     /* get into Canon's PLAY mode */
     mlv_play_enter_playback();
-
-    /* TEST (power-off hang): player started (helper tasks, buffers, screen cleared), but no
-     * playlist scan and no clip */
-    {
-        extern int GetFreeMemForAllocateMemory();
-        extern int GetFreeMemForMalloc();
-        bmp_printf(FONT_LARGE, 60, 200, "TEST: two low-priority tasks");
-        {
-            extern int is_taskid_valid(int, int, void *);
-            extern unsigned int task_max;
-            struct pwr_task_attr a;
-            int n = 0, hi = 0;
-            for (int id = 1; id <= (int) task_max && id < 256; id++)
-                if (is_taskid_valid(1, id, &a) == 0) { n++; hi = id; }
-            bmp_printf(FONT_MED, 60, 310, "tasks: %d   task_max: %d   highest id: %d", n, task_max, hi);
-        }
-        bmp_printf(FONT_MED, 60, 250, "free before: %d / %d KB", mlv_play_mem_before_am / 1024, mlv_play_mem_before_ml / 1024);
-        bmp_printf(FONT_MED, 60, 280, "free now:    %d / %d KB", GetFreeMemForAllocateMemory() / 1024, GetFreeMemForMalloc() / 1024);
-        while (gui_state == GUISTATE_PLAYMENU && !sensor_cleaning && !ml_shutdown_requested)
-            msleep(100);
-        goto cleanup;
-    }
 
     /* create playlist */
     mlv_play_show_dlg(0, "Building playlist...");
@@ -3185,9 +3048,7 @@ static void mlv_play_task(void *priv)
         
         /* ok now start real playback routines */
         mlv_play(mlv_play_current_filename, chunk_files, chunk_count);
-        if (mlv_play_pwr_stage) mlv_play_pwr_stage = 2;
         mlv_play_close_chunks(chunk_files, chunk_count);
-        if (mlv_play_pwr_stage) mlv_play_pwr_stage = 3;
         
         /* all files closed, anything to delete? */
         mlv_play_delete_if_requested();
@@ -3209,14 +3070,11 @@ static void mlv_play_task(void *priv)
     } while(!mlv_play_should_stop());
     
 cleanup:
-    mlv_play_pwr_watch_start();     /* diagnostic: only shows anything if power-off gets stuck */
-    if (!mlv_play_powering_off())
-        mlv_playlist_free();
+    mlv_playlist_free();
     mlv_play_leave_playback();
     mlv_play_delete_requested = 0;
     mlv_play_osd_delete_selected = 0;
     give_semaphore(mlv_play_sem);
-    if (mlv_play_pwr_stage) mlv_play_pwr_stage = 7;
     
     /* undo black and white level change */
     raw_info.black_level = old_black_level;
@@ -3351,10 +3209,9 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
             case MODULE_KEY_PLAY:
             {
                 /* Canon handles the PLAY key itself and enters playback the normal way; the
-                 * player then takes over the screen.  Switching to playback by request from
-                 * Live View instead (SetGUIRequestMode) left the camera unable to finish its
-                 * power-off sensor cleaning when switched off in playback (tested: that request
-                 * alone, with no player at all, was enough to hang it). */
+                 * player then takes over the screen.  Requesting playback mode from Live View
+                 * (SetGUIRequestMode) instead left the camera with fewer free task slots, and
+                 * with the task table full it hung at power-off (see mlv_play_osd_init). */
                 mlv_play_canon_play_pending = 1;
                 task_create("mlv_play_task", 0x1e, 0x4000, mlv_play_task, NULL);
                 return 1;

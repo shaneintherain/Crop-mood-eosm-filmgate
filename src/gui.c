@@ -27,7 +27,6 @@
 
 #include <dryos.h>
 #include <property.h>
-#include <propvalues.h>
 #include <bmp.h>
 #include <config.h>
 #include <consts.h>
@@ -104,30 +103,6 @@ struct gui_main_struct {
 
 extern struct gui_main_struct gui_main_struct;
 
-/* Power-off.  While Canon is powering off (sensor cleaning, or ML's shutdown has begun), every
- * GUI event goes straight to Canon: none of ML's handlers may hold one back then.  The camera
- * sometimes stayed on the sensor cleaning screen with every task idle, as if waiting for an
- * event that never reached Canon's GUI code.
- * The last 16 events since the power-off began are kept for the playback diagnostic screen:
- * type << 24 | param << 4 | what happened (0 = passed through ML, 1 = blocked by ML,
- * 2 = sent straight to Canon). */
-static int pwr_ev_log[16];
-static int pwr_ev_count = 0;
-static int pwr_ev_started = 0;
-
-int gui_pwr_event(int i)
-{
-    if (i >= pwr_ev_count || i >= 16) return -1;
-    return pwr_ev_log[(pwr_ev_count - 1 - i) % 16];     /* 0 = most recent */
-}
-
-static void pwr_ev_record(struct event * event, int what)
-{
-    if (!pwr_ev_started) return;
-    pwr_ev_log[pwr_ev_count % 16] = (event->type << 24) | ((event->param & 0xFFFFF) << 4) | what;
-    pwr_ev_count++;
-}
-
 void ml_gui_main_task()
 {
     struct event * event = NULL;
@@ -148,34 +123,21 @@ void ml_gui_main_task()
 
         index = event->type;
 
-        if (event->type == 0 && (event->param == GMT_GUICMD_START_AS_CHECK ||
-                                 event->param == GMT_GUICMD_OPEN_SLOT_COVER ||
-                                 event->param == GMT_GUICMD_LOCK_OFF))
-            pwr_ev_started = 1;
-
-        if (sensor_cleaning || ml_shutdown_requested)
-        {
-            pwr_ev_started = 1;
-            pwr_ev_record(event, 2);
-        }
-        else if (!magic_is_off())
+        if (!magic_is_off())
         {
 
             if (event->type == 0)
             {
                 if (handle_buttons(event) == 0) { // ML button/event handler
-                    pwr_ev_record(event, 1);
                     continue;
                 }
             }
             else
             {
                 if (handle_other_events(event) == 0) {
-                    pwr_ev_record(event, 1);
                     continue;
                 }
             }
-            pwr_ev_record(event, 0);
         }
 
         if (IS_FAKE(event)) {

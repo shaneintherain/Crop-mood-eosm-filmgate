@@ -568,61 +568,58 @@ static void crash_log_step()
 }
 #endif
 
-static void
-debug_loop_task( void* unused ) // screenshot, draw_prop
+/* screenshot, format-dialog hook, crash log, draw_prop: called every 200 ms from
+ * focus_misc_task (no task of its own any more: see console_step in console.c) */
+void debug_step()
 {
-    TASK_LOOP
-    {
 #ifdef CONFIG_HEXDUMP
-        if (hexdump_enabled)
-            bmp_hexdump(FONT_SMALL, 0, 480-120, (void*) hexdump_addr, 32*10);
+    if (hexdump_enabled)
+        bmp_hexdump(FONT_SMALL, 0, 480-120, (void*) hexdump_addr, 32*10);
 #endif
 
-        #ifdef FEATURE_SCREENSHOT
-        if (screenshot_sec)
+    #ifdef FEATURE_SCREENSHOT
+    if (screenshot_sec)
+    {
+        static int valid = 0;
+        if (screenshot_sec == 1 && valid)
         {
-            static int valid = 0;
-            if (screenshot_sec == 1 && valid)
-            {
-            menu_set_str_value_from_script("Movie", "RAW video", "ON", 1);
-            valid = 0;
+        menu_set_str_value_from_script("Movie", "RAW video", "ON", 1);
+        valid = 0;
+        msleep(100);
+        }
+        if (screenshot_sec == 3 && raw_lv_is_enabled())
+        {
+            valid = 1;
+            menu_set_str_value_from_script("Movie", "RAW video", "OFF", 0);
             msleep(100);
-            }
-            if (screenshot_sec == 3 && raw_lv_is_enabled())
-            {
-                valid = 1;
-                menu_set_str_value_from_script("Movie", "RAW video", "OFF", 0);
-                msleep(100);
-            }
-            
-            info_led_blink(1, 20, 1000-20-200);
-            screenshot_sec--;
-            if (!screenshot_sec)
-                take_screenshot(SCREENSHOT_FILENAME_AUTO, SCREENSHOT_BMP | SCREENSHOT_YUV);
         }
-        #endif
-
-        #ifdef CONFIG_RESTORE_AFTER_FORMAT
-        if (MENU_MODE)
-        {
-            HijackFormatDialogBox_main();
-        }
-        #endif
-
-        #if CONFIG_DEBUGMSG
-        if (draw_prop)
-        {
-            dbg_draw_props(dbg_last_changed_propindex);
-            continue;
-        }
-        #endif
-
-        #ifdef CONFIG_CRASH_LOG
-        crash_log_step();
-        #endif
-
-        msleep(200);
+        
+        info_led_blink(1, 20, 1000-20-200);
+        screenshot_sec--;
+        if (!screenshot_sec)
+            take_screenshot(SCREENSHOT_FILENAME_AUTO, SCREENSHOT_BMP | SCREENSHOT_YUV);
     }
+    #endif
+
+    #ifdef CONFIG_RESTORE_AFTER_FORMAT
+    if (MENU_MODE)
+    {
+        HijackFormatDialogBox_main();
+    }
+    #endif
+
+    #if CONFIG_DEBUGMSG
+    if (draw_prop)
+    {
+        dbg_draw_props(dbg_last_changed_propindex);
+        return;
+    }
+    #endif
+
+    #ifdef CONFIG_CRASH_LOG
+    crash_log_step();
+    #endif
+
 }
 
 static void screenshot_start(void* priv, int delta)
@@ -1269,7 +1266,7 @@ debug_init_stuff( void )
 
 }
 
-TASK_CREATE( "debug_task", debug_loop_task, 0, 0x1e, 0x2000 );
+/* debug_task: merged into focus_misc_task (debug_step) */
 
 
 #ifdef CONFIG_INTERMEDIATE_ISO_INTERCEPT_SCROLLWHEEL

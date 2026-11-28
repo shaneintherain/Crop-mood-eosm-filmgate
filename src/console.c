@@ -285,44 +285,46 @@ void console_draw_from_menu()
         console_draw(1);
 }
 
-static void
-console_task( void* unused )
+/* Called every 200 ms from focus_misc_task.  The console used to have a task of its own; the
+ * camera has room for only 104 tasks, and with the playback player open the table was full,
+ * so the camera could not start the task its power-off needs and hung on the sensor cleaning
+ * screen.  Every task ML does not really need is a slot the camera may need. */
+void console_step()
 {
     extern int ml_started;
-    console_init();
-    #ifdef CONSOLE_DEBUG
-    console_show();
-    #endif
-    int dirty = 0;
-    TASK_LOOP
+    static int initialized = 0;
+    static int dirty = 0;
+
+    if (!initialized)
     {
-        if (!ml_started)
-        {
-            msleep(100);
-            continue;
-        }
+        initialized = 1;
+        console_init();
+        #ifdef CONSOLE_DEBUG
+        console_show();
+        #endif
+    }
 
-        // show the console only when there are no Canon dialogs on the screen
-        if (console_visible && (display_idle() || is_pure_play_photo_or_movie_mode()))
-        {
-            if (dirty) console_draw(0);
-            dirty = 1;
-        }
-        else if (dirty)
-        {
-            redraw();
-            dirty = 0;
-        }
-        else if (console_visible && !gui_menu_shown())
-        {
-            console_draw(1);
-        }
+    if (!ml_started)
+    {
+        return;
+    }
 
-        msleep(200);
+    // show the console only when there are no Canon dialogs on the screen
+    if (console_visible && (display_idle() || is_pure_play_photo_or_movie_mode()))
+    {
+        if (dirty) console_draw(0);
+        dirty = 1;
+    }
+    else if (dirty)
+    {
+        redraw();
+        dirty = 0;
+    }
+    else if (console_visible && !gui_menu_shown())
+    {
+        console_draw(1);
     }
 }
-
-TASK_CREATE( "console_task", console_task, 0, 0x1d, 0x1000 );
 
 /* some functions from standard I/O */
 

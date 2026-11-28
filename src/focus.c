@@ -1003,9 +1003,21 @@ void plot_focus_mag(){};
 static void
 focus_misc_task(void* unused)
 {
+    /* also hosts the console and the debug steps (each formerly a task of its own) */
+    extern void console_step();
+    extern void debug_step();
+    int t_misc = 0;
+
     TASK_LOOP
     {
         msleep(100);
+
+        if (get_ms_clock() - t_misc >= 200)
+        {
+            t_misc = get_ms_clock();
+            console_step();
+            debug_step();
+        }
         
         if (hsp_countdown) hsp_countdown--;
 
