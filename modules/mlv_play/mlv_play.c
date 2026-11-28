@@ -3041,7 +3041,7 @@ static void mlv_play_enter_playback()
         mlv_play_mem_before_ml = GetFreeMemForMalloc();
     }
     task_create("mlv_play_dummy1", 0x1d, 0x800, mlv_play_dummy_task, NULL);
-    task_create("mlv_play_dummy2", 0x15, 0x800, mlv_play_dummy_task, 0);
+    task_create("mlv_play_dummy2", 0x1d, 0x800, mlv_play_dummy_task, 0);
     
     mlv_play_zoom = 0;
     mlv_play_zoom_x_pct = 0;
@@ -3106,7 +3106,16 @@ static void mlv_play_task(void *priv)
     {
         extern int GetFreeMemForAllocateMemory();
         extern int GetFreeMemForMalloc();
-        bmp_printf(FONT_LARGE, 60, 200, "TEST: two small sleeping tasks");
+        bmp_printf(FONT_LARGE, 60, 200, "TEST: two low-priority tasks");
+        {
+            extern int is_taskid_valid(int, int, void *);
+            extern unsigned int task_max;
+            struct pwr_task_attr a;
+            int n = 0, hi = 0;
+            for (int id = 1; id <= (int) task_max && id < 256; id++)
+                if (is_taskid_valid(1, id, &a) == 0) { n++; hi = id; }
+            bmp_printf(FONT_MED, 60, 310, "tasks: %d   task_max: %d   highest id: %d", n, task_max, hi);
+        }
         bmp_printf(FONT_MED, 60, 250, "free before: %d / %d KB", mlv_play_mem_before_am / 1024, mlv_play_mem_before_ml / 1024);
         bmp_printf(FONT_MED, 60, 280, "free now:    %d / %d KB", GetFreeMemForAllocateMemory() / 1024, GetFreeMemForMalloc() / 1024);
         while (gui_state == GUISTATE_PLAYMENU && !sensor_cleaning && !ml_shutdown_requested)
