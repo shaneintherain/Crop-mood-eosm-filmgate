@@ -3063,6 +3063,15 @@ static void mlv_play_task(void *priv)
     mlv_play_show_dlg(0, "Building playlist...");
     mlv_playlist_build(0);
     mlv_play_show_dlg(0, 0);
+
+    /* TEST (power-off hang): open the player, but load and show no clip */
+    {
+        bmp_printf(FONT_LARGE, 60, 200, "TEST: player open, no clip");
+        bmp_printf(FONT_MED, 60, 250, "Power off now (or press PLAY to leave)");
+        while (!mlv_play_should_stop())
+            msleep(100);
+        goto cleanup;
+    }
     
     if (filename)
     {
