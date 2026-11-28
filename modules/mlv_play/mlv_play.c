@@ -2409,8 +2409,7 @@ static void mlv_play_mlv(char *filename, FILE **chunk_files, uint32_t chunk_coun
             buffer->blackLevel = rawi_block.raw_info.black_level;
             buffer->whiteLevel = rawi_block.raw_info.white_level;
 
-            /* TEST (power-off hang): skip Canon's hardware lossless decoder; the picture is noise */
-            if((main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92) && 0)
+            if(main_header.videoClass & MLV_VIDEO_CLASS_FLAG_LJ92)
             {
                 int output_bpp = raw_twk_available() ? 16 : 14;
                 int r = lossless_decompress_raw(
