@@ -1877,6 +1877,7 @@ static void mlv_play_render_task(uint32_t priv)
  * is still running (hung on the sensor cleaning screen), the watcher prints on screen what
  * every task is doing, so it can be photographed.  Nothing is written to the card.
  * --------------------------------------------------------------------------------------------- */
+static volatile int mlv_play_canon_play_pending = 0;   /* PLAY key passed on to Canon */
 static volatile int mlv_play_pwr_stage = 0;    /* how far playback got in closing down */
 static volatile int mlv_play_pwr_watch = 0;
 
@@ -2978,6 +2979,16 @@ static void mlv_play_enter_playback()
 {
     /* prepare display */
     NotifyBoxHide();
+
+    /* opened with the PLAY key: Canon is entering playback by itself, wait for it (up to 3 s)
+     * so we do not request the same mode change a second time */
+    if (mlv_play_canon_play_pending)
+    {
+        for (int i = 0; i < 30 && gui_state != GUISTATE_PLAYMENU; i++)
+            msleep(100);
+        mlv_play_canon_play_pending = 0;
+        msleep(300);    /* let Canon's viewer finish drawing before we clear it */
+    }
     enter_play_mode();
 
     /* render task is slave and controlled via these variables */
@@ -3270,8 +3281,14 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
         {
             case MODULE_KEY_PLAY:
             {
+                /* Let Canon handle the PLAY key itself, so the camera enters playback the normal
+                 * way (stopping Live View as it always does); the player then takes over the
+                 * screen.  Entering playback by request from Live View instead (SetGUIRequestMode)
+                 * left the camera unable to finish its power-off sensor cleaning when it was
+                 * switched off during playback, until the battery was taken out. */
+                mlv_play_canon_play_pending = 1;
                 task_create("mlv_play_task", 0x1e, 0x4000, mlv_play_task, NULL);
-                return 0;
+                return 1;
             }
         }
         
