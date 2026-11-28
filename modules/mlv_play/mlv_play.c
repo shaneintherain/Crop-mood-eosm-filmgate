@@ -2999,6 +2999,12 @@ static void mlv_play_leave_playback()
     exit_play_qr_mode();
 }
 
+static void mlv_play_dummy_task(void * unused)
+{
+    while (!mlv_play_render_abort)
+        msleep(50);
+}
+
 static void mlv_play_enter_playback()
 {
     /* prepare display */
@@ -3023,10 +3029,11 @@ static void mlv_play_enter_playback()
 
     /* render task is slave and controlled via these variables */
     mlv_play_render_abort = 0;
-    /* TEST (power-off hang): no helper tasks */
+    /* TEST (power-off hang): two dummy tasks with the same stack sizes and priorities as the
+     * player's helper tasks, which only sleep until the player closes */
     mlv_play_rendering = 0;
-    //task_create("mlv_play_render", 0x1d, 0x4000, mlv_play_render_task, NULL);
-    //task_create("mlv_play_osd_task", 0x15, 0x4000, mlv_play_osd_task, 0);
+    task_create("mlv_play_dummy1", 0x1d, 0x4000, mlv_play_dummy_task, NULL);
+    task_create("mlv_play_dummy2", 0x15, 0x4000, mlv_play_dummy_task, 0);
     
     mlv_play_zoom = 0;
     mlv_play_zoom_x_pct = 0;
@@ -3089,7 +3096,7 @@ static void mlv_play_task(void *priv)
     /* TEST (power-off hang): player started (helper tasks, buffers, screen cleared), but no
      * playlist scan and no clip */
     {
-        bmp_printf(FONT_LARGE, 60, 200, "TEST: no player tasks");
+        bmp_printf(FONT_LARGE, 60, 200, "TEST: two sleeping tasks");
         while (gui_state == GUISTATE_PLAYMENU && !sensor_cleaning && !ml_shutdown_requested)
             msleep(100);
         goto cleanup;
