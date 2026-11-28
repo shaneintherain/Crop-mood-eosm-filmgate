@@ -1901,9 +1901,10 @@ static void mlv_play_pwr_watch_task(void * unused)
     {
         bmp_fill(COLOR_BLACK, 0, 0, 720, 480);
         int fnt = FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK);
-        bmp_printf(fnt, 4, 2, "PWR %ds stage=%d shut=%d clean=%d gui=%d mode=%d lv=%d disp=%d",
+        extern int display_is_on();
+        bmp_printf(fnt, 4, 2, "PWR %ds stage=%d shut=%d clean=%d gui=%d lv=%d disp=%d",
                    (get_ms_clock() - t0) / 1000, mlv_play_pwr_stage, ml_shutdown_requested,
-                   sensor_cleaning, gui_state, CURRENT_GUI_MODE, lv, DISPLAY_IS_ON);
+                   sensor_cleaning, gui_state, lv, display_is_on());
 
         /* one entry per task: name, state (0 ready, 1 wait, 2 susp), wait type
          * (0 sleep, 1 sem, 2 flag, 3 send mq, 4 recv mq, 5 mutex) */
