@@ -3296,8 +3296,9 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
         {
             case MODULE_KEY_PLAY:
             {
-                task_create("mlv_play_task", 0x1e, 0x4000, mlv_play_task, NULL);
-                return 0;
+                /* TEST (power-off hang): no player at all, Canon's own viewer opens */
+                mlv_play_pwr_watch_start();
+                return 1;
             }
         }
         
