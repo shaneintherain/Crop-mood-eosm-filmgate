@@ -2020,7 +2020,7 @@ static void mlv_play_clear_screen()
     /* clear anything */
     /* TEST (power-off hang): no clearing of the picture buffer */
     //vram_clear_lv();
-    clrscr();
+    //clrscr();
     
     /* update OSD */
     msg_queue_post(mlv_play_queue_osd, (uint32_t) 0);
@@ -3088,7 +3088,7 @@ static void mlv_play_task(void *priv)
     /* TEST (power-off hang): player started (helper tasks, buffers, screen cleared), but no
      * playlist scan and no clip */
     {
-        bmp_printf(FONT_LARGE, 60, 200, "TEST: player started, no clip, no wipe");
+        bmp_printf(FONT_LARGE, 60, 200, "TEST: player tasks only");
         while (!mlv_play_should_stop())
             msleep(100);
         goto cleanup;
