@@ -424,6 +424,8 @@ static playlist_entry_t mlv_playlist_prev(playlist_entry_t current);
 static void mlv_playlist_delete(playlist_entry_t current);
 static void mlv_playlist_build(uint32_t priv);
 static uint32_t mlv_play_should_stop();
+static volatile int mlv_play_canon_play_pending = 0;   /* PLAY key passed on to Canon */
+static volatile int mlv_play_osd_running = 0;
 
 /* microsecond durations for one frame */
 static uint32_t mlv_play_frame_div_pos = 0;
@@ -1034,6 +1036,7 @@ static void mlv_play_osd_act(void *handler)
 
 static void mlv_play_osd_task(void *priv)
 {
+    mlv_play_osd_running = 1;
     uint32_t next_render_time = get_ms_clock() + mlv_play_render_timestep;
  
     mlv_play_osd_state = MLV_PLAY_MENU_IDLE;
@@ -1185,6 +1188,7 @@ static void mlv_play_osd_task(void *priv)
         }
         continue;
     }
+    mlv_play_osd_running = 0;
 }
 
 
@@ -2014,8 +2018,7 @@ static uint32_t mlv_play_should_stop()
 static void mlv_play_clear_screen()
 {
     /* clear anything */
-    /* TEST (power-off hang): no clearing of the picture buffer */
-    //vram_clear_lv();
+    vram_clear_lv();
     clrscr();
     
     /* update OSD */
@@ -2954,6 +2957,11 @@ static void mlv_play_leave_playback()
     {
         info_led_blink(1, 100, 100);
     }
+
+    /* also let the OSD task finish (up to 2 s), so a quickly reopened player does not end up
+     * with two of them sharing the key queue (SET would then sometimes show no controls) */
+    for (int i = 0; i < 40 && mlv_play_osd_running; i++)
+        msleep(50);
     
     if (mlv_play_pwr_stage) mlv_play_pwr_stage = 5;
 
@@ -2994,7 +3002,23 @@ static void mlv_play_enter_playback()
 {
     /* prepare display */
     NotifyBoxHide();
-    enter_play_mode();
+
+    if (mlv_play_canon_play_pending)
+    {
+        /* opened with the PLAY key: Canon is entering playback by itself.  Wait for it (up to
+         * 3 s) and do not request the mode change ourselves. */
+        for (int i = 0; i < 30 && gui_state != GUISTATE_PLAYMENU; i++)
+            msleep(100);
+        mlv_play_canon_play_pending = 0;
+        msleep(500);    /* let Canon's viewer settle and finish drawing before we take over */
+        if (gui_state != GUISTATE_PLAYMENU)
+            enter_play_mode();      /* Canon did not switch (should not happen): old way */
+    }
+    else
+    {
+        /* opened from the file manager: no PLAY key to pass on */
+        enter_play_mode();
+    }
 
     /* render task is slave and controlled via these variables */
     mlv_play_render_abort = 0;
@@ -3057,36 +3081,13 @@ static void mlv_play_task(void *priv)
         }
     }
 
-    /* TEST (power-off hang): only switch into playback; no helper tasks, buffers or clearing */
-    {
-        NotifyBoxHide();
-        enter_play_mode();
-        bmp_printf(FONT_LARGE, 60, 200, "TEST: playback mode only");
-        bmp_printf(FONT_MED, 60, 250, "Now switch the camera off");
-        while (gui_state == GUISTATE_PLAYMENU && !sensor_cleaning && !ml_shutdown_requested)
-            msleep(100);
-        mlv_play_pwr_watch_start();
-        give_semaphore(mlv_play_sem);
-        return;
-    }
-
     /* get into Canon's PLAY mode */
     mlv_play_enter_playback();
 
     /* create playlist */
-    /* TEST (power-off hang): no dialog, no playlist */
-    //mlv_play_show_dlg(0, "Building playlist...");
-    //mlv_playlist_build(0);
-    //mlv_play_show_dlg(0, 0);
-
-    /* TEST (power-off hang): open the player, but load and show no clip */
-    {
-        bmp_printf(FONT_LARGE, 60, 200, "TEST: player open, no clip");
-        bmp_printf(FONT_MED, 60, 250, "Now switch the camera off");
-        while (!mlv_play_should_stop())
-            msleep(100);
-        goto cleanup;
-    }
+    mlv_play_show_dlg(0, "Building playlist...");
+    mlv_playlist_build(0);
+    mlv_play_show_dlg(0, 0);
     
     if (filename)
     {
@@ -3310,8 +3311,14 @@ static unsigned int mlv_play_keypress_cbr(unsigned int key)
         {
             case MODULE_KEY_PLAY:
             {
+                /* Canon handles the PLAY key itself and enters playback the normal way; the
+                 * player then takes over the screen.  Switching to playback by request from
+                 * Live View instead (SetGUIRequestMode) left the camera unable to finish its
+                 * power-off sensor cleaning when switched off in playback (tested: that request
+                 * alone, with no player at all, was enough to hang it). */
+                mlv_play_canon_play_pending = 1;
                 task_create("mlv_play_task", 0x1e, 0x4000, mlv_play_task, NULL);
-                return 0;
+                return 1;
             }
         }
         
