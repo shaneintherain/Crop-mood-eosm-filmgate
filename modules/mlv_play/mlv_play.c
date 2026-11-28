@@ -2014,7 +2014,8 @@ static uint32_t mlv_play_should_stop()
 static void mlv_play_clear_screen()
 {
     /* clear anything */
-    vram_clear_lv();
+    /* TEST (power-off hang): no clearing of the picture buffer */
+    //vram_clear_lv();
     clrscr();
     
     /* update OSD */
